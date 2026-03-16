@@ -29,6 +29,17 @@ def get_opencode_skills_dir() -> str:
     return skills_dir
 
 
+def get_opencode_agents_dir() -> str:
+    """获取OpenCode Agents目录
+
+    Returns:
+        str: Agents目录路径
+    """
+    config_dir = get_config_dir()
+    agents_dir = os.path.join(config_dir, "agents")
+    return agents_dir
+
+
 def ensure_dir_exists(dir_path: str) -> None:
     """确保目录存在，不存在则创建
 

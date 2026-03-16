@@ -104,9 +104,10 @@ async def upload_skill(
     file_content = await file.read()
     checksum = hashlib.sha256(file_content).hexdigest()
 
-    # 生成安全的文件名
+    # 保持原始文件名，只做基本安全检查防止路径遍历
     original_filename = file.filename or "skill"
-    safe_filename = "".join(c for c in original_filename if c.isalnum() or c in "._- ")
+    # 移除路径分隔符，只保留文件名部分
+    safe_filename = os.path.basename(original_filename)
     if not safe_filename:
         safe_filename = "skill"
 
@@ -114,20 +115,17 @@ async def upload_skill(
     opencode_skills_dir = get_opencode_skills_dir()
     ensure_dir_exists(opencode_skills_dir)
 
-    # 为skill创建唯一的目录名（基于名称和checksum）
-    skill_dir_name = f"{name.lower().replace(' ', '_')}_{checksum[:8]}"
+    # 直接使用文件名作为目录名（不添加任何后缀）
+    skill_dir_name = name.lower().replace(" ", "_")
     skill_dir = os.path.join(opencode_skills_dir, skill_dir_name)
 
-    # 如果目录已存在，添加数字后缀
-    counter = 1
-    base_skill_dir_name = skill_dir_name
-    while os.path.exists(skill_dir):
-        skill_dir = os.path.join(opencode_skills_dir, f"{base_skill_dir_name}_{counter}")
-        counter += 1
+    # 检查目录是否已存在，存在则直接失败
+    if os.path.exists(skill_dir):
+        raise HTTPException(status_code=400, detail=f"名称 '{name}' 已存在，请使用其他名称")
 
     os.makedirs(skill_dir, exist_ok=True)
 
-    # 保存原始文件
+    # 保存原始文件，使用用户上传的原始文件名
     original_file_path = os.path.join(skill_dir, safe_filename)
     with open(original_file_path, "wb") as f:
         f.write(file_content)
