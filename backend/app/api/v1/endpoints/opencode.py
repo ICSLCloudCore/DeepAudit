@@ -51,10 +51,48 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
 
         # Determine project path
         project_path = None
+        extract_dir = Path(f"/tmp/{task_id}")
+        extract_dir.mkdir(parents=True, exist_ok=True)
+
         if project.source_type == "repository":
-            # TODO: For repository projects, we need to clone or find the local path
-            print(f"[OpenCode] Repository project path not implemented yet")
-            return
+            # Clone repository to /tmp/{task_id}
+            repo_url = project.repository_url
+            branch = project.default_branch or "main"
+            if not repo_url:
+                print(f"[OpenCode] Repository URL not found for project {project_id}")
+                return
+
+            print(f"[OpenCode] Cloning repository {repo_url} (branch: {branch}) to {extract_dir}")
+
+            # Build git clone command
+            clone_cmd = ['git', 'clone', '--depth', '1', '--branch', branch, repo_url, str(extract_dir)]
+            
+            # Execute clone command
+            result = await execute_command(
+                command=clone_cmd,
+                shell=False,
+                capture_output=True,
+                timeout=300  # 5 minutes timeout for clone
+            )
+
+            if not result.success:
+                print(f"[OpenCode] Failed to clone repository: {result.stderr}")
+                # Try without specific branch in case it doesn't exist
+                print(f"[OpenCode] Retrying clone without specifying branch...")
+                clone_cmd_fallback = ['git', 'clone', '--depth', '1', repo_url, str(extract_dir)]
+                result = await execute_command(
+                    command=clone_cmd_fallback,
+                    shell=False,
+                    capture_output=True,
+                    timeout=300
+                )
+                if not result.success:
+                    print(f"[OpenCode] Failed to clone repository (fallback): {result.stderr}")
+                    return
+
+            project_path = str(extract_dir)
+            print(f"[OpenCode] Cloned repository to {project_path}")
+
         elif project.source_type == "zip":
             # Extract ZIP file
             zip_file_path = Path(settings.ZIP_STORAGE_PATH) / f"{project_id}.zip"
@@ -62,10 +100,6 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
                 print(f"[OpenCode] ZIP file not found at {zip_file_path}")
                 return
 
-            # Extract ZIP to /tmp/{task_id}
-            extract_dir = Path(f"/tmp/{task_id}")
-            extract_dir.mkdir(parents=True, exist_ok=True)
-            
             with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
             
