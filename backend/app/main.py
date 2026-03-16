@@ -5,8 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.api.v1.api import api_router
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, engine
 from app.db.init_db import init_db
+from app.db.base import Base
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +26,7 @@ async def check_agent_services():
     # 检查 Docker/沙箱服务
     try:
         import docker
+
         client = docker.from_env()
         client.ping()
         logger.info("  - Docker 服务可用")
@@ -37,6 +39,7 @@ async def check_agent_services():
     try:
         import redis
         import os
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         r = redis.from_url(redis_url)
         r.ping()
@@ -56,6 +59,14 @@ async def lifespan(app: FastAPI):
     启动时初始化数据库（创建默认账户等）
     """
     logger.info("DeepAudit 后端服务启动中...")
+
+    # 自动创建所有数据库表（使用 SQLAlchemy 元数据）
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("  - 数据库表创建完成")
+    except Exception as e:
+        logger.warning(f"创建数据库表时出错（可能表已存在）: {e}")
 
     # 初始化数据库（创建默认账户）
     # 注意：需要先运行 alembic upgrade head 创建表结构
@@ -99,7 +110,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Configure CORS - Allow all origins in development
@@ -124,8 +135,5 @@ async def root():
     return {
         "message": "Welcome to DeepAudit API",
         "docs": "/docs",
-        "demo_account": {
-            "email": "demo@example.com",
-            "password": "demo123"
-        }
+        "demo_account": {"email": "demo@example.com", "password": "demo123"},
     }

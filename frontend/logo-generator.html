@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoDeepAudit Logo Generator</title>
+    <style>
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px;
+            background: #1a1a1a;
+            min-height: 100vh;
+        }
+        
+        .logo-container {
+            margin: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+        }
+        
+        .logo-512 {
+            width: 512px;
+            height: 512px;
+        }
+        
+        .logo-256 {
+            width: 256px;
+            height: 256px;
+        }
+        
+        .logo-128 {
+            width: 128px;
+            height: 128px;
+        }
+        
+        .logo-64 {
+            width: 64px;
+            height: 64px;
+        }
+        
+        .logo-32 {
+            width: 32px;
+            height: 32px;
+        }
+        
+        button {
+            margin: 10px;
+            padding: 12px 24px;
+            font-size: 16px;
+            background: #FF6B2C;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        button:hover {
+            background: #e55a1f;
+        }
+        
+        h1 {
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .label {
+            color: #888;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>GoDeepAudit Logo Generator</h1>
+    
+    <div class="logo-container">
+        <canvas id="logo-512" class="logo-512"></canvas>
+        <div class="label">512x512</div>
+    </div>
+    
+    <div class="logo-container">
+        <canvas id="logo-256" class="logo-256"></canvas>
+        <div class="label">256x256</div>
+    </div>
+    
+    <div class="logo-container">
+        <canvas id="logo-128" class="logo-128"></canvas>
+        <div class="label">128x128</div>
+    </div>
+    
+    <div style="display: flex; gap: 20px;">
+        <div class="logo-container">
+            <canvas id="logo-64" class="logo-64"></canvas>
+            <div class="label">64x64</div>
+        </div>
+        <div class="logo-container">
+            <canvas id="logo-32" class="logo-32"></canvas>
+            <div class="label">32x32</div>
+        </div>
+    </div>
+    
+    <div style="margin-top: 30px;">
+        <button onclick="downloadLogo('512')">Download 512x512 PNG</button>
+        <button onclick="downloadLogo('256')">Download 256x256 PNG</button>
+        <button onclick="downloadLogo('128')">Download 128x128 PNG</button>
+    </div>
+
+    <script>
+        function drawLogo(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            canvas.width = size;
+            canvas.height = size;
+            
+            const scale = size / 512;
+            
+            // Background square with rounded corners
+            ctx.fillStyle = '#FF6B2C';
+            ctx.beginPath();
+            const radius = 40 * scale;
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.quadraticCurveTo(size, 0, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.quadraticCurveTo(size, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.quadraticCurveTo(0, size, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw three bars (original style)
+            const barWidth = 85 * scale;
+            const barGap = 35 * scale;
+            const startX = 80 * scale;
+            const baseY = size - 80 * scale;
+            
+            // Bar 1 (left, tallest)
+            ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+            const bar1Height = 280 * scale;
+            ctx.fillRect(startX, baseY - bar1Height, barWidth, bar1Height);
+            
+            // Bar 2 (middle, medium)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            const bar2Height = 200 * scale;
+            ctx.fillRect(startX + barWidth + barGap, baseY - bar2Height, barWidth, bar2Height);
+            
+            // Bar 3 (right, shorter)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            const bar3Height = 240 * scale;
+            ctx.fillRect(startX + 2 * (barWidth + barGap), baseY - bar3Height, barWidth, bar3Height);
+            
+            // Add "G" letter
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${120 * scale}px JetBrains Mono, monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('G', size - 90 * scale, size / 2);
+        }
+        
+        function downloadLogo(size) {
+            const canvas = document.getElementById(`logo-${size}`);
+            const link = document.createElement('a');
+            link.download = `logo_godeepaudit_${size}x${size}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+        
+        // Draw all logos
+        drawLogo(document.getElementById('logo-512'), 512);
+        drawLogo(document.getElementById('logo-256'), 256);
+        drawLogo(document.getElementById('logo-128'), 128);
+        drawLogo(document.getElementById('logo-64'), 64);
+        drawLogo(document.getElementById('logo-32'), 32);
+    </script>
+</body>
+</html>

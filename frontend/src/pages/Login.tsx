@@ -132,7 +132,7 @@ export default function Login() {
       </div>
 
       <div className="absolute bottom-4 left-4 text-sm font-mono text-muted-foreground z-30">
-        DEEPAUDIT_AUTH_v3
+        GODEEPAUDIT_AUTH_v3
       </div>
 
       <div className="absolute bottom-4 right-4 text-sm font-mono text-muted-foreground z-30">
@@ -146,8 +146,8 @@ export default function Login() {
           <div className="inline-flex items-center justify-center p-3 cyber-dialog border border-border/60 rounded-lg mb-6"
                style={{ boxShadow: '0 0 30px rgba(255,107,44,0.1)' }}>
             <img
-              src="/logo_deepaudit.png"
-              alt="DeepAudit"
+              src="/logo_godeepaudit.png"
+              alt="GoDeepAudit"
               className="w-14 h-14 object-contain"
             />
           </div>
@@ -155,6 +155,7 @@ export default function Login() {
             className="text-3xl font-bold tracking-wider mb-2 font-mono"
             style={{ textShadow: "0 0 30px rgba(255,107,44,0.5), 0 0 60px rgba(255,107,44,0.3)" }}
           >
+            <span className="text-primary">GO</span>
             <span className="text-primary">DEEP</span>
             <span className="text-foreground">AUDIT</span>
           </div>
@@ -174,7 +175,7 @@ export default function Login() {
               <div className="w-3 h-3 rounded-full bg-green-500/80" />
             </div>
             <span className="ml-2 font-mono text-sm text-muted-foreground tracking-wider">
-              authentication@deepaudit
+              authentication@godeepaudit
             </span>
           </div>
 

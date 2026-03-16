@@ -9,22 +9,24 @@ from dataclasses import dataclass, field
 
 class LLMProvider(str, Enum):
     """支持的LLM提供商类型"""
-    GEMINI = "gemini"        # Google Gemini
-    OPENAI = "openai"        # OpenAI (GPT系列)
-    CLAUDE = "claude"        # Anthropic Claude
-    QWEN = "qwen"            # 阿里云通义千问
-    DEEPSEEK = "deepseek"    # DeepSeek
-    ZHIPU = "zhipu"          # 智谱AI (GLM系列)
-    MOONSHOT = "moonshot"    # 月之暗面 Kimi
-    BAIDU = "baidu"          # 百度文心一言
-    MINIMAX = "minimax"      # MiniMax
-    DOUBAO = "doubao"        # 字节豆包
-    OLLAMA = "ollama"        # Ollama 本地大模型
+
+    GEMINI = "gemini"  # Google Gemini
+    OPENAI = "openai"  # OpenAI (GPT系列)
+    CLAUDE = "claude"  # Anthropic Claude
+    QWEN = "qwen"  # 阿里云通义千问
+    DEEPSEEK = "deepseek"  # DeepSeek
+    ZHIPU = "zhipu"  # 智谱AI (GLM系列)
+    MOONSHOT = "moonshot"  # 月之暗面 Kimi
+    BAIDU = "baidu"  # 百度文心一言
+    MINIMAX = "minimax"  # MiniMax
+    DOUBAO = "doubao"  # 字节豆包
+    OLLAMA = "ollama"  # Ollama 本地大模型
 
 
 @dataclass
 class LLMConfig:
     """LLM配置"""
+
     provider: LLMProvider
     api_key: str
     model: str
@@ -36,11 +38,14 @@ class LLMConfig:
     frequency_penalty: float = 0
     presence_penalty: float = 0
     custom_headers: Dict[str, str] = field(default_factory=dict)
+    http_proxy: Optional[str] = None
+    https_proxy: Optional[str] = None
 
 
 @dataclass
 class LLMMessage:
     """LLM请求消息"""
+
     role: str  # 'system', 'user', 'assistant'
     content: str
 
@@ -48,6 +53,7 @@ class LLMMessage:
 @dataclass
 class LLMRequest:
     """LLM请求参数"""
+
     messages: List[LLMMessage]
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
@@ -58,6 +64,7 @@ class LLMRequest:
 @dataclass
 class LLMUsage:
     """Token使用统计"""
+
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
@@ -66,6 +73,7 @@ class LLMUsage:
 @dataclass
 class LLMResponse:
     """LLM响应"""
+
     content: str
     model: Optional[str] = None
     usage: Optional[LLMUsage] = None
@@ -74,13 +82,14 @@ class LLMResponse:
 
 class LLMError(Exception):
     """LLM错误"""
+
     def __init__(
         self,
         message: str,
         provider: Optional[LLMProvider] = None,
         status_code: Optional[int] = None,
         original_error: Optional[Any] = None,
-        api_response: Optional[str] = None
+        api_response: Optional[str] = None,
     ):
         super().__init__(message)
         self.provider = provider
@@ -119,9 +128,3 @@ DEFAULT_BASE_URLS: Dict[LLMProvider, str] = {
     LLMProvider.GEMINI: "https://generativelanguage.googleapis.com/v1beta",
     LLMProvider.CLAUDE: "https://api.anthropic.com/v1",
 }
-
-
-
-
-
-

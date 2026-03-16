@@ -10,6 +10,8 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import Account from "@/pages/Account";
 import AuditRules from "@/pages/AuditRules";
 import PromptManager from "@/pages/PromptManager";
+import AgentManagement from "@/pages/AgentManagement";
+import SkillMCPMarketplace from "@/pages/SkillMCPMarketplace";
 import type { ReactNode } from 'react';
 
 export interface RouteConfig {
@@ -49,6 +51,18 @@ const routes: RouteConfig[] = [
     path: "/projects/:id",
     element: <ProjectDetail />,
     visible: false,
+  },
+  {
+    name: "Agent管理",
+    path: "/agents",
+    element: <AgentManagement />,
+    visible: true,
+  },
+  {
+    name: "Skill/MCP市场",
+    path: "/marketplace",
+    element: <SkillMCPMarketplace />,
+    visible: true,
   },
   {
     name: "即时分析",
