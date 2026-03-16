@@ -2,16 +2,246 @@
 Skill and MCP Management API
 """
 
+import os
+import uuid
+import re
+import time
+import zipfile
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone
+from pathlib import Path
 
-from app.db.session import get_db
+from app.db.session import get_db, AsyncSessionLocal
 from app.models import OpenCodeSkill, SkillCategory, OpenCodeMCP, MCPType
+from app.models.project import Project
+from app.models.audit import AuditTask
 from app.api.deps import get_current_user
+from app.utils.async_command import execute_command
+from app.core.platform_config import ensure_dir_exists
+from app.core.config import settings
 
 router = APIRouter()
+
+async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_id: str):
+    """Start opencode serve in the background"""
+    try:
+        # Get project
+        result = await db_session.execute(select(Project).where(Project.id == project_id))
+        project = result.scalar_one_or_none()
+        if not project:
+            print(f"[OpenCode] Project {project_id} not found")
+            return
+
+        # Create task
+        task = AuditTask(
+            project_id=project_id,
+            created_by=user_id,
+            task_type="opencode_serve",
+            status="pending",
+            scan_config="{}"
+        )
+        db_session.add(task)
+        await db_session.commit()
+        await db_session.refresh(task)
+
+        task_id = task.id
+
+        # Determine project path
+        project_path = None
+        if project.source_type == "repository":
+            # TODO: For repository projects, we need to clone or find the local path
+            print(f"[OpenCode] Repository project path not implemented yet")
+            return
+        elif project.source_type == "zip":
+            # Extract ZIP file
+            zip_file_path = Path(settings.ZIP_STORAGE_PATH) / f"{project_id}.zip"
+            if not zip_file_path.exists():
+                print(f"[OpenCode] ZIP file not found at {zip_file_path}")
+                return
+
+            # Extract ZIP to /tmp/{task_id}
+            extract_dir = Path(f"/tmp/{task_id}")
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            
+            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            project_path = str(extract_dir)
+            print(f"[OpenCode] Extracted ZIP to {project_path}")
+
+        # For now, use a temp directory as placeholder if not set
+        if not project_path:
+            project_path = f"/tmp/opencode_project_{project_id}"
+            ensure_dir_exists(project_path)
+
+        # Create log directory
+        log_dir = f"/tmp/opencode_logs"
+        ensure_dir_exists(log_dir)
+
+        # Generate random log file name
+        random_id = str(uuid.uuid4())[:8]
+        log_path = os.path.join(log_dir, f"{random_id}.log")
+
+        # Execute opencode serve command
+        command = f"cd {project_path} ; nohup opencode serve > {log_path} 2>&1 & echo $!"
+        result = await execute_command(
+            command=command,
+            shell=True,
+            capture_output=True,
+            timeout=30
+        )
+
+        if not result.success:
+            print(f"[OpenCode] Failed to start opencode serve: {result.stderr}")
+            return
+
+        # Extract PID from output
+        pid = result.stdout.strip()
+        if not pid.isdigit():
+            print(f"[OpenCode] Invalid PID: {pid}")
+            return
+
+        # Wait a bit for the log to be written
+        await asyncio.sleep(2)
+
+        # Read log file to find port
+        port = None
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            if os.path.exists(log_path):
+                with open(log_path, 'r') as f:
+                    log_content = f.read()
+                    # Try to find port in log (fixed format: http://127.0.0.1:{port})
+                    port_match = re.search(r'http://127\.0\.0\.1:(\d+)', log_content)
+                    if port_match:
+                        port = port_match.group(1)
+                        break
+            await asyncio.sleep(1)
+
+        # Update project with opencode info
+        project.opencode_pid = pid
+        project.opencode_port = port
+        project.opencode_log_path = log_path
+        project.opencode_started_at = datetime.now(timezone.utc)
+        project.updated_at = datetime.now(timezone.utc)
+
+        await db_session.commit()
+
+        print(f"[OpenCode] Started opencode serve for project {project_id}: PID={pid}, Port={port}")
+
+    except Exception as e:
+        print(f"[OpenCode] Error starting opencode serve: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Import asyncio for the sleep
+import asyncio
+
+@router.post("/projects/{project_id}/start")
+async def start_opencode(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Start opencode serve for a project"""
+    # Get project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check permissions
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+
+    # Check if already running
+    if project.opencode_pid:
+        # Verify if the process is actually still running
+        try:
+            # Check if PID exists (Unix-only)
+            import os
+            os.kill(int(project.opencode_pid), 0)
+            # If no exception, process is running
+            return {
+                "success": True,
+                "message": "OpenCode serve is already running",
+                "pid": project.opencode_pid,
+                "port": project.opencode_port
+            }
+        except (OSError, ValueError):
+            # Process not running, reset fields
+            project.opencode_pid = None
+            project.opencode_port = None
+            project.opencode_log_path = None
+            project.opencode_started_at = None
+            await db.commit()
+
+    # Start in background
+    background_tasks.add_task(start_opencode_serve, project_id, AsyncSessionLocal(), current_user.id)
+
+    return {
+        "success": True,
+        "message": "OpenCode serve starting"
+    }
+
+@router.post("/projects/{project_id}/stop")
+async def stop_opencode(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Stop opencode serve for a project"""
+    # Get project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check permissions
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+
+    if not project.opencode_pid:
+        return {
+            "success": True,
+            "message": "OpenCode serve is not running"
+        }
+
+    # Try to kill the process
+    try:
+        import os
+        import signal
+        os.kill(int(project.opencode_pid), signal.SIGTERM)
+        # Wait a bit and check
+        await asyncio.sleep(1)
+        try:
+            os.kill(int(project.opencode_pid), 0)
+            # Still running, try SIGKILL
+            os.kill(int(project.opencode_pid), signal.SIGKILL)
+        except OSError:
+            pass
+    except (OSError, ValueError) as e:
+        print(f"[OpenCode] Error stopping process: {e}")
+
+    # Reset project fields
+    project.opencode_pid = None
+    project.opencode_port = None
+    project.opencode_log_path = None
+    project.opencode_started_at = None
+    project.updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "OpenCode serve stopped"
+    }
 
 
 # ==================== Skill Endpoints ====================

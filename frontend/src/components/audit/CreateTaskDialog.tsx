@@ -42,12 +42,14 @@ import {
   Loader2,
   Zap,
   Bot,
+  Code,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/shared/config/database";
 import { getRuleSets, type AuditRuleSet } from "@/shared/api/rules";
 import { getPromptTemplates, type PromptTemplate } from "@/shared/api/prompts";
 import { createAgentTask } from "@/shared/api/agentTasks";
+import { opencodeApi } from "@/shared/api/opencode";
 
 import { useProjects } from "./hooks/useTaskForm";
 import { useZipFile, formatFileSize } from "./hooks/useZipFile";
@@ -228,6 +230,22 @@ export default function CreateTaskDialog({
         toast.success("Agent 审计任务已创建");
         navigate(`/agent-audit/${agentTask.id}`);
 
+        setSelectedProjectId("");
+        setSelectedFiles(undefined);
+        setExcludePatterns(DEFAULT_EXCLUDES);
+        return;
+      }
+
+      if (auditMode === "opencode") {
+        // Start opencode serve
+        const result = await opencodeApi.startProjectServe(selectedProject.id);
+        onOpenChange(false);
+        onTaskCreated();
+        if (result.success) {
+          toast.success(result.message || "OpenCode 审计模式已启动");
+        } else {
+          toast.error(result.message || "OpenCode 审计模式启动失败");
+        }
         setSelectedProjectId("");
         setSelectedFiles(undefined);
         setExcludePatterns(DEFAULT_EXCLUDES);
@@ -627,6 +645,11 @@ export default function CreateTaskDialog({
                 <>
                   <Bot className="w-4 h-4 mr-2" />
                   启动 Agent 审计
+                </>
+              ) : auditMode === "opencode" ? (
+                <>
+                  <Code className="w-4 h-4 mr-2" />
+                  启动 OpenCode 审计
                 </>
               ) : (
                 <>

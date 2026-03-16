@@ -38,6 +38,11 @@ export interface Project {
   programming_languages: string;
   owner_id: string;
   is_active: boolean;
+  // OpenCode fields
+  opencode_pid?: string;
+  opencode_port?: string;
+  opencode_log_path?: string;
+  opencode_started_at?: string;
   created_at: string;
   updated_at: string;
   owner?: Profile;

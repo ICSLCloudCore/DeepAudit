@@ -24,6 +24,12 @@ class Project(Base):
     owner_id = Column(String, ForeignKey("users.id"), nullable=False)
     is_active = Column(Boolean(), default=True)
     
+    # OpenCode integration fields
+    opencode_pid = Column(String, nullable=True)  # Process ID of opencode serve
+    opencode_port = Column(String, nullable=True)  # Port that opencode serve is listening on
+    opencode_log_path = Column(String, nullable=True)  # Path to the log file
+    opencode_started_at = Column(DateTime(timezone=True), nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

@@ -3,10 +3,10 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { Bot, Zap, CheckCircle2, Clock, Shield, Code } from "lucide-react";
+import { Bot, Zap, CheckCircle2, Clock, Shield, Code, Terminal } from "lucide-react";
 import { cn } from "@/shared/utils/utils";
 
-export type AuditMode = "fast" | "agent";
+export type AuditMode = "fast" | "agent" | "opencode";
 
 interface AgentModeSelectorProps {
   value: AuditMode;
@@ -28,7 +28,7 @@ export default function AgentModeSelector({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         {/* 快速审计模式 */}
         <label
           className={cn(
@@ -163,6 +163,74 @@ export default function AgentModeSelector({
           <div className="mt-auto pt-2 border-t border-border">
             <span className="text-xs uppercase tracking-wider text-muted-foreground font-bold font-mono">
               适合: 发版前审计、深度安全评估
+            </span>
+          </div>
+        </label>
+
+        {/* OpenCode 审计模式 */}
+        <label
+          className={cn(
+            "relative flex flex-col p-4 border cursor-pointer transition-all rounded",
+            value === "opencode"
+              ? "border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/30"
+              : "border-border hover:border-border bg-muted/50",
+            disabled && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          <input
+            type="radio"
+            name="auditMode"
+            value="opencode"
+            checked={value === "opencode"}
+            onChange={() => onChange("opencode")}
+            disabled={disabled}
+            className="sr-only"
+          />
+
+          <div className="flex items-center gap-2 mb-2">
+            <div className={cn(
+              "p-1.5 rounded border",
+              value === "opencode"
+                ? "bg-emerald-500/20 border-emerald-500/50"
+                : "bg-muted border-border"
+            )}>
+              <Code className={cn(
+                "w-4 h-4",
+                value === "opencode" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+              )} />
+            </div>
+            <span className={cn(
+              "font-bold text-sm font-mono uppercase",
+              value === "opencode" ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"
+            )}>
+              OpenCode 审计
+            </span>
+            {value === "opencode" && (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 ml-auto" />
+            )}
+          </div>
+
+          <ul className="text-xs text-muted-foreground space-y-1 mb-3 font-mono">
+            <li className="flex items-center gap-1">
+              <Code className="w-3 h-3" />
+              启动 OpenCode Serve
+            </li>
+            <li className="flex items-center gap-1">
+              <Terminal className="w-3 h-3" />
+              实时代码服务
+            </li>
+            <li className={cn(
+              "flex items-center gap-1",
+              value === "opencode" ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"
+            )}>
+              <Shield className="w-3 h-3" />
+              灵活审计
+            </li>
+          </ul>
+
+          <div className="mt-auto pt-2 border-t border-border">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-bold font-mono">
+              适合: 灵活审计、实时服务
             </span>
           </div>
         </label>

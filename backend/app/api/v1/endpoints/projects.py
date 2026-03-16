@@ -67,6 +67,11 @@ class ProjectResponse(BaseModel):
     programming_languages: Optional[str] = None
     owner_id: str
     is_active: bool
+    # OpenCode fields
+    opencode_pid: Optional[str] = None
+    opencode_port: Optional[str] = None
+    opencode_log_path: Optional[str] = None
+    opencode_started_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     owner: Optional[OwnerSchema] = None

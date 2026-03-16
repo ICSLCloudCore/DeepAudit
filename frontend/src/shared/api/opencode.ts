@@ -245,6 +245,17 @@ export const opencodeApi = {
     const response = await apiClient.post(`/opencode/mcps/${id}/test`);
     return response.data;
   },
+
+  // Project opencode serve
+  startProjectServe: async (projectId: string) => {
+    const response = await apiClient.post(`/opencode/projects/${projectId}/start`);
+    return response.data;
+  },
+
+  stopProjectServe: async (projectId: string) => {
+    const response = await apiClient.post(`/opencode/projects/${projectId}/stop`);
+    return response.data;
+  },
 };
 
 // Project Config API

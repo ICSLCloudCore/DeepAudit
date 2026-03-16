@@ -47,6 +47,7 @@ import {
 import { ProjectIssuesTab } from "@/pages/project-detail/components/ProjectIssuesTab";
 import { ProjectTasksTab } from "@/pages/project-detail/components/ProjectTasksTab";
 import { ProjectStatsCards, type ProjectCombinedStats } from "@/pages/project-detail/components/ProjectStatsCards";
+import { opencodeApi } from "@/shared/api/opencode";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -615,6 +616,81 @@ export default function ProjectDetail() {
 
         <TabsContent value="overview" className="flex flex-col gap-6 mt-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* OpenCode Server */}
+            <div className="cyber-card p-4">
+              <div className="section-header">
+                <Terminal className="w-5 h-5 text-emerald-400" />
+                <h3 className="section-title">OpenCode 服务器</h3>
+              </div>
+              <div className="space-y-4 font-mono">
+                {project.opencode_pid ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground uppercase">状态</span>
+                      <Badge className="cyber-badge-success">运行中</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground uppercase">PID</span>
+                      <span className="text-sm font-bold text-foreground bg-muted px-2 py-0.5 rounded border border-border">{project.opencode_pid}</span>
+                    </div>
+                    {project.opencode_port && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground uppercase">监听端口</span>
+                        <span className="text-sm font-bold text-foreground bg-muted px-2 py-0.5 rounded border border-border">{project.opencode_port}</span>
+                      </div>
+                    )}
+                    {project.opencode_started_at && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground uppercase">启动时间</span>
+                        <span className="text-sm text-foreground">{formatDate(project.opencode_started_at)}</span>
+                      </div>
+                    )}
+                    <div className="pt-2">
+                      <Button
+                        onClick={async () => {
+                          if (!id) return;
+                          try {
+                            await opencodeApi.stopProjectServe(id);
+                            toast.success("OpenCode 服务器已停止");
+                            loadProjectData();
+                          } catch (error) {
+                            toast.error("停止 OpenCode 服务器失败");
+                          }
+                        }}
+                        variant="outline"
+                        className="w-full cyber-btn-outline"
+                      >
+                        <XCircle className="w-4 h-4 mr-2" />
+                        停止服务器
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    <Terminal className="empty-state-icon" />
+                    <p className="empty-state-description">OpenCode 服务器未运行</p>
+                    <Button
+                      onClick={async () => {
+                        if (!id) return;
+                        try {
+                          await opencodeApi.startProjectServe(id);
+                          toast.success("OpenCode 服务器启动中...");
+                          // Refresh after a delay
+                          setTimeout(() => loadProjectData(), 2000);
+                        } catch (error) {
+                          toast.error("启动 OpenCode 服务器失败");
+                        }
+                      }}
+                      className="mt-4 cyber-btn-primary"
+                    >
+                      <Activity className="w-4 h-4 mr-2" />
+                      启动服务器
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* 项目信息 */}
             <div className="cyber-card p-4">
               <div className="section-header">
