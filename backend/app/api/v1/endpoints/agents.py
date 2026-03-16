@@ -3,13 +3,15 @@ Agent Management API
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
+import os
 
 from app.db.session import get_db
 from app.models import Agent, AgentType
 from app.api.deps import get_current_user
+from app.core.platform_config import get_opencode_agents_dir, ensure_dir_exists, delete_file_or_dir
 
 router = APIRouter()
 
@@ -189,3 +191,96 @@ async def toggle_agent(
     await db.refresh(agent)
 
     return agent.to_dict()
+
+
+# ==================== Agent 文件管理端点 ====================
+
+
+@router.get("/files")
+async def list_agent_files(
+    current_user=Depends(get_current_user),
+):
+    """列出所有上传的 Agent 配置文件"""
+    agents_dir = get_opencode_agents_dir()
+    ensure_dir_exists(agents_dir)
+
+    files = []
+    if os.path.exists(agents_dir):
+        for filename in os.listdir(agents_dir):
+            if filename.endswith(".md"):
+                file_path = os.path.join(agents_dir, filename)
+                stat = os.stat(file_path)
+                files.append(
+                    {
+                        "filename": filename,
+                        "file_size": stat.st_size,
+                        "created_at": stat.st_ctime,
+                        "updated_at": stat.st_mtime,
+                    }
+                )
+
+    return {"files": files}
+
+
+@router.post("/files/upload")
+async def upload_agent_file(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    """上传 Agent 配置文件（.md 格式）"""
+    # 验证文件类型
+    if not file.filename.lower().endswith(".md"):
+        raise HTTPException(status_code=400, detail="请上传 .md 格式的文件")
+
+    agents_dir = get_opencode_agents_dir()
+    ensure_dir_exists(agents_dir)
+
+    # 保持原始文件名，只做路径安全检查防止路径遍历
+    original_filename = file.filename or "agent.md"
+    # 移除路径分隔符，只保留文件名部分
+    safe_filename = os.path.basename(original_filename)
+    if not safe_filename:
+        safe_filename = "agent.md"
+    if not safe_filename.lower().endswith(".md"):
+        safe_filename += ".md"
+
+    file_path = os.path.join(agents_dir, safe_filename)
+
+    # 检查文件是否已存在，存在则直接失败
+    if os.path.exists(file_path):
+        raise HTTPException(
+            status_code=400, detail=f"文件 '{safe_filename}' 已存在，请使用其他文件名或先删除原文件"
+        )
+
+    # 保存文件
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    return {
+        "message": "Agent 文件上传成功",
+        "filename": os.path.basename(file_path),
+        "file_size": len(content),
+    }
+
+
+@router.delete("/files/{filename}")
+async def delete_agent_file(
+    filename: str,
+    current_user=Depends(get_current_user),
+):
+    """删除指定的 Agent 配置文件"""
+    agents_dir = get_opencode_agents_dir()
+    file_path = os.path.join(agents_dir, filename)
+
+    # 安全检查：防止路径遍历攻击
+    if not os.path.abspath(file_path).startswith(os.path.abspath(agents_dir)):
+        raise HTTPException(status_code=400, detail="无效的文件名")
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    if delete_file_or_dir(file_path):
+        return {"message": "文件删除成功", "filename": filename}
+    else:
+        raise HTTPException(status_code=500, detail="文件删除失败")

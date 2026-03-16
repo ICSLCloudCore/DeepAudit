@@ -158,6 +158,22 @@ export const agentApi = {
     const response = await apiClient.patch(`/agents/${id}/toggle`, { is_active });
     return response.data;
   },
+
+  // Agent 文件管理
+  listFiles: async () => {
+    const response = await apiClient.get("/agents/files");
+    return response.data;
+  },
+
+  uploadFile: async (formData: FormData) => {
+    const response = await apiClient.post("/agents/files/upload", formData);
+    return response.data;
+  },
+
+  deleteFile: async (filename: string) => {
+    const response = await apiClient.delete(`/agents/files/${encodeURIComponent(filename)}`);
+    return response.data;
+  },
 };
 
 // OpenCode API (Skills & MCPs)
