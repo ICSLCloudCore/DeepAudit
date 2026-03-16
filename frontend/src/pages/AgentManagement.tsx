@@ -1,6 +1,29 @@
-// Agent Management Page
+/**
+ * Agent Management Page
+ * Cyberpunk Terminal Aesthetic
+ */
+
 import React, { useState, useEffect, useRef } from "react";
 import { agentApi, type Agent } from "@/shared/api/opencode";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Upload,
+  Plus,
+  Search,
+  FileText,
+  Trash2,
+  Eye,
+  Power,
+  Bot,
+  Cpu,
+  Code,
+  Clock,
+  FolderOpen
+} from "lucide-react";
+import { toast } from "sonner";
 
 interface AgentFile {
   filename: string;
@@ -9,7 +32,7 @@ interface AgentFile {
   updated_at: number;
 }
 
-const AgentManagementPage: React.FC = () => {
+export default function AgentManagement() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentFiles, setAgentFiles] = useState<AgentFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +57,7 @@ const AgentManagementPage: React.FC = () => {
       setAgents(data.items);
     } catch (error) {
       console.error("Failed to load agents:", error);
+      toast.error("加载 Agent 列表失败");
     } finally {
       setLoading(false);
     }
@@ -46,6 +70,7 @@ const AgentManagementPage: React.FC = () => {
       setAgentFiles(data.files);
     } catch (error) {
       console.error("Failed to load agent files:", error);
+      toast.error("加载 Agent 文件失败");
     } finally {
       setLoadingFiles(false);
     }
@@ -54,9 +79,11 @@ const AgentManagementPage: React.FC = () => {
   const toggleAgent = async (id: string, currentStatus: boolean) => {
     try {
       await agentApi.toggle(id, !currentStatus);
+      toast.success(currentStatus ? "Agent 已禁用" : "Agent 已启用");
       loadAgents();
     } catch (error) {
       console.error("Failed to toggle agent:", error);
+      toast.error("操作失败");
     }
   };
 
@@ -69,7 +96,7 @@ const AgentManagementPage: React.FC = () => {
 
   const handleFileUpload = async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.md')) {
-      alert('请上传 .md 格式的文件');
+      toast.error('请上传 .md 格式的文件');
       return;
     }
 
@@ -78,11 +105,11 @@ const AgentManagementPage: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
       await agentApi.uploadFile(formData);
-      alert('Agent 文件上传成功！');
+      toast.success('Agent 文件上传成功！');
       loadAgentFiles();
     } catch (error) {
       console.error("Failed to upload file:", error);
-      alert('文件上传失败，请重试');
+      toast.error('文件上传失败，请重试');
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -98,11 +125,11 @@ const AgentManagementPage: React.FC = () => {
 
     try {
       await agentApi.deleteFile(filename);
-      alert('文件删除成功！');
+      toast.success('文件删除成功！');
       loadAgentFiles();
     } catch (error) {
       console.error("Failed to delete file:", error);
-      alert('文件删除失败，请重试');
+      toast.error('文件删除失败');
     }
   };
 
@@ -123,27 +150,34 @@ const AgentManagementPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-cyan-400">Agent 管理</h1>
-            <p className="text-gray-400 mt-2">管理系统 Agent 和自定义 Agent</p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition flex items-center gap-2"
+    <div className="space-y-6 p-6 cyber-bg-elevated min-h-screen font-mono relative">
+      {/* Grid background */}
+      <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
+
+      {/* Header Section */}
+      <div className="cyber-card p-0 relative z-10">
+        <div className="cyber-card-header">
+          <Bot className="w-5 h-5 text-primary" />
+          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Agent 管理</h3>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
+              size="sm"
+              className="cyber-btn-outline h-8"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
+              <Upload className="w-4 h-4 mr-2" />
               {uploading ? '上传中...' : '上传 Agent 文件'}
-            </button>
-            <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg transition">
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="cyber-btn-primary h-8"
+            >
+              <Plus className="w-4 h-4 mr-2" />
               创建自定义 Agent
-            </button>
+            </Button>
             <input
               ref={fileInputRef}
               type="file"
@@ -153,146 +187,223 @@ const AgentManagementPage: React.FC = () => {
             />
           </div>
         </div>
+        <div className="p-6">
+          <p className="text-muted-foreground font-mono">管理系统 Agent 和自定义 Agent</p>
+        </div>
+      </div>
 
-        {/* Agent 文件列表 */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-cyan-300">自定义 Agent 文件</h2>
-            <span className="text-sm text-gray-400">
-              文件存储在 ~/.config/opencode/agents/ 目录
-            </span>
-          </div>
-          
+      {/* Agent Files Section */}
+      <div className="cyber-card p-0 relative z-10">
+        <div className="cyber-card-header">
+          <FolderOpen className="w-5 h-5 text-primary" />
+          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">自定义 Agent 文件</h3>
+          <span className="ml-auto text-xs text-muted-foreground font-mono">
+            文件存储在 ~/.config/opencode/agents/ 目录
+          </span>
+        </div>
+        <div className="p-6">
           {loadingFiles ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-500 mx-auto"></div>
-              <p className="text-gray-400 mt-2">加载中...</p>
+              <div className="loading-spinner mx-auto mb-4"></div>
+              <p className="text-muted-foreground font-mono">加载中...</p>
             </div>
           ) : agentFiles.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p>暂无自定义 Agent 文件</p>
-              <p className="text-sm mt-2">点击上方按钮上传 .md 格式的 Agent 配置文件</p>
+            <div className="empty-state">
+              <FileText className="empty-state-icon" />
+              <p className="empty-state-title">暂无自定义 Agent 文件</p>
+              <p className="empty-state-description">点击上方按钮上传 .md 格式的 Agent 配置文件</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {agentFiles.map((file) => (
                 <div
                   key={file.filename}
-                  className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 hover:border-cyan-500 transition"
+                  className="cyber-card p-4 hover:border-border transition-all group"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-cyan-900/50 rounded-lg flex items-center justify-center">
-                        <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/20 text-primary">
+                        <FileText className="w-5 h-5" />
                       </div>
-                      <div className="min-w-0">
-                        <h3 className="font-medium truncate">{file.filename}</h3>
-                        <p className="text-sm text-gray-400">{formatFileSize(file.file_size)}</p>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors truncate">
+                          {file.filename}
+                        </h4>
+                        <p className="text-xs text-muted-foreground font-mono">{formatFileSize(file.file_size)}</p>
                       </div>
                     </div>
-                    <button
-                      className="text-red-400 hover:text-red-300 transition"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleDeleteFile(file.filename)}
+                      className="h-8 w-8 p-0 hover:bg-rose-500/10 hover:text-rose-400"
                       title="删除文件"
                     >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <div className="text-xs text-gray-500">
-                    <p>更新时间: {formatDate(file.updated_at)}</p>
+                  <div className="flex items-center text-xs text-muted-foreground font-mono">
+                    <Clock className="w-3 h-3 mr-1" />
+                    更新时间: {formatDate(file.updated_at)}
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+      </div>
 
-        {/* Filters */}
-        <div className="bg-gray-800 rounded-lg p-4 mb-6 flex flex-wrap gap-4">
-          <input
-            type="text"
-            placeholder="搜索 Agent..."
-            className="px-4 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-cyan-500 focus:outline-none"
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-          />
-          <select
-            className="px-4 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-cyan-500 focus:outline-none"
-            value={filters.agent_type}
-            onChange={(e) => setFilters({ ...filters, agent_type: e.target.value })}
-          >
-            <option value="all">全部类型</option>
-            <option value="system">系统 Agent</option>
-            <option value="custom">自定义 Agent</option>
-          </select>
+      {/* Filters Section */}
+      <div className="cyber-card p-0 relative z-10">
+        <div className="cyber-card-header">
+          <Search className="w-5 h-5 text-primary" />
+          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">筛选和搜索</h3>
         </div>
-
-        {/* Agent List */}
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto"></div>
-            <p className="text-gray-400 mt-4">加载中...</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {agents.map((agent) => (
-              <div
-                key={agent.id}
-                className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-cyan-500 transition"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="text-lg font-semibold">{agent.name}</h3>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      agent.agent_type === "system"
-                        ? "bg-purple-600"
-                        : "bg-green-600"
-                    }`}>
-                      {agent.agent_type === "system" ? "系统" : "自定义"}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      agent.is_active ? "bg-green-600" : "bg-red-600"
-                    }`}>
-                      {agent.is_active ? "启用" : "禁用"}
-                    </span>
-                  </div>
-                </div>
-                <p className="text-gray-400 text-sm mb-3">
-                  {agent.description || "暂无描述"}
-                </p>
-                <div className="flex justify-between items-center text-sm text-gray-500">
-                  <span>v{agent.version}</span>
-                  <div className="flex gap-2">
-                    <button
-                      className="text-cyan-400 hover:text-cyan-300"
-                      onClick={() => console.log("View agent:", agent.id)}
-                    >
-                      详情
-                    </button>
-                    <button
-                      className="text-yellow-400 hover:text-yellow-300"
-                      onClick={() => toggleAgent(agent.id, agent.is_active)}
-                    >
-                      {agent.is_active ? "禁用" : "启用"}
-                    </button>
-                  </div>
-                </div>
+        <div className="p-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">搜索 Agent</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索 Agent..."
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  className="pl-10 cyber-input h-10"
+                />
               </div>
-            ))}
+            </div>
+            <div className="flex-1 space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Agent 类型</label>
+              <Select value={filters.agent_type} onValueChange={(val) => setFilters({ ...filters, agent_type: val })}>
+                <SelectTrigger className="cyber-input h-10">
+                  <SelectValue placeholder="选择类型" />
+                </SelectTrigger>
+                <SelectContent className="cyber-dialog border-border">
+                  <SelectItem value="all">全部类型</SelectItem>
+                  <SelectItem value="system">系统 Agent</SelectItem>
+                  <SelectItem value="custom">自定义 Agent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">状态</label>
+              <Select 
+                value={filters.is_active === undefined ? 'all' : filters.is_active ? 'active' : 'inactive'} 
+                onValueChange={(val) => setFilters({ 
+                  ...filters, 
+                  is_active: val === 'all' ? undefined : val === 'active' 
+                })}
+              >
+                <SelectTrigger className="cyber-input h-10">
+                  <SelectValue placeholder="选择状态" />
+                </SelectTrigger>
+                <SelectContent className="cyber-dialog border-border">
+                  <SelectItem value="all">全部状态</SelectItem>
+                  <SelectItem value="active">已启用</SelectItem>
+                  <SelectItem value="inactive">已禁用</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* Agent List */}
+      <div className="cyber-card p-0 relative z-10">
+        <div className="cyber-card-header">
+          <Cpu className="w-5 h-5 text-primary" />
+          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Agent 列表 ({agents.length})</h3>
+        </div>
+        <div className="p-6">
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="loading-spinner mx-auto mb-4"></div>
+              <p className="text-muted-foreground font-mono">加载中...</p>
+            </div>
+          ) : agents.length === 0 ? (
+            <div className="empty-state">
+              <Bot className="empty-state-icon" />
+              <p className="empty-state-title">暂无 Agent</p>
+              <p className="empty-state-description">没有找到符合条件的 Agent</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {agents.map((agent) => (
+                <div
+                  key={agent.id}
+                  className="cyber-card p-4 hover:border-border transition-all group"
+                >
+                  <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        agent.agent_type === "system"
+                          ? "bg-violet-500/20 text-violet-400"
+                          : "bg-emerald-500/20 text-emerald-400"
+                      }`}>
+                        <Code className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">
+                          {agent.name}
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <Badge className={`font-bold uppercase text-xs ${
+                            agent.agent_type === "system"
+                              ? "bg-violet-500/20 text-violet-400 border-violet-500/30"
+                              : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                          }`}>
+                            {agent.agent_type === "system" ? "系统" : "自定义"}
+                          </Badge>
+                          <Badge className={`font-bold uppercase text-xs ${
+                            agent.is_active
+                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                              : "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                          }`}>
+                            {agent.is_active ? "启用" : "禁用"}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <p className="text-muted-foreground text-sm mb-4 leading-relaxed font-mono">
+                    {agent.description || "暂无描述"}
+                  </p>
+                  
+                  <div className="flex justify-between items-center pt-3 border-t border-border">
+                    <span className="text-xs text-muted-foreground font-mono">v{agent.version}</span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => console.log("View agent:", agent.id)}
+                        className="h-8 px-2 text-xs cyber-btn-ghost hover:text-primary"
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        详情
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleAgent(agent.id, agent.is_active)}
+                        className={`h-8 px-2 text-xs cyber-btn-ghost ${
+                          agent.is_active 
+                            ? "hover:text-rose-400" 
+                            : "hover:text-emerald-400"
+                        }`}
+                      >
+                        <Power className="w-3 h-3 mr-1" />
+                        {agent.is_active ? "禁用" : "启用"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
-};
-
-export default AgentManagementPage;
+}
