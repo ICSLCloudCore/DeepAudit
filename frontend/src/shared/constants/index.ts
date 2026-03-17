@@ -2,18 +2,18 @@
 
 // 支持的编程语言
 export const SUPPORTED_LANGUAGES = [
-  'javascript',
-  'typescript',
-  'python',
-  'java',
+  // 'javascript',
+  // 'typescript',
+  // 'python',
+  // 'java',
   'go',
-  'rust',
-  'cpp',
-  'csharp',
-  'php',
-  'ruby',
-  'swift',
-  'kotlin',
+  // 'rust',
+  // 'cpp',
+  // 'csharp',
+  // 'php',
+  // 'ruby',
+  // 'swift',
+  // 'kotlin',
 ] as const;
 
 // 问题类型

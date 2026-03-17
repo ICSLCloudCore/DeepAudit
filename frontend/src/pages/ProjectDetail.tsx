@@ -366,18 +366,18 @@ export default function ProjectDetail() {
 
   const formatLanguageName = (lang: string): string => {
     const nameMap: Record<string, string> = {
-      'javascript': 'JavaScript',
-      'typescript': 'TypeScript',
-      'python': 'Python',
-      'java': 'Java',
+      // 'javascript': 'JavaScript',
+      // 'typescript': 'TypeScript',
+      // 'python': 'Python',
+      // 'java': 'Java',
       'go': 'Go',
-      'rust': 'Rust',
-      'cpp': 'C++',
-      'csharp': 'C#',
-      'php': 'PHP',
-      'ruby': 'Ruby',
-      'swift': 'Swift',
-      'kotlin': 'Kotlin'
+      // 'rust': 'Rust',
+      // 'cpp': 'C++',
+      // 'csharp': 'C#',
+      // 'php': 'PHP',
+      // 'ruby': 'Ruby',
+      // 'swift': 'Swift',
+      // 'kotlin': 'Kotlin'
     };
     return nameMap[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
   };

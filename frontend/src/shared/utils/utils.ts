@@ -81,24 +81,24 @@ export function getFileExtension(filename: string): string {
 
 export function getLanguageFromExtension(extension: string): string {
   const languageMap: Record<string, string> = {
-    'js': 'javascript',
-    'jsx': 'javascript',
-    'ts': 'typescript',
-    'tsx': 'typescript',
-    'py': 'python',
-    'java': 'java',
+    // 'js': 'javascript',
+    // 'jsx': 'javascript',
+    // 'ts': 'typescript',
+    // 'tsx': 'typescript',
+    // 'py': 'python',
+    // 'java': 'java',
     'go': 'go',
-    'rs': 'rust',
-    'cpp': 'cpp',
-    'c': 'cpp',
-    'cc': 'cpp',
-    'h': 'cpp',
-    'hh': 'cpp',
-    'cs': 'csharp',
-    'php': 'php',
-    'rb': 'ruby',
-    'kt': 'kotlin',
-    'swift': 'swift'
+    // 'rs': 'rust',
+    // 'cpp': 'cpp',
+    // 'c': 'cpp',
+    // 'cc': 'cpp',
+    // 'h': 'cpp',
+    // 'hh': 'cpp',
+    // 'cs': 'csharp',
+    // 'php': 'php',
+    // 'rb': 'ruby',
+    // 'kt': 'kotlin',
+    // 'swift': 'swift'
   };
   
   return languageMap[extension] || 'text';
