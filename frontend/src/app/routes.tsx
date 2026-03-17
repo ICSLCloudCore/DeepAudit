@@ -11,7 +11,8 @@ import Account from "@/pages/Account";
 import AuditRules from "@/pages/AuditRules";
 import PromptManager from "@/pages/PromptManager";
 import AgentManagement from "@/pages/AgentManagement";
-import SkillMCPMarketplace from "@/pages/SkillMCPMarketplace";
+import SkillMarketplace from "@/pages/SkillMarketplace";
+import MCPMarketplace from "@/pages/MCPMarketplace";
 import type { ReactNode } from 'react';
 
 export interface RouteConfig {
@@ -59,9 +60,15 @@ const routes: RouteConfig[] = [
     visible: true,
   },
   {
-    name: "Skill/MCP市场",
-    path: "/marketplace",
-    element: <SkillMCPMarketplace />,
+    name: "Skill",
+    path: "/skill-marketplace",
+    element: <SkillMarketplace />,
+    visible: true,
+  },
+  {
+    name: "MCP",
+    path: "/mcp-marketplace",
+    element: <MCPMarketplace />,
     visible: true,
   },
   {

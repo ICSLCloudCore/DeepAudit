@@ -1,4 +1,4 @@
-// Skill & MCP Marketplace Page - Cyberpunk Terminal Aesthetic
+// Skill Marketplace Page - Cyberpunk Terminal Aesthetic
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,17 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Package,
-  Server,
   Upload,
   Search,
   Filter,
   Trash2,
   Eye,
-  Zap,
   X,
   AlertTriangle,
   Globe,
@@ -30,13 +27,11 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { Label } from "@/components/ui/label";
-import { opencodeApi, type OpenCodeSkill, type OpenCodeMCP } from "@/shared/api/opencode";
+import { opencodeApi, type OpenCodeSkill } from "@/shared/api/opencode";
 import { toast } from "sonner";
 
-const SkillMCPMarketplace: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"skills" | "mcps">("skills");
+const SkillMarketplace: React.FC = () => {
   const [skills, setSkills] = useState<OpenCodeSkill[]>([]);
-  const [mcps, setMcps] = useState<OpenCodeMCP[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     category: "",
@@ -58,12 +53,8 @@ const SkillMCPMarketplace: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (activeTab === "skills") {
-      loadSkills();
-    } else {
-      loadMcps();
-    }
-  }, [activeTab, filters]);
+    loadSkills();
+  }, [filters]);
 
   const loadSkills = async () => {
     try {
@@ -75,33 +66,6 @@ const SkillMCPMarketplace: React.FC = () => {
       toast.error("加载 Skills 失败");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadMcps = async () => {
-    try {
-      setLoading(true);
-      const data = await opencodeApi.listMcps(filters);
-      setMcps(data.items);
-    } catch (error) {
-      console.error("Failed to load mcps:", error);
-      toast.error("加载 MCPs 失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const testMcpConnection = async (id: string) => {
-    try {
-      const result = await opencodeApi.testMcpConnection(id);
-      if (result.success) {
-        toast.success("连接测试成功!");
-      } else {
-        toast.error("连接测试失败!");
-      }
-    } catch (error) {
-      console.error("Failed to test MCP connection:", error);
-      toast.error("连接测试失败");
     }
   };
 
@@ -242,241 +206,144 @@ const SkillMCPMarketplace: React.FC = () => {
       <div className="cyber-card p-0 relative z-10">
         <div className="cyber-card-header">
           <Package className="w-5 h-5 text-primary" />
-          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Skill & MCP 市场</h3>
+          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Skill 市场</h3>
           <div className="ml-auto">
             <Button
               variant="outline"
-              onClick={() => activeTab === "skills" && setShowUploadDialog(true)}
+              onClick={() => setShowUploadDialog(true)}
               className="cyber-btn-primary"
             >
               <Upload className="w-4 h-4 mr-2" />
-              {activeTab === "skills" ? "上传 Skill" : "创建 MCP"}
+              上传 Skill
             </Button>
           </div>
         </div>
         <div className="p-6">
-          <p className="text-muted-foreground font-mono">浏览和管理 OpenCode Skills 和 MCPs</p>
+          <p className="text-muted-foreground font-mono">浏览和管理 OpenCode Skills</p>
         </div>
       </div>
 
       {/* Main Content Card */}
       <div className="cyber-card p-0 relative z-10">
         <div className="p-6 space-y-6">
-          {/* Tabs */}
-          <Tabs 
-            defaultValue="skills" 
-            value={activeTab}
-            onValueChange={(value) => setActiveTab(value as "skills" | "mcps")}
-            className="w-full"
-          >
-            <TabsList className="grid w-full grid-cols-2 bg-muted border border-border p-1 h-auto gap-1 rounded mb-6">
-              <TabsTrigger value="skills" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs">
-                <Package className="w-4 h-4 mr-2" />
-                Skills
-              </TabsTrigger>
-              <TabsTrigger value="mcps" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs">
-                <Server className="w-4 h-4 mr-2" />
-                MCPs
-              </TabsTrigger>
-            </TabsList>
-
-            {/* Filters */}
-            <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                    <Search className="w-3 h-3" />
-                    搜索
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder={`搜索 ${activeTab === "skills" ? "Skills" : "MCPs"}...`}
-                    className="cyber-input"
-                    value={filters.search}
-                    onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  />
-                </div>
-                {activeTab === "skills" && (
-                  <div className="sm:w-48">
-                    <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                      <Filter className="w-3 h-3" />
-                      分类
-                    </label>
-                    <Select
-                      value={filters.category}
-                      onValueChange={(value) => setFilters({ ...filters, category: value })}
-                    >
-                      <SelectTrigger className="cyber-input">
-                        <SelectValue placeholder="全部分类" />
-                      </SelectTrigger>
-                      <SelectContent className="cyber-dialog border-border">
-                        <SelectItem value="all">全部分类</SelectItem>
-                        <SelectItem value="security">安全</SelectItem>
-                        <SelectItem value="analysis">分析</SelectItem>
-                        <SelectItem value="utility">工具</SelectItem>
-                        <SelectItem value="custom">自定义</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+          {/* Filters */}
+          <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                  <Search className="w-3 h-3" />
+                  搜索
+                </label>
+                <Input
+                  type="text"
+                  placeholder="搜索 Skills..."
+                  className="cyber-input"
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                />
+              </div>
+              <div className="sm:w-48">
+                <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                  <Filter className="w-3 h-3" />
+                  分类
+                </label>
+                <Select
+                  value={filters.category}
+                  onValueChange={(value) => setFilters({ ...filters, category: value })}
+                >
+                  <SelectTrigger className="cyber-input">
+                    <SelectValue placeholder="全部分类" />
+                  </SelectTrigger>
+                  <SelectContent className="cyber-dialog border-border">
+                    <SelectItem value="all">全部分类</SelectItem>
+                    <SelectItem value="security">安全</SelectItem>
+                    <SelectItem value="analysis">分析</SelectItem>
+                    <SelectItem value="utility">工具</SelectItem>
+                    <SelectItem value="custom">自定义</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+          </div>
 
-            {/* Content */}
-            <TabsContent value="skills" className="mt-0">
-              {loading ? (
-                <div className="text-center py-12">
-                  <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
-                  <p className="text-muted-foreground font-mono">加载中...</p>
-                </div>
-              ) : skills.length === 0 ? (
-                <div className="empty-state">
-                  <Package className="empty-state-icon" />
-                  <p className="empty-state-title">暂无 Skills</p>
-                  <p className="empty-state-description">上传您的第一个 Skill 开始使用</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {skills.map((skill) => (
-                    <div
-                      key={skill.id}
-                      className="cyber-card p-4 hover:border-primary transition-all group"
-                    >
-                      <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
-                        <div className="flex items-start space-x-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getCategoryColor(skill.category)}`}>
-                            {getCategoryIcon(skill.category)}
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">{skill.name}</h4>
-                            <div className="flex items-center space-x-1 text-xs text-muted-foreground font-mono">
-                              <span className="text-primary">{`>`}</span>
-                              <span>v{skill.version}</span>
-                            </div>
-                          </div>
-                        </div>
-                        {skill.is_public && (
-                          <Badge className="cyber-badge-muted">
-                            <Globe className="w-3 h-3 mr-1" />
-                            公开
-                          </Badge>
-                        )}
+          {/* Content */}
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
+              <p className="text-muted-foreground font-mono">加载中...</p>
+            </div>
+          ) : skills.length === 0 ? (
+            <div className="empty-state">
+              <Package className="empty-state-icon" />
+              <p className="empty-state-title">暂无 Skills</p>
+              <p className="empty-state-description">上传您的第一个 Skill 开始使用</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {skills.map((skill) => (
+                <div
+                  key={skill.id}
+                  className="cyber-card p-4 hover:border-primary transition-all group"
+                >
+                  <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
+                    <div className="flex items-start space-x-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getCategoryColor(skill.category)}`}>
+                        {getCategoryIcon(skill.category)}
                       </div>
-
-                      <div className="space-y-3">
-                        <p className="text-muted-foreground text-sm">
-                          {skill.description || "暂无描述"}
-                        </p>
-                        
-                        <div className="flex justify-between items-center">
-                          <div className="text-xs text-muted-foreground font-mono">
-                            作者: {skill.author}
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs cyber-btn-ghost"
-                              onClick={() => console.log("View skill:", skill.id)}
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              详情
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs cyber-btn-ghost text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
-                              onClick={() => {
-                                setSkillToDelete(skill);
-                                setShowDeleteDialog(true);
-                              }}
-                            >
-                              <Trash2 className="w-3 h-3 mr-1" />
-                              删除
-                            </Button>
-                          </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">{skill.name}</h4>
+                        <div className="flex items-center space-x-1 text-xs text-muted-foreground font-mono">
+                          <span className="text-primary">{`>`}</span>
+                          <span>v{skill.version}</span>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
+                    {skill.is_public && (
+                      <Badge className="cyber-badge-muted">
+                        <Globe className="w-3 h-3 mr-1" />
+                        公开
+                      </Badge>
+                    )}
+                  </div>
 
-            <TabsContent value="mcps" className="mt-0">
-              {loading ? (
-                <div className="text-center py-12">
-                  <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
-                  <p className="text-muted-foreground font-mono">加载中...</p>
-                </div>
-              ) : mcps.length === 0 ? (
-                <div className="empty-state">
-                  <Server className="empty-state-icon" />
-                  <p className="empty-state-title">暂无 MCPs</p>
-                  <p className="empty-state-description">添加您的第一个 MCP 开始使用</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {mcps.map((mcp) => (
-                    <div
-                      key={mcp.id}
-                      className="cyber-card p-4 hover:border-primary transition-all group"
-                    >
-                      <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
-                        <div className="flex items-start space-x-3">
-                          <div className="w-10 h-10 rounded-lg flex items-center justify-center text-violet-400 bg-violet-500/20">
-                            <Server className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">{mcp.name}</h4>
-                            <div className="flex items-center space-x-1 text-xs text-muted-foreground font-mono">
-                              <span className="text-primary">{`>`}</span>
-                              <span>v{mcp.version}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <Badge className="cyber-badge-muted">
-                          {mcp.mcp_type}
-                        </Badge>
+                  <div className="space-y-3">
+                    <p className="text-muted-foreground text-sm">
+                      {skill.description || "暂无描述"}
+                    </p>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="text-xs text-muted-foreground font-mono">
+                        作者: {skill.author}
                       </div>
-
-                      <div className="space-y-3">
-                        <p className="text-muted-foreground text-sm">
-                          {mcp.description || "暂无描述"}
-                        </p>
-                        
-                        <div className="flex justify-between items-center">
-                          <div className="text-xs text-muted-foreground font-mono">
-                            作者: {mcp.author}
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs cyber-btn-ghost text-violet-400 hover:text-violet-300 hover:bg-violet-500/10"
-                              onClick={() => testMcpConnection(mcp.id)}
-                            >
-                              <Zap className="w-3 h-3 mr-1" />
-                              测试连接
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs cyber-btn-ghost"
-                              onClick={() => console.log("View MCP:", mcp.id)}
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              详情
-                            </Button>
-                          </div>
-                        </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs cyber-btn-ghost"
+                          onClick={() => console.log("View skill:", skill.id)}
+                        >
+                          <Eye className="w-3 h-3 mr-1" />
+                          详情
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs cyber-btn-ghost text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                          onClick={() => {
+                            setSkillToDelete(skill);
+                            setShowDeleteDialog(true);
+                          }}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" />
+                          删除
+                        </Button>
                       </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              )}
-            </TabsContent>
-          </Tabs>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -730,4 +597,4 @@ const SkillMCPMarketplace: React.FC = () => {
   );
 };
 
-export default SkillMCPMarketplace;
+export default SkillMarketplace;
