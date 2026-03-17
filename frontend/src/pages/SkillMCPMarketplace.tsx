@@ -23,8 +23,13 @@ import {
   Globe,
   Shield,
   Cpu,
-  Database
+  Database,
+  Terminal,
+  FileText,
+  AlertCircle
 } from "lucide-react";
+import { useRef } from "react";
+import { Label } from "@/components/ui/label";
 import { opencodeApi, type OpenCodeSkill, type OpenCodeMCP } from "@/shared/api/opencode";
 import { toast } from "sonner";
 
@@ -50,6 +55,7 @@ const SkillMCPMarketplace: React.FC = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [skillToDelete, setSkillToDelete] = useState<OpenCodeSkill | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (activeTab === "skills") {
@@ -127,6 +133,9 @@ const SkillMCPMarketplace: React.FC = () => {
         is_public: false,
         file: null,
       });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       loadSkills();
     } catch (error: any) {
       console.error("Failed to upload skill:", error);
@@ -473,53 +482,72 @@ const SkillMCPMarketplace: React.FC = () => {
 
       {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
-        <DialogContent className="cyber-dialog border-border">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-              <Upload className="w-5 h-5 text-primary" />
+        <DialogContent className="!w-[min(90vw,700px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
+          {/* Terminal Header */}
+          <div className="flex items-center gap-2 px-4 py-3 cyber-bg-elevated border-b border-border flex-shrink-0">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500/80" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+              <div className="w-3 h-3 rounded-full bg-green-500/80" />
+            </div>
+            <span className="ml-2 font-mono text-xs text-muted-foreground tracking-wider">
+              upload_skill@godeepaudit
+            </span>
+          </div>
+
+          <DialogHeader className="px-6 pt-4 flex-shrink-0">
+            <DialogTitle className="font-mono text-lg uppercase tracking-wider flex items-center gap-2 text-foreground">
+              <Terminal className="w-5 h-5 text-primary" />
               上传新 Skill
             </DialogTitle>
-            <DialogDescription className="text-muted-foreground font-mono">
-              填写以下信息并上传您的 Skill 文件
-            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleUploadSkill}>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase block">Skill 名称 *</label>
+
+          <div className="flex-1 overflow-y-auto p-6">
+            <form onSubmit={handleUploadSkill} className="flex flex-col gap-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="skill-name" className="font-mono font-bold uppercase text-xs text-muted-foreground">Skill 名称 *</Label>
                 <Input
+                  id="skill-name"
                   type="text"
                   className="cyber-input"
                   value={uploadForm.name}
                   onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                  placeholder="输入 Skill 名称"
                   required
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase block">版本</label>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="skill-version" className="font-mono font-bold uppercase text-xs text-muted-foreground">版本</Label>
                 <Input
+                  id="skill-version"
                   type="text"
                   className="cyber-input"
                   value={uploadForm.version}
                   onChange={(e) => setUploadForm({ ...uploadForm, version: e.target.value })}
+                  placeholder="1.0.0"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase block">描述</label>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="skill-description" className="font-mono font-bold uppercase text-xs text-muted-foreground">描述</Label>
                 <Textarea
-                  className="cyber-input"
+                  id="skill-description"
+                  className="cyber-input min-h-[80px]"
                   rows={3}
                   value={uploadForm.description}
                   onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
+                  placeholder="// Skill 描述..."
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase block">分类</label>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="skill-category" className="font-mono font-bold uppercase text-xs text-muted-foreground">分类</Label>
                 <Select
                   value={uploadForm.category}
                   onValueChange={(value) => setUploadForm({ ...uploadForm, category: value as any })}
                 >
-                  <SelectTrigger className="cyber-input">
+                  <SelectTrigger id="skill-category" className="cyber-input">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="cyber-dialog border-border">
@@ -530,15 +558,87 @@ const SkillMCPMarketplace: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase block">Skill 文件 *</label>
-                <Input
-                  type="file"
-                  className="cyber-input"
-                  onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files?.[0] || null })}
-                  required
-                />
+
+              <div className="space-y-4">
+                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">Skill 文件 *</Label>
+
+                {!uploadForm.file ? (
+                  <div
+                    className="border border-dashed border-border bg-muted/50 rounded p-6 text-center hover:bg-muted hover:border-border transition-colors cursor-pointer group"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3 group-hover:text-primary transition-colors" />
+                    <h3 className="text-base font-bold text-foreground uppercase mb-1">上传 Skill 文件</h3>
+                    <p className="text-xs font-mono text-muted-foreground mb-3">
+                      选择 .zip Skill 文件
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      id="skill-file"
+                      type="file"
+                      accept=".zip"
+                      onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files?.[0] || null })}
+                      className="hidden"
+                      disabled={uploading}
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="cyber-btn-outline h-8 text-xs"
+                      disabled={uploading}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      <FileText className="w-3 h-3 mr-2" />
+                      选择文件
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="border border-border bg-muted/50 p-4 flex items-center justify-between rounded">
+                    <div className="flex items-center space-x-3 overflow-hidden">
+                      <div className="w-10 h-10 bg-muted border border-border rounded flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-mono font-bold text-sm text-foreground truncate">{uploadForm.file.name}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{(uploadForm.file.size / 1024).toFixed(2)} KB</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setUploadForm({ ...uploadForm, file: null });
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = '';
+                        }
+                      }}
+                      disabled={uploading}
+                      className="hover:bg-rose-500/10 hover:text-rose-400"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+
+                  <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded">
+                  <div className="flex items-start space-x-3">
+                    <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5" />
+                    <div className="text-xs font-mono text-amber-300">
+                      <p className="font-bold mb-1 uppercase">上传说明:</p>
+                      <ul className="space-y-0.5 list-disc list-inside text-amber-400/80">
+                        <li>仅支持 ZIP 格式</li>
+                        <li>确保文件包含完整的 Skill 配置</li>
+                        <li>包含必要的元数据和工具定义</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
               </div>
+
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="is_public"
@@ -549,32 +649,33 @@ const SkillMCPMarketplace: React.FC = () => {
                   公开分享
                 </label>
               </div>
-            </div>
-            <DialogFooter className="mt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowUploadDialog(false)}
-                className="cyber-btn-outline"
-              >
-                取消
-              </Button>
-              <Button
-                type="submit"
-                className="cyber-btn-primary"
-                disabled={uploading}
-              >
-                {uploading ? (
-                  <>
-                    <div className="loading-spinner w-4 h-4 mr-2"></div>
-                    上传中...
-                  </>
-                ) : (
-                  "上传"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
+
+              <div className="flex justify-end space-x-4 pt-4 border-t border-border mt-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowUploadDialog(false)}
+                  className="cyber-btn-outline"
+                >
+                  取消
+                </Button>
+                <Button
+                  type="submit"
+                  className="cyber-btn-primary"
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <>
+                      <div className="loading-spinner w-4 h-4 mr-2"></div>
+                      上传中...
+                    </>
+                  ) : (
+                    "上传"
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
         </DialogContent>
       </Dialog>
 
