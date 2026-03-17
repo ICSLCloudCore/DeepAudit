@@ -82,6 +82,7 @@ class Settings(BaseSettings):
 
     # ZIP文件存储配置
     ZIP_STORAGE_PATH: str = "./uploads/zip_files"  # ZIP文件存储目录
+    SKILLS_ZIP_STORAGE_PATH: str = "./uploads/skills"  # Skills ZIP文件存储目录
 
     # 上传文件存储配置
     UPLOAD_DIR: str = "./uploads"  # 上传文件根目录

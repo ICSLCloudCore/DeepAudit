@@ -361,69 +361,104 @@ async def upload_skill(
     import os
     import hashlib
     import zipfile
-    import tarfile
-    from app.core.config import settings
+    import tempfile
     from app.core.platform_config import get_opencode_skills_dir, ensure_dir_exists
+    from app.core.config import settings
 
     file_content = await file.read()
     checksum = hashlib.sha256(file_content).hexdigest()
 
     # 保持原始文件名，只做基本安全检查防止路径遍历
     original_filename = file.filename or "skill"
-    # 移除路径分隔符，只保留文件名部分
     safe_filename = os.path.basename(original_filename)
     if not safe_filename:
         safe_filename = "skill"
+
+    # 只接受zip格式
+    if not safe_filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="只支持ZIP格式的文件")
 
     # 获取跨平台的OpenCode Skills目录
     opencode_skills_dir = get_opencode_skills_dir()
     ensure_dir_exists(opencode_skills_dir)
 
-    # 直接使用文件名作为目录名（不添加任何后缀）
-    skill_dir_name = name.lower().replace(" ", "_")
-    skill_dir = os.path.join(opencode_skills_dir, skill_dir_name)
+    # 确保skills zip存储目录存在
+    skills_zip_dir = Path(settings.SKILLS_ZIP_STORAGE_PATH)
+    skills_zip_dir.mkdir(parents=True, exist_ok=True)
 
-    # 检查目录是否已存在，存在则直接失败
-    if os.path.exists(skill_dir):
-        raise HTTPException(status_code=400, detail=f"名称 '{name}' 已存在，请使用其他名称")
+    # 创建临时目录用于检查zip内容
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_zip_path = os.path.join(temp_dir, safe_filename)
+        with open(temp_zip_path, "wb") as f:
+            f.write(file_content)
 
-    os.makedirs(skill_dir, exist_ok=True)
+        # 检查zip内容
+        root_dirs = set()
+        has_skill_md = False
+        skill_dir_name = None
 
-    # 保存原始文件，使用用户上传的原始文件名
-    original_file_path = os.path.join(skill_dir, safe_filename)
-    with open(original_file_path, "wb") as f:
-        f.write(file_content)
+        try:
+            with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
+                # 遍历zip中的所有文件
+                for info in zip_ref.infolist():
+                    # 获取路径的第一部分（根目录）
+                    parts = info.filename.split("/")
+                    if len(parts) > 0 and parts[0]:
+                        root_dirs.add(parts[0])
+                        # 检查是否有SKILL.md在根目录下
+                        if len(parts) == 2 and parts[1] == "SKILL.md":
+                            has_skill_md = True
+                            skill_dir_name = parts[0]
 
-    # 尝试解压文件
-    extracted_path = None
-    try:
-        if safe_filename.endswith(".zip"):
-            with zipfile.ZipFile(original_file_path, "r") as zip_ref:
-                zip_ref.extractall(skill_dir)
-            extracted_path = skill_dir
-        elif safe_filename.endswith(".tar.gz") or safe_filename.endswith(".tgz"):
-            with tarfile.open(original_file_path, "r:gz") as tar_ref:
-                tar_ref.extractall(skill_dir)
-            extracted_path = skill_dir
-        elif safe_filename.endswith(".tar"):
-            with tarfile.open(original_file_path, "r:") as tar_ref:
-                tar_ref.extractall(skill_dir)
-            extracted_path = skill_dir
-    except Exception as e:
-        # 如果解压失败，只记录日志，不中断上传
-        print(f"Warning: Failed to extract file {safe_filename}: {e}")
+                # 检查是否只有一个根目录
+                if len(root_dirs) != 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"ZIP格式不符：必须包含且仅包含一个根目录，当前包含 {len(root_dirs)} 个"
+                    )
 
-    # 如果没有解压或者解压失败，使用原始文件所在目录
-    final_opencode_path = extracted_path or skill_dir
+                # 检查是否包含SKILL.md
+                if not has_skill_md:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="ZIP格式不符：根目录下必须包含SKILL.md文件"
+                    )
 
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"ZIP文件解析失败：{str(e)}"
+            )
+
+        # 检查目标目录是否已存在
+        skill_dir = os.path.join(opencode_skills_dir, skill_dir_name)
+        if os.path.exists(skill_dir):
+            raise HTTPException(
+                status_code=400,
+                detail=f"技能目录 '{skill_dir_name}' 已存在，请使用其他名称或删除现有技能"
+            )
+
+        # 解压到opencode_skills_dir
+        with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
+            zip_ref.extractall(opencode_skills_dir)
+
+        # 保存原始zip文件到项目upload的skills目录下
+        skills_zip_file_path = skills_zip_dir / safe_filename
+  
+        with open(skills_zip_file_path, "wb") as f:
+            f.write(file_content)
+
+    # 创建数据库记录
     skill = OpenCodeSkill(
         name=name,
         version=version,
         description=description,
         author=getattr(current_user, "username", "unknown"),
         category=category,
-        file_path=original_file_path,
-        opencode_file_path=final_opencode_path,
+        file_path=str(skills_zip_file_path),
+        opencode_file_path=skill_dir,
         file_size=len(file_content),
         checksum=checksum,
         is_public=is_public,
@@ -492,17 +527,17 @@ async def delete_skill(
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
 
-    # 删除文件系统中的文件和目录
+    # 获取技能目录名并删除
     deleted_files = []
-    if skill.file_path and os.path.exists(skill.file_path):
-        if delete_file_or_dir(skill.file_path):
-            deleted_files.append(skill.file_path)
+    if skill.opencode_file_path:
+        # 按照目录名删除整个技能目录
+        if delete_file_or_dir(skill.opencode_file_path):
+            deleted_files.append(skill.opencode_file_path)
 
-    if skill.opencode_file_path and os.path.exists(skill.opencode_file_path):
-        # 确保不会重复删除同一个目录
-        if skill.opencode_file_path != skill.file_path:
-            if delete_file_or_dir(skill.opencode_file_path):
-                deleted_files.append(skill.opencode_file_path)
+    # 删除原始zip文件
+    if skill.file_path:
+        if delete_file_or_dir(skill.file_path):
+            deleted_files.append(skill.opencode_file_path)
 
     # 从数据库删除记录
     await db.delete(skill)
