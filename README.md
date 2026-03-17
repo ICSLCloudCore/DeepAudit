@@ -351,7 +351,7 @@ uv sync
 source .venv/bin/activate
 
 # 启动 API 服务
-uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload
 ```
 
 ### 3. 前端启动
