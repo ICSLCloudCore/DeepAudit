@@ -5,20 +5,85 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Server,
   Search,
   Eye,
-  Zap
+  Zap,
+  Plus,
+  Edit2,
+  Trash2,
+  Save,
+  Terminal,
+  Globe,
 } from "lucide-react";
 import { opencodeApi, type OpenCodeMCP } from "@/shared/api/opencode";
 import { toast } from "sonner";
+
+interface MCPFormData {
+  name: string;
+  mcp_type: "stdio" | "sse" | "http";
+  version: string;
+  description: string;
+  server_url: string;
+  command: string;
+  args: string;
+  env: string;
+  config: string;
+}
 
 const MCPMarketplace: React.FC = () => {
   const [mcps, setMcps] = useState<OpenCodeMCP[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     search: "",
+    mcp_type: "",
   });
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+  const [isViewSheetOpen, setIsViewSheetOpen] = useState(false);
+  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [selectedMcp, setSelectedMcp] = useState<OpenCodeMCP | null>(null);
+  const [formData, setFormData] = useState<MCPFormData>({
+    name: "",
+    mcp_type: "stdio",
+    version: "1.0.0",
+    description: "",
+    server_url: "",
+    command: "",
+    args: "",
+    env: "",
+    config: "",
+  });
+  const [formSubmitting, setFormSubmitting] = useState(false);
 
   useEffect(() => {
     loadMcps();
@@ -27,7 +92,10 @@ const MCPMarketplace: React.FC = () => {
   const loadMcps = async () => {
     try {
       setLoading(true);
-      const data = await opencodeApi.listMcps(filters);
+      const params: any = {};
+      if (filters.search) params.search = filters.search;
+      if (filters.mcp_type) params.mcp_type = filters.mcp_type;
+      const data = await opencodeApi.listMcps(params);
       setMcps(data.items);
     } catch (error) {
       console.error("Failed to load mcps:", error);
@@ -41,7 +109,7 @@ const MCPMarketplace: React.FC = () => {
     try {
       const result = await opencodeApi.testMcpConnection(id);
       if (result.success) {
-        toast.success("连接测试成功!");
+        toast.success(`连接测试成功! 工具数量: ${result.tools?.length || 0}, 延迟: ${result.latency_ms}ms`);
       } else {
         toast.error("连接测试失败!");
       }
@@ -50,6 +118,294 @@ const MCPMarketplace: React.FC = () => {
       toast.error("连接测试失败");
     }
   };
+
+  const handleCreateMcp = async () => {
+    if (!formData.name) {
+      toast.error("请输入 MCP 名称");
+      return;
+    }
+    try {
+      setFormSubmitting(true);
+      const data: any = {
+        name: formData.name,
+        mcp_type: formData.mcp_type,
+        version: formData.version,
+        description: formData.description || undefined,
+      };
+
+      if (formData.mcp_type === "stdio") {
+        data.command = formData.command || undefined;
+        if (formData.args) {
+          try {
+            data.args = JSON.parse(formData.args);
+          } catch {
+            data.args = formData.args.split("\n").filter(Boolean);
+          }
+        }
+        if (formData.env) {
+          try {
+            data.env = JSON.parse(formData.env);
+          } catch {
+            data.env = {};
+          }
+        }
+      } else if (formData.mcp_type === "sse" || formData.mcp_type === "http") {
+        data.server_url = formData.server_url || undefined;
+      }
+
+      if (formData.config) {
+        try {
+          data.config = JSON.parse(formData.config);
+        } catch {
+          data.config = {};
+        }
+      }
+
+      await opencodeApi.createMcp(data);
+      toast.success("MCP 创建成功!");
+      setIsCreateDialogOpen(false);
+      resetForm();
+      loadMcps();
+    } catch (error) {
+      console.error("Failed to create MCP:", error);
+      toast.error("创建 MCP 失败");
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  const handleUpdateMcp = async () => {
+    if (!selectedMcp) return;
+    if (!formData.name) {
+      toast.error("请输入 MCP 名称");
+      return;
+    }
+    try {
+      setFormSubmitting(true);
+      const data: any = {};
+
+      if (formData.name !== selectedMcp.name) data.name = formData.name;
+      if (formData.version !== selectedMcp.version) data.version = formData.version;
+      if (formData.description !== selectedMcp.description) data.description = formData.description;
+      if (formData.server_url !== selectedMcp.server_url) data.server_url = formData.server_url;
+      if (formData.command !== selectedMcp.command) data.command = formData.command;
+
+      if (formData.args) {
+        try {
+          const parsedArgs = JSON.parse(formData.args);
+          data.args = parsedArgs;
+        } catch {
+          const splitArgs = formData.args.split("\n").filter(Boolean);
+          data.args = splitArgs;
+        }
+      }
+
+      if (formData.env) {
+        try {
+          data.env = JSON.parse(formData.env);
+        } catch {
+          data.env = {};
+        }
+      }
+
+      if (formData.config) {
+        try {
+          data.config = JSON.parse(formData.config);
+        } catch {
+          data.config = {};
+        }
+      }
+
+      await opencodeApi.updateMcp(selectedMcp.id, data);
+      toast.success("MCP 更新成功!");
+      setIsEditSheetOpen(false);
+      resetForm();
+      loadMcps();
+    } catch (error) {
+      console.error("Failed to update MCP:", error);
+      toast.error("更新 MCP 失败");
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  const handleDeleteMcp = async () => {
+    if (!selectedMcp) return;
+    try {
+      await opencodeApi.deleteMcp(selectedMcp.id);
+      toast.success(`MCP "${selectedMcp.name}" 删除成功!`);
+      setIsDeleteAlertOpen(false);
+      setSelectedMcp(null);
+      loadMcps();
+    } catch (error) {
+      console.error("Failed to delete MCP:", error);
+      toast.error("删除 MCP 失败");
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      mcp_type: "stdio",
+      version: "1.0.0",
+      description: "",
+      server_url: "",
+      command: "",
+      args: "",
+      env: "",
+      config: "",
+    });
+    setSelectedMcp(null);
+  };
+
+  const openCreateDialog = () => {
+    resetForm();
+    setIsCreateDialogOpen(true);
+  };
+
+  const openEditSheet = (mcp: OpenCodeMCP) => {
+    setSelectedMcp(mcp);
+    setFormData({
+      name: mcp.name || "",
+      mcp_type: mcp.mcp_type || "stdio",
+      version: mcp.version || "1.0.0",
+      description: mcp.description || "",
+      server_url: mcp.server_url || "",
+      command: mcp.command || "",
+      args: mcp.args ? (Array.isArray(mcp.args) ? mcp.args.join("\n") : JSON.stringify(mcp.args, null, 2)) : "",
+      env: mcp.env ? JSON.stringify(mcp.env, null, 2) : "",
+      config: mcp.config ? JSON.stringify(mcp.config, null, 2) : "",
+    });
+    setIsEditSheetOpen(true);
+  };
+
+  const openViewSheet = (mcp: OpenCodeMCP) => {
+    setSelectedMcp(mcp);
+    setIsViewSheetOpen(true);
+  };
+
+  const openDeleteAlert = (mcp: OpenCodeMCP) => {
+    setSelectedMcp(mcp);
+    setIsDeleteAlertOpen(true);
+  };
+
+  const renderMcpForm = (isEdit: boolean = false) => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">MCP 名称 *</Label>
+          <Input
+            id="name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="输入 MCP 名称"
+            className="cyber-input"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="version">版本</Label>
+          <Input
+            id="version"
+            value={formData.version}
+            onChange={(e) => setFormData({ ...formData, version: e.target.value })}
+            placeholder="1.0.0"
+            className="cyber-input"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="mcp_type">MCP 类型</Label>
+        <Select
+          value={formData.mcp_type}
+          onValueChange={(value: any) => setFormData({ ...formData, mcp_type: value })}
+        >
+          <SelectTrigger id="mcp_type" className="cyber-input">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="stdio">stdio (标准输入输出)</SelectItem>
+            <SelectItem value="sse">sse (Server-Sent Events)</SelectItem>
+            <SelectItem value="http">http (HTTP)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="description">描述</Label>
+        <Textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          placeholder="输入 MCP 描述"
+          rows={3}
+          className="cyber-input"
+        />
+      </div>
+
+      {formData.mcp_type === "stdio" ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="command">命令</Label>
+            <Input
+              id="command"
+              value={formData.command}
+              onChange={(e) => setFormData({ ...formData, command: e.target.value })}
+              placeholder="例如: node /path/to/server.js"
+              className="cyber-input"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="args">参数 (JSON 或每行一个)</Label>
+            <Textarea
+              id="args"
+              value={formData.args}
+              onChange={(e) => setFormData({ ...formData, args: e.target.value })}
+              placeholder='["--arg1", "value1"] 或每行一个参数'
+              rows={3}
+              className="cyber-input font-mono text-sm"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="env">环境变量 (JSON)</Label>
+            <Textarea
+              id="env"
+              value={formData.env}
+              onChange={(e) => setFormData({ ...formData, env: e.target.value })}
+              placeholder='{"ENV_VAR": "value"}'
+              rows={3}
+              className="cyber-input font-mono text-sm"
+            />
+          </div>
+        </>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="server_url">服务器 URL</Label>
+          <Input
+            id="server_url"
+            value={formData.server_url}
+            onChange={(e) => setFormData({ ...formData, server_url: e.target.value })}
+            placeholder="https://example.com/mcp"
+            className="cyber-input"
+          />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="config">配置 (JSON)</Label>
+        <Textarea
+          id="config"
+          value={formData.config}
+          onChange={(e) => setFormData({ ...formData, config: e.target.value })}
+          placeholder='{"key": "value"}'
+          rows={3}
+          className="cyber-input font-mono text-sm"
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6 p-6 cyber-bg-elevated min-h-screen font-mono relative">
@@ -64,9 +420,10 @@ const MCPMarketplace: React.FC = () => {
           <div className="ml-auto">
             <Button
               variant="outline"
-              onClick={() => console.log("Create MCP")}
+              onClick={openCreateDialog}
               className="cyber-btn-primary"
             >
+              <Plus className="w-4 h-4 mr-2" />
               创建 MCP
             </Button>
           </div>
@@ -95,6 +452,25 @@ const MCPMarketplace: React.FC = () => {
                   onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 />
               </div>
+              <div className="w-full sm:w-48">
+                <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                  类型
+                </label>
+                <Select
+                  value={filters.mcp_type}
+                  onValueChange={(value) => setFilters({ ...filters, mcp_type: value })}
+                >
+                  <SelectTrigger className="cyber-input">
+                    <SelectValue placeholder="全部类型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部类型</SelectItem>
+                    <SelectItem value="stdio">stdio</SelectItem>
+                    <SelectItem value="sse">sse</SelectItem>
+                    <SelectItem value="http">http</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -120,7 +496,13 @@ const MCPMarketplace: React.FC = () => {
                   <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
                     <div className="flex items-start space-x-3">
                       <div className="w-10 h-10 rounded-lg flex items-center justify-center text-violet-400 bg-violet-500/20">
-                        <Server className="w-4 h-4" />
+                        {mcp.mcp_type === "stdio" ? (
+                          <Terminal className="w-4 h-4" />
+                        ) : mcp.mcp_type === "sse" || mcp.mcp_type === "http" ? (
+                          <Globe className="w-4 h-4" />
+                        ) : (
+                          <Server className="w-4 h-4" />
+                        )}
                       </div>
                       <div className="flex-1">
                         <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">{mcp.name}</h4>
@@ -136,7 +518,7 @@ const MCPMarketplace: React.FC = () => {
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-muted-foreground text-sm">
+                    <p className="text-muted-foreground text-sm line-clamp-2">
                       {mcp.description || "暂无描述"}
                     </p>
                     
@@ -144,7 +526,7 @@ const MCPMarketplace: React.FC = () => {
                       <div className="text-xs text-muted-foreground font-mono">
                         作者: {mcp.author}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -152,16 +534,32 @@ const MCPMarketplace: React.FC = () => {
                           onClick={() => testMcpConnection(mcp.id)}
                         >
                           <Zap className="w-3 h-3 mr-1" />
-                          测试连接
+                          测试
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-xs cyber-btn-ghost"
-                          onClick={() => console.log("View MCP:", mcp.id)}
+                          onClick={() => openViewSheet(mcp)}
                         >
                           <Eye className="w-3 h-3 mr-1" />
                           详情
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs cyber-btn-ghost text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                          onClick={() => openEditSheet(mcp)}
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs cyber-btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          onClick={() => openDeleteAlert(mcp)}
+                        >
+                          <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
                     </div>
@@ -172,6 +570,233 @@ const MCPMarketplace: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Create MCP Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              创建 MCP
+            </DialogTitle>
+            <DialogDescription>
+              创建一个新的 OpenCode MCP 服务器配置
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] pr-4">
+            {renderMcpForm()}
+          </ScrollArea>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setIsCreateDialogOpen(false)}
+              disabled={formSubmitting}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleCreateMcp}
+              disabled={formSubmitting}
+              className="cyber-btn-primary"
+            >
+              {formSubmitting ? (
+                <div className="loading-spinner w-4 h-4 mr-2"></div>
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit MCP Sheet */}
+      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
+        <SheetContent className="sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Edit2 className="w-5 h-5" />
+              编辑 MCP
+            </SheetTitle>
+            <SheetDescription>
+              修改 MCP 配置
+            </SheetDescription>
+          </SheetHeader>
+          <ScrollArea className="flex-1 mt-6 max-h-[calc(100vh-200px)] pr-4">
+            {renderMcpForm(true)}
+          </ScrollArea>
+          <SheetFooter className="mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setIsEditSheetOpen(false)}
+              disabled={formSubmitting}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleUpdateMcp}
+              disabled={formSubmitting}
+              className="cyber-btn-primary"
+            >
+              {formSubmitting ? (
+                <div className="loading-spinner w-4 h-4 mr-2"></div>
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              保存
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* View MCP Sheet */}
+      <Sheet open={isViewSheetOpen} onOpenChange={setIsViewSheetOpen}>
+        <SheetContent className="sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              MCP 详情
+            </SheetTitle>
+            <SheetDescription>
+              查看 MCP 配置详情
+            </SheetDescription>
+          </SheetHeader>
+          <ScrollArea className="flex-1 mt-6 max-h-[calc(100vh-200px)] pr-4">
+            {selectedMcp && (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase">名称</Label>
+                    <p className="font-mono text-foreground">{selectedMcp.name}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase">类型</Label>
+                    <Badge className="cyber-badge-muted mt-1">{selectedMcp.mcp_type}</Badge>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase">版本</Label>
+                    <p className="font-mono text-foreground">v{selectedMcp.version}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase">描述</Label>
+                    <p className="text-foreground">{selectedMcp.description || "暂无描述"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase">作者</Label>
+                    <p className="font-mono text-foreground">{selectedMcp.author}</p>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-4 space-y-4">
+                  <h4 className="text-sm font-bold uppercase text-muted-foreground">配置</h4>
+                  
+                  {selectedMcp.mcp_type === "stdio" ? (
+                    <>
+                      <div>
+                        <Label className="text-xs text-muted-foreground uppercase">命令</Label>
+                        <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
+                          {selectedMcp.command || "未设置"}
+                        </div>
+                      </div>
+                      {selectedMcp.args && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground uppercase">参数</Label>
+                          <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
+                            <pre className="whitespace-pre-wrap">
+                              {typeof selectedMcp.args === "string" 
+                                ? selectedMcp.args 
+                                : JSON.stringify(selectedMcp.args, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                      {selectedMcp.env && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground uppercase">环境变量</Label>
+                          <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
+                            <pre className="whitespace-pre-wrap">
+                              {JSON.stringify(selectedMcp.env, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div>
+                      <Label className="text-xs text-muted-foreground uppercase">服务器 URL</Label>
+                      <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
+                        {selectedMcp.server_url || "未设置"}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedMcp.config && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground uppercase">配置</Label>
+                      <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
+                        <pre className="whitespace-pre-wrap">
+                          {JSON.stringify(selectedMcp.config, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-border pt-4 space-y-2">
+                  <div className="text-xs text-muted-foreground">
+                    <p>ID: <span className="font-mono">{selectedMcp.id}</span></p>
+                    <p>创建时间: <span className="font-mono">{selectedMcp.created_at}</span></p>
+                    {selectedMcp.updated_at && (
+                      <p>更新时间: <span className="font-mono">{selectedMcp.updated_at}</span></p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </ScrollArea>
+          <SheetFooter className="mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setIsViewSheetOpen(false)}
+            >
+              关闭
+            </Button>
+            {selectedMcp && (
+              <Button
+                onClick={() => {
+                  setIsViewSheetOpen(false);
+                  openEditSheet(selectedMcp);
+                }}
+                className="cyber-btn-primary"
+              >
+                <Edit2 className="w-4 h-4 mr-2" />
+                编辑
+              </Button>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              您确定要删除 MCP "{selectedMcp?.name}" 吗？此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteMcp}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
