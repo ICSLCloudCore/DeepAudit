@@ -7,7 +7,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -290,10 +289,10 @@ const MCPMarketplace: React.FC = () => {
   };
 
   const renderMcpForm = (isEdit: boolean = false) => (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">MCP 名称 *</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="name" className="font-mono font-bold uppercase text-xs text-muted-foreground">MCP 名称 *</Label>
           <Input
             id="name"
             value={formData.name}
@@ -302,8 +301,8 @@ const MCPMarketplace: React.FC = () => {
             className="cyber-input"
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="version">版本</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="version" className="font-mono font-bold uppercase text-xs text-muted-foreground">版本</Label>
           <Input
             id="version"
             value={formData.version}
@@ -314,8 +313,8 @@ const MCPMarketplace: React.FC = () => {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="mcp_type">MCP 类型</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="mcp_type" className="font-mono font-bold uppercase text-xs text-muted-foreground">MCP 类型</Label>
         <Select
           value={formData.mcp_type}
           onValueChange={(value: any) => setFormData({ ...formData, mcp_type: value })}
@@ -323,7 +322,7 @@ const MCPMarketplace: React.FC = () => {
           <SelectTrigger id="mcp_type" className="cyber-input">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="cyber-dialog border-border">
             <SelectItem value="stdio">stdio (标准输入输出)</SelectItem>
             <SelectItem value="sse">sse (Server-Sent Events)</SelectItem>
             <SelectItem value="http">http (HTTP)</SelectItem>
@@ -331,22 +330,22 @@ const MCPMarketplace: React.FC = () => {
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="description">描述</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="description" className="font-mono font-bold uppercase text-xs text-muted-foreground">描述</Label>
         <Textarea
           id="description"
           value={formData.description}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          placeholder="输入 MCP 描述"
+          placeholder="// MCP 描述..."
           rows={3}
-          className="cyber-input"
+          className="cyber-input min-h-[80px]"
         />
       </div>
 
       {formData.mcp_type === "stdio" ? (
         <>
-          <div className="space-y-2">
-            <Label htmlFor="command">命令</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="command" className="font-mono font-bold uppercase text-xs text-muted-foreground">命令</Label>
             <Input
               id="command"
               value={formData.command}
@@ -356,8 +355,8 @@ const MCPMarketplace: React.FC = () => {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="args">参数 (JSON 或每行一个)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="args" className="font-mono font-bold uppercase text-xs text-muted-foreground">参数 (JSON 或每行一个)</Label>
             <Textarea
               id="args"
               value={formData.args}
@@ -368,8 +367,8 @@ const MCPMarketplace: React.FC = () => {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="env">环境变量 (JSON)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="env" className="font-mono font-bold uppercase text-xs text-muted-foreground">环境变量 (JSON)</Label>
             <Textarea
               id="env"
               value={formData.env}
@@ -381,8 +380,8 @@ const MCPMarketplace: React.FC = () => {
           </div>
         </>
       ) : (
-        <div className="space-y-2">
-          <Label htmlFor="server_url">服务器 URL</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="server_url" className="font-mono font-bold uppercase text-xs text-muted-foreground">服务器 URL</Label>
           <Input
             id="server_url"
             value={formData.server_url}
@@ -393,8 +392,8 @@ const MCPMarketplace: React.FC = () => {
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="config">配置 (JSON)</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="config" className="font-mono font-bold uppercase text-xs text-muted-foreground">配置 (JSON)</Label>
         <Textarea
           id="config"
           value={formData.config}
@@ -573,24 +572,38 @@ const MCPMarketplace: React.FC = () => {
 
       {/* Create MCP Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              创建 MCP
+        <DialogContent className="!w-[min(90vw,700px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
+          {/* Terminal Header */}
+          <div className="flex items-center gap-2 px-4 py-3 cyber-bg-elevated border-b border-border flex-shrink-0">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500/80" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+              <div className="w-3 h-3 rounded-full bg-green-500/80" />
+            </div>
+            <span className="ml-2 font-mono text-xs text-muted-foreground tracking-wider">
+              create_mcp@godeepaudit
+            </span>
+          </div>
+
+          <DialogHeader className="px-6 pt-4 flex-shrink-0">
+            <DialogTitle className="font-mono text-lg uppercase tracking-wider flex items-center gap-2 text-foreground">
+              <Terminal className="w-5 h-5 text-primary" />
+              创建新 MCP
             </DialogTitle>
-            <DialogDescription>
-              创建一个新的 OpenCode MCP 服务器配置
-            </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[60vh] pr-4">
-            {renderMcpForm()}
+
+          <ScrollArea className="flex-1 px-6">
+            <div className="py-4">
+              {renderMcpForm()}
+            </div>
           </ScrollArea>
-          <DialogFooter>
+
+          <DialogFooter className="px-6 pb-6 pt-4 border-t border-border flex-shrink-0">
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() => setIsCreateDialogOpen(false)}
               disabled={formSubmitting}
+              className="cyber-btn-outline"
             >
               取消
             </Button>
@@ -600,11 +613,13 @@ const MCPMarketplace: React.FC = () => {
               className="cyber-btn-primary"
             >
               {formSubmitting ? (
-                <div className="loading-spinner w-4 h-4 mr-2"></div>
+                <>
+                  <div className="loading-spinner w-4 h-4 mr-2"></div>
+                  创建中...
+                </>
               ) : (
-                <Save className="w-4 h-4 mr-2" />
+                "创建"
               )}
-              创建
             </Button>
           </DialogFooter>
         </DialogContent>
