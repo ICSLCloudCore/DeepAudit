@@ -2,23 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: 'ArkPixel';
-  src: url('/fonts/ark-pixel-12px-monospaced-zh_cn.ttf.woff2') format('woff2');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* CJK fallback font with consistent weight */
-@font-face {
-  font-family: 'CJK Fallback';
-  src: local('PingFang SC'), local('Microsoft YaHei'), local('Noto Sans SC'), local('Hiragino Sans GB');
-  font-weight: 100 900;
-  font-style: normal;
-  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+F900-FAFF, U+FE30-FE4F;
-}
-
 /*
   DeepAudit Design System v3.1
   Theme System with CSS Variables
@@ -149,9 +132,8 @@
   }
 
   body {
-    @apply bg-background text-foreground font-mono antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     line-height: 1.65;
-    font-weight: 550;
   }
 
   /* Typography - use foreground color from variables */
