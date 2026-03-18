@@ -630,7 +630,7 @@ const MCPMarketplace: React.FC = () => {
 
       {/* Create MCP Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="!w-[min(90vw,700px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
+        <DialogContent className="!w-[min(90vw,700px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg overflow-hidden">
           {/* Terminal Header */}
           <div className="flex items-center gap-2 px-4 py-3 cyber-bg-elevated border-b border-border flex-shrink-0">
             <div className="flex items-center gap-1.5">
@@ -650,11 +650,11 @@ const MCPMarketplace: React.FC = () => {
             </DialogTitle>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 px-6">
+          <div className="flex-1 overflow-y-auto px-6">
             <div className="py-4">
               {renderMcpForm()}
             </div>
-          </ScrollArea>
+          </div>
 
           <DialogFooter className="px-6 pb-6 pt-4 border-t border-border flex-shrink-0">
             <Button
