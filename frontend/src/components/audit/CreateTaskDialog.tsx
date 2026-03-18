@@ -101,7 +101,7 @@ export default function CreateTaskDialog({
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const [auditMode, setAuditMode] = useState<AuditMode>("agent");
+  const [auditMode, setAuditMode] = useState<AuditMode>("opencode");
 
   const [ruleSets, setRuleSets] = useState<AuditRuleSet[]>([]);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
