@@ -3,6 +3,7 @@ Skill Management API
 """
 
 import os
+import subprocess
 import uuid
 import re
 import time
@@ -119,23 +120,23 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
         random_id = str(uuid.uuid4())[:8]
         log_path = os.path.join(log_dir, f"{random_id}.log")
 
-        # Execute opencode serve command
-        command = f"cd {project_path} ; nohup opencode serve > {log_path} 2>&1 & echo $!"
-        result = await execute_command(
-            command=command,
-            shell=True,
-            capture_output=True,
-            timeout=30
-        )
-
-        if not result.success:
-            print(f"[OpenCode] Failed to start opencode serve: {result.stderr}")
-            return
-
-        # Extract PID from output
-        pid = result.stdout.strip()
-        if not pid.isdigit():
-            print(f"[OpenCode] Invalid PID: {pid}")
+        # Execute opencode serve command directly without waiting for it to finish
+        
+        # Start the process directly with proper path handling
+        try:
+            log_file = open(log_path, "w")
+            proc = subprocess.Popen(
+                ["opencode", "serve"],
+                cwd=project_path,
+                stdout=log_file,
+                stderr=log_file,
+                preexec_fn=os.setpgrp  # Create new process group
+            )
+            pid = str(proc.pid)
+        except Exception as e:
+            print(f"[OpenCode] Failed to start opencode serve: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
         # Wait a bit for the log to be written

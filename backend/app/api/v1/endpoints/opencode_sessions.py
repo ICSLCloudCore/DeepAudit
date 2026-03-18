@@ -1,0 +1,374 @@
+"""
+OpenCode会话管理 API 端点
+"""
+
+import json
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sse_starlette.sse import EventSourceResponse
+from sqlalchemy import select, and_, desc, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+import asyncio
+
+from app.db.session import get_db
+from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+from app.models.prompt_template import PromptTemplate
+from app.models.project import Project
+from app.api.deps import get_current_user
+from app.schemas.opencode_session import (
+    OpenCodeSessionCreate,
+    OpenCodeSessionResponse,
+    OpenCodeSessionListResponse,
+    SendPromptRequest,
+    OpenCodeStreamEventType,
+    OpenCodeStreamEvent,
+)
+
+router = APIRouter()
+
+
+def process_prompt_variables(content: str, variables: dict) -> str:
+    """处理提示词变量替换"""
+    result = content
+    for key, value in variables.items():
+        result = result.replace(f"{{{key}}}", str(value))
+    return result
+
+
+@router.post("/projects/{project_id}/sessions", response_model=OpenCodeSessionResponse)
+async def create_session(
+    project_id: str,
+    session_in: OpenCodeSessionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """创建新的OpenCode会话"""
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    prompt_content = session_in.prompt_content
+    prompt_template_id = session_in.prompt_template_id
+
+    if prompt_template_id:
+        result = await db.execute(
+            select(PromptTemplate).where(PromptTemplate.id == prompt_template_id)
+        )
+        template = result.scalar_one_or_none()
+        if template:
+            prompt_content = template.content_zh or template.content_en or prompt_content
+            if session_in.variables:
+                prompt_content = process_prompt_variables(prompt_content, session_in.variables)
+
+    session = OpenCodeSession(
+        project_id=project_id,
+        status=OpenCodeSessionStatus.ACTIVE,
+        prompt_template_id=prompt_template_id,
+        prompt_content=prompt_content,
+        created_by=current_user.id,
+    )
+
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
+
+    project.opencode_current_session_id = session.id
+    await db.commit()
+
+    return OpenCodeSessionResponse(
+        id=session.id,
+        project_id=session.project_id,
+        status=session.status,
+        prompt_template_id=session.prompt_template_id,
+        prompt_content=session.prompt_content,
+        response_content=session.response_content,
+        started_at=session.started_at,
+        completed_at=session.completed_at,
+        created_by=session.created_by,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
+
+
+@router.get("/projects/{project_id}/sessions", response_model=OpenCodeSessionListResponse)
+async def list_sessions(
+    project_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """获取项目的会话列表"""
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    count_query = select(func.count()).select_from(
+        select(OpenCodeSession).where(OpenCodeSession.project_id == project_id).subquery()
+    )
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    query = (
+        select(OpenCodeSession)
+        .where(OpenCodeSession.project_id == project_id)
+        .order_by(desc(OpenCodeSession.created_at))
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    sessions = result.scalars().all()
+
+    items = [
+        OpenCodeSessionResponse(
+            id=s.id,
+            project_id=s.project_id,
+            status=s.status,
+            prompt_template_id=s.prompt_template_id,
+            prompt_content=s.prompt_content,
+            response_content=s.response_content,
+            started_at=s.started_at,
+            completed_at=s.completed_at,
+            created_by=s.created_by,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+        )
+        for s in sessions
+    ]
+
+    return OpenCodeSessionListResponse(items=items, total=total)
+
+
+@router.get("/sessions/{session_id}", response_model=OpenCodeSessionResponse)
+async def get_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """获取会话详情"""
+    result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    result = await db.execute(select(Project).where(Project.id == session.project_id))
+    project = result.scalar_one_or_none()
+
+    if project and project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return OpenCodeSessionResponse(
+        id=session.id,
+        project_id=session.project_id,
+        status=session.status,
+        prompt_template_id=session.prompt_template_id,
+        prompt_content=session.prompt_content,
+        response_content=session.response_content,
+        started_at=session.started_at,
+        completed_at=session.completed_at,
+        created_by=session.created_by,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
+
+
+@router.post("/sessions/{session_id}/send-prompt", response_model=OpenCodeSessionResponse)
+async def send_prompt(
+    session_id: str,
+    prompt_in: SendPromptRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """向会话发送提示词"""
+    result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    result = await db.execute(select(Project).where(Project.id == session.project_id))
+    project = result.scalar_one_or_none()
+
+    if project and project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    prompt_content = prompt_in.prompt_content or session.prompt_content
+    prompt_template_id = prompt_in.prompt_template_id or session.prompt_template_id
+
+    if prompt_in.prompt_template_id and prompt_in.prompt_template_id != session.prompt_template_id:
+        result = await db.execute(
+            select(PromptTemplate).where(PromptTemplate.id == prompt_in.prompt_template_id)
+        )
+        template = result.scalar_one_or_none()
+        if template:
+            prompt_content = template.content_zh or template.content_en
+            if prompt_in.variables:
+                prompt_content = process_prompt_variables(prompt_content, prompt_in.variables)
+
+    session.prompt_content = prompt_content
+    session.prompt_template_id = prompt_template_id
+    session.status = OpenCodeSessionStatus.ACTIVE
+    session.response_content = ""
+
+    await db.commit()
+    await db.refresh(session)
+
+    if project:
+        project.opencode_current_session_id = session.id
+        await db.commit()
+
+    return OpenCodeSessionResponse(
+        id=session.id,
+        project_id=session.project_id,
+        status=session.status,
+        prompt_template_id=session.prompt_template_id,
+        prompt_content=session.prompt_content,
+        response_content=session.response_content,
+        started_at=session.started_at,
+        completed_at=session.completed_at,
+        created_by=session.created_by,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
+
+
+@router.delete("/sessions/{session_id}")
+async def close_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """关闭会话"""
+    result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    result = await db.execute(select(Project).where(Project.id == session.project_id))
+    project = result.scalar_one_or_none()
+
+    if project and project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    session.status = OpenCodeSessionStatus.CLOSED
+    session.completed_at = datetime.utcnow()
+
+    await db.commit()
+
+    if project and project.opencode_current_session_id == session.id:
+        project.opencode_current_session_id = None
+        await db.commit()
+
+    return {"message": "Session closed successfully"}
+
+
+@router.get("/sessions/{session_id}/stream")
+async def session_stream(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """获取会话的流式响应"""
+    result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    result = await db.execute(select(Project).where(Project.id == session.project_id))
+    project = result.scalar_one_or_none()
+
+    if project and project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    async def event_generator():
+        yield {
+            "event": OpenCodeStreamEventType.DATA.value,
+            "data": json.dumps(
+                {
+                    "type": OpenCodeStreamEventType.DATA.value,
+                    "data": "开始处理您的提示词...\n\n",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            ),
+        }
+
+        await asyncio.sleep(1)
+
+        sample_response = (
+            "这是一个模拟的AI响应示例。\n\n"
+            "## 分析结果\n\n"
+            "根据您的提示词，我进行了以下分析：\n\n"
+            "1. **代码审查**：检查了项目中的主要文件\n"
+            "2. **安全审计**：识别了潜在的安全问题\n"
+            "3. **优化建议**：提供了性能优化建议\n\n"
+            "### 代码示例\n\n"
+            "```python\n"
+            "def hello_world():\n"
+            '    print("Hello, OpenCode!")\n'
+            "```\n\n"
+            "感谢使用DeepAudit x OpenCode！"
+        )
+
+        for i, char in enumerate(sample_response):
+            await asyncio.sleep(0.02)
+
+            yield {
+                "event": OpenCodeStreamEventType.DATA.value,
+                "data": json.dumps(
+                    {
+                        "type": OpenCodeStreamEventType.DATA.value,
+                        "data": char,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                ),
+            }
+
+            if i % 50 == 0:
+                async with AsyncSessionLocal() as db_session:
+                    result = await db_session.execute(
+                        select(OpenCodeSession).where(OpenCodeSession.id == session_id)
+                    )
+                    current_session = result.scalar_one_or_none()
+                    if current_session:
+                        current_session.response_content = sample_response[: i + 1]
+                        await db_session.commit()
+
+        async with AsyncSessionLocal() as db_session:
+            result = await db_session.execute(
+                select(OpenCodeSession).where(OpenCodeSession.id == session_id)
+            )
+            current_session = result.scalar_one_or_none()
+            if current_session:
+                current_session.response_content = sample_response
+                current_session.status = OpenCodeSessionStatus.CLOSED
+                current_session.completed_at = datetime.utcnow()
+                await db_session.commit()
+
+        yield {
+            "event": OpenCodeStreamEventType.DONE.value,
+            "data": json.dumps(
+                {
+                    "type": OpenCodeStreamEventType.DONE.value,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            ),
+        }
+
+    return EventSourceResponse(event_generator())
+
+
+from app.db.session import AsyncSessionLocal
