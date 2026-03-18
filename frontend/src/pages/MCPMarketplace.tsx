@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -11,14 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,7 +27,6 @@ import {
   Server,
   Search,
   Eye,
-  Zap,
   Plus,
   Edit2,
   Trash2,
@@ -107,20 +97,6 @@ const MCPMarketplace: React.FC = () => {
     }
   };
 
-  const testMcpConnection = async (id: string) => {
-    try {
-      const result = await opencodeApi.testMcpConnection(id);
-      if (result.success) {
-        toast.success(`连接测试成功! 工具数量: ${result.tools?.length || 0}, 延迟: ${result.latency_ms}ms`);
-        loadMcps();
-      } else {
-        toast.error(`连接测试失败: ${result.error || "未知错误"}`);
-      }
-    } catch (error) {
-      console.error("Failed to test MCP connection:", error);
-      toast.error("连接测试失败");
-    }
-  };
 
   const refreshMcpTools = async (id: string) => {
     try {
@@ -581,18 +557,8 @@ const MCPMarketplace: React.FC = () => {
                             disabled={refreshingTools === mcp.id}
                           >
                             <RefreshCw className={`w-3 h-3 mr-1 ${refreshingTools === mcp.id ? 'animate-spin' : ''}`} />
-                            刷新
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs cyber-btn-ghost text-violet-400 hover:text-violet-300 hover:bg-violet-500/10"
-                          onClick={() => testMcpConnection(mcp.id)}
-                        >
-                          <Zap className="w-3 h-3 mr-1" />
-                          测试
-                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -600,7 +566,6 @@ const MCPMarketplace: React.FC = () => {
                           onClick={() => openViewSheet(mcp)}
                         >
                           <Eye className="w-3 h-3 mr-1" />
-                          详情
                         </Button>
                         <Button
                           variant="ghost"
@@ -683,26 +648,40 @@ const MCPMarketplace: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Edit MCP Sheet */}
-      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
-        <SheetContent className="sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Edit2 className="w-5 h-5" />
+      {/* Edit MCP Dialog */}
+      <Dialog open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
+        <DialogContent className="!w-[min(90vw,700px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg overflow-hidden">
+          {/* Terminal Header */}
+          <div className="flex items-center gap-2 px-4 py-3 cyber-bg-elevated border-b border-border flex-shrink-0">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500/80" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+              <div className="w-3 h-3 rounded-full bg-green-500/80" />
+            </div>
+            <span className="ml-2 font-mono text-xs text-muted-foreground tracking-wider">
+              edit_mcp@godeepaudit
+            </span>
+          </div>
+
+          <DialogHeader className="px-6 pt-4 flex-shrink-0">
+            <DialogTitle className="font-mono text-lg uppercase tracking-wider flex items-center gap-2 text-foreground">
+              <Edit2 className="w-5 h-5 text-primary" />
               编辑 MCP
-            </SheetTitle>
-            <SheetDescription>
-              修改 MCP 配置
-            </SheetDescription>
-          </SheetHeader>
-          <ScrollArea className="flex-1 mt-6 max-h-[calc(100vh-200px)] pr-4">
-            {renderMcpForm(true)}
-          </ScrollArea>
-          <SheetFooter className="mt-6">
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-6">
+            <div className="py-4">
+              {renderMcpForm(true)}
+            </div>
+          </div>
+
+          <DialogFooter className="px-6 pb-6 pt-4 border-t border-border flex-shrink-0">
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() => setIsEditSheetOpen(false)}
               disabled={formSubmitting}
+              className="cyber-btn-outline"
             >
               取消
             </Button>
@@ -712,153 +691,207 @@ const MCPMarketplace: React.FC = () => {
               className="cyber-btn-primary"
             >
               {formSubmitting ? (
-                <div className="loading-spinner w-4 h-4 mr-2"></div>
+                <>
+                  <div className="loading-spinner w-4 h-4 mr-2"></div>
+                  保存中...
+                </>
               ) : (
-                <Save className="w-4 h-4 mr-2" />
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  保存
+                </>
               )}
-              保存
             </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* View MCP Sheet */}
-      <Sheet open={isViewSheetOpen} onOpenChange={setIsViewSheetOpen}>
-        <SheetContent className="sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Eye className="w-5 h-5" />
+      {/* View MCP Dialog */}
+      <Dialog open={isViewSheetOpen} onOpenChange={setIsViewSheetOpen}>
+        <DialogContent className="!w-[min(90vw,700px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg overflow-hidden">
+          {/* Terminal Header */}
+          <div className="flex items-center gap-2 px-4 py-3 cyber-bg-elevated border-b border-border flex-shrink-0">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500/80" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+              <div className="w-3 h-3 rounded-full bg-green-500/80" />
+            </div>
+            <span className="ml-2 font-mono text-xs text-muted-foreground tracking-wider">
+              view_mcp@godeepaudit
+            </span>
+          </div>
+
+          <DialogHeader className="px-6 pt-4 flex-shrink-0">
+            <DialogTitle className="font-mono text-lg uppercase tracking-wider flex items-center gap-2 text-foreground">
+              <Eye className="w-5 h-5 text-primary" />
               MCP 详情
-            </SheetTitle>
-            <SheetDescription>
-              查看 MCP 配置详情
-            </SheetDescription>
-          </SheetHeader>
-          <ScrollArea className="flex-1 mt-6 max-h-[calc(100vh-200px)] pr-4">
-            {selectedMcp && (
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-xs text-muted-foreground uppercase">名称</Label>
-                    <p className="font-mono text-foreground">{selectedMcp.name}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground uppercase">类型</Label>
-                    <Badge className="cyber-badge-muted mt-1">{selectedMcp.mcp_type}</Badge>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground uppercase">版本</Label>
-                    <p className="font-mono text-foreground">v{selectedMcp.version}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground uppercase">描述</Label>
-                    <p className="text-foreground">{selectedMcp.description || "暂无描述"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground uppercase">作者</Label>
-                    <p className="font-mono text-foreground">{selectedMcp.author}</p>
-                  </div>
-                </div>
+            </DialogTitle>
+          </DialogHeader>
 
-                {/* Tools section */}
-                {selectedMcp.tools && selectedMcp.tools.length > 0 && (
-                  <div className="border-t border-border pt-4 space-y-4">
-                    <h4 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2">
-                      <Wrench className="w-4 h-4" />
-                      工具列表 ({selectedMcp.tools.length})
-                    </h4>
-                    <div className="space-y-3">
-                      {selectedMcp.tools.map((tool: any, idx: number) => (
-                        <div key={idx} className="p-3 bg-background border border-border rounded-lg">
-                          <div className="font-mono text-sm font-bold text-foreground">{tool.name}</div>
-                          {tool.description && (
-                            <div className="text-sm text-muted-foreground mt-1">{tool.description}</div>
-                          )}
-                          {tool.inputSchema && (
-                            <details className="mt-2">
-                              <summary className="text-xs text-muted-foreground cursor-pointer">输入参数</summary>
-                              <pre className="mt-2 p-2 bg-muted rounded text-xs font-mono overflow-x-auto">
-                                {JSON.stringify(tool.inputSchema, null, 2)}
-                              </pre>
-                            </details>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="border-t border-border pt-4 space-y-4">
-                  <h4 className="text-sm font-bold uppercase text-muted-foreground">配置</h4>
-                  
-                  {selectedMcp.mcp_type === "stdio" ? (
-                    <>
-                      <div>
-                        <Label className="text-xs text-muted-foreground uppercase">命令</Label>
-                        <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
-                          {selectedMcp.command || "未设置"}
-                        </div>
+          <div className="flex-1 overflow-y-auto px-6">
+            <div className="py-4 space-y-6">
+              {selectedMcp && (
+                <>
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="view-name" className="font-mono font-bold uppercase text-xs text-muted-foreground">MCP 名称</Label>
+                        <Input
+                          id="view-name"
+                          value={selectedMcp.name}
+                          readOnly
+                          className="cyber-input bg-muted/50"
+                        />
                       </div>
-                      {selectedMcp.args && (
-                        <div>
-                          <Label className="text-xs text-muted-foreground uppercase">参数</Label>
-                          <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
-                            <pre className="whitespace-pre-wrap">
-                              {typeof selectedMcp.args === "string" 
-                                ? selectedMcp.args 
-                                : JSON.stringify(selectedMcp.args, null, 2)}
-                            </pre>
-                          </div>
-                        </div>
-                      )}
-                      {selectedMcp.env && (
-                        <div>
-                          <Label className="text-xs text-muted-foreground uppercase">环境变量</Label>
-                          <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
-                            <pre className="whitespace-pre-wrap">
-                              {JSON.stringify(selectedMcp.env, null, 2)}
-                            </pre>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div>
-                      <Label className="text-xs text-muted-foreground uppercase">服务器 URL</Label>
-                      <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
-                        {selectedMcp.server_url || "未设置"}
+                      <div className="space-y-1.5">
+                        <Label htmlFor="view-version" className="font-mono font-bold uppercase text-xs text-muted-foreground">版本</Label>
+                        <Input
+                          id="view-version"
+                          value={`v${selectedMcp.version}`}
+                          readOnly
+                          className="cyber-input bg-muted/50"
+                        />
                       </div>
                     </div>
-                  )}
 
-                  {selectedMcp.config && (
-                    <div>
-                      <Label className="text-xs text-muted-foreground uppercase">配置</Label>
-                      <div className="mt-1 p-3 bg-background border border-border rounded font-mono text-sm">
-                        <pre className="whitespace-pre-wrap">
-                          {JSON.stringify(selectedMcp.config, null, 2)}
-                        </pre>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="view-type" className="font-mono font-bold uppercase text-xs text-muted-foreground">MCP 类型</Label>
+                      <div className="cyber-input bg-muted/50 h-10 px-3 flex items-center">
+                        <Badge className="cyber-badge-muted">{selectedMcp.mcp_type}</Badge>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                <div className="border-t border-border pt-4 space-y-2">
-                  <div className="text-xs text-muted-foreground">
-                    <p>ID: <span className="font-mono">{selectedMcp.id}</span></p>
-                    <p>创建时间: <span className="font-mono">{selectedMcp.created_at}</span></p>
-                    {selectedMcp.updated_at && (
-                      <p>更新时间: <span className="font-mono">{selectedMcp.updated_at}</span></p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="view-description" className="font-mono font-bold uppercase text-xs text-muted-foreground">描述</Label>
+                      <Textarea
+                        id="view-description"
+                        value={selectedMcp.description || "暂无描述"}
+                        readOnly
+                        rows={3}
+                        className="cyber-input min-h-[80px] bg-muted/50"
+                      />
+                    </div>
+
+                    {selectedMcp.mcp_type === "stdio" ? (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="view-command" className="font-mono font-bold uppercase text-xs text-muted-foreground">命令</Label>
+                          <Input
+                            id="view-command"
+                            value={selectedMcp.command || "未设置"}
+                            readOnly
+                            className="cyber-input bg-muted/50"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="view-args" className="font-mono font-bold uppercase text-xs text-muted-foreground">参数</Label>
+                          <Textarea
+                            id="view-args"
+                            value={
+                              selectedMcp.args
+                                ? typeof selectedMcp.args === "string"
+                                  ? selectedMcp.args
+                                  : JSON.stringify(selectedMcp.args, null, 2)
+                                : "未设置"
+                            }
+                            readOnly
+                            rows={3}
+                            className="cyber-input font-mono text-sm bg-muted/50"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="view-env" className="font-mono font-bold uppercase text-xs text-muted-foreground">环境变量</Label>
+                          <Textarea
+                            id="view-env"
+                            value={selectedMcp.env ? JSON.stringify(selectedMcp.env, null, 2) : "未设置"}
+                            readOnly
+                            rows={3}
+                            className="cyber-input font-mono text-sm bg-muted/50"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="view-server-url" className="font-mono font-bold uppercase text-xs text-muted-foreground">服务器 URL</Label>
+                        <Input
+                          id="view-server-url"
+                          value={selectedMcp.server_url || "未设置"}
+                          readOnly
+                          className="cyber-input bg-muted/50"
+                        />
+                      </div>
                     )}
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="view-config" className="font-mono font-bold uppercase text-xs text-muted-foreground">配置</Label>
+                      <Textarea
+                        id="view-config"
+                        value={selectedMcp.config ? JSON.stringify(selectedMcp.config, null, 2) : "未设置"}
+                        readOnly
+                        rows={3}
+                        className="cyber-input font-mono text-sm bg-muted/50"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">作者</Label>
+                      <Input
+                        value={selectedMcp.author}
+                        readOnly
+                        className="cyber-input bg-muted/50"
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </ScrollArea>
-          <SheetFooter className="mt-6">
+
+                  {/* Tools section */}
+                  {selectedMcp.tools && selectedMcp.tools.length > 0 && (
+                    <div className="border-t border-border pt-4 space-y-4">
+                      <h4 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2">
+                        <Wrench className="w-4 h-4" />
+                        工具列表 ({selectedMcp.tools.length})
+                      </h4>
+                      <div className="space-y-3">
+                        {selectedMcp.tools.map((tool: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-background border border-border rounded-lg">
+                            <div className="font-mono text-sm font-bold text-foreground">{tool.name}</div>
+                            {tool.description && (
+                              <div className="text-sm text-muted-foreground mt-1">{tool.description}</div>
+                            )}
+                            {tool.inputSchema && (
+                              <details className="mt-2">
+                                <summary className="text-xs text-muted-foreground cursor-pointer">输入参数</summary>
+                                <pre className="mt-2 p-2 bg-muted rounded text-xs font-mono overflow-x-auto">
+                                  {JSON.stringify(tool.inputSchema, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-border pt-4 space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      <p>ID: <span className="font-mono">{selectedMcp.id}</span></p>
+                      <p>创建时间: <span className="font-mono">{selectedMcp.created_at}</span></p>
+                      {selectedMcp.updated_at && (
+                        <p>更新时间: <span className="font-mono">{selectedMcp.updated_at}</span></p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="px-6 pb-6 pt-4 border-t border-border flex-shrink-0">
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() => setIsViewSheetOpen(false)}
+              className="cyber-btn-outline"
             >
               关闭
             </Button>
@@ -874,9 +907,9 @@ const MCPMarketplace: React.FC = () => {
                 编辑
               </Button>
             )}
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
