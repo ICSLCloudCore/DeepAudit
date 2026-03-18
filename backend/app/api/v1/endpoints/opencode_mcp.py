@@ -3,6 +3,7 @@ MCP Management API
 """
 
 import time
+import json
 import httpx
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -106,7 +107,32 @@ async def fetch_mcp_tools(server_url: str, config: Optional[dict] = None) -> dic
             response = await client.post(server_url, json=list_tools_payload, headers=request_headers)
             response.raise_for_status()
             
-            result = response.json()
+            # Check content type and parse accordingly
+            content_type = response.headers.get("content-type", "")
+            
+            if "text/event-stream" in content_type:
+                # Handle Server-Sent Events format
+                result = None
+                # Parse SSE stream - look for JSON data lines
+                for line in response.text.split("\n"):
+                    line = line.strip()
+                    if line.startswith("data:"):
+                        data_str = line[5:].strip()
+                        if data_str:
+                            try:
+                                result = json.loads(data_str)
+                                break  # Take the first valid JSON data
+                            except Exception:
+                                continue
+                
+                if result is None:
+                    return {
+                        "success": False,
+                        "error": "Failed to parse SSE response"
+                    }
+            else:
+                # Default to JSON parsing for other content types
+                result = response.json()
             
             # Check for errors
             if "error" in result:
