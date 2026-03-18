@@ -456,7 +456,7 @@ async def upload_skill(
         name=name,
         version=version,
         description=description,
-        author=getattr(current_user, "username", "unknown"),
+        author=getattr(current_user, "full_name", "unknown"),
         category=category,
         file_path=str(skills_zip_file_path),
         opencode_file_path=skill_dir,

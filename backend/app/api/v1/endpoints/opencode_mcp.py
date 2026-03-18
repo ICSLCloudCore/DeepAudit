@@ -315,7 +315,7 @@ async def create_mcp(
         mcp_type=data.mcp_type,
         version=data.version,
         description=data.description,
-        author=getattr(current_user, "username", "unknown"),
+        author=getattr(current_user, "full_name", "unknown"),
         server_url=data.server_url,
         command=data.command,
         args=data.args,

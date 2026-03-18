@@ -321,7 +321,6 @@ const SkillMarketplace: React.FC = () => {
                           onClick={() => console.log("View skill:", skill.id)}
                         >
                           <Eye className="w-3 h-3 mr-1" />
-                          详情
                         </Button>
                         <Button
                           variant="ghost"
@@ -333,7 +332,6 @@ const SkillMarketplace: React.FC = () => {
                           }}
                         >
                           <Trash2 className="w-3 h-3 mr-1" />
-                          删除
                         </Button>
                       </div>
                     </div>
