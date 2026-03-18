@@ -5,6 +5,8 @@ MCP Management API
 import time
 import json
 import httpx
+import os
+from pathlib import Path
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,6 +18,64 @@ from app.models import OpenCodeMCP, MCPType
 from app.api.deps import get_current_user
 
 router = APIRouter()
+
+
+def get_opencode_config_path() -> Path:
+    """Get the path to opencode.json config file"""
+    config_dir = Path.home() / ".config" / "opencode"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir / "opencode.json"
+
+
+def read_opencode_config() -> dict:
+    """Read opencode.json config file, create if doesn't exist"""
+    config_path = get_opencode_config_path()
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"mcp": {}}
+
+
+def write_opencode_config(config: dict):
+    """Write config to opencode.json"""
+    config_path = get_opencode_config_path()
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+
+def update_config_mcp_entry(mcp: OpenCodeMCP, old_name: Optional[str] = None):
+    """Update or add an MCP entry to opencode.json"""
+    config = read_opencode_config()
+    
+    # Ensure mcp section exists
+    if "mcp" not in config:
+        config["mcp"] = {}
+    
+    # Remove old entry if name changed
+    if old_name and old_name in config["mcp"] and old_name != mcp.name:
+        del config["mcp"][old_name]
+    
+    # Prepare MCP entry from database fields
+    headers = mcp.config.get("headers", {}) if mcp.config else {}
+    
+    mcp_entry = {
+        "type": "remote",
+        "url": mcp.server_url,
+        "enabled": mcp.is_active,
+        "headers": headers
+    }
+    
+    config["mcp"][mcp.name] = mcp_entry
+    write_opencode_config(config)
+
+
+def remove_config_mcp_entry(mcp_name: str):
+    """Remove an MCP entry from opencode.json"""
+    config = read_opencode_config()
+    
+    if "mcp" in config and mcp_name in config["mcp"]:
+        del config["mcp"][mcp_name]
+        write_opencode_config(config)
 
 
 class MCPCreate(BaseModel):
@@ -270,6 +330,9 @@ async def create_mcp(
     await db.commit()
     await db.refresh(mcp)
 
+    # Update opencode.json config file
+    update_config_mcp_entry(mcp)
+
     return mcp.to_dict()
 
 
@@ -288,6 +351,9 @@ async def update_mcp(
     if not mcp:
         raise HTTPException(status_code=404, detail="MCP not found")
 
+    # Capture old name before updating
+    old_name = mcp.name
+
     # Update fields from request data
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -305,6 +371,9 @@ async def update_mcp(
     await db.commit()
     await db.refresh(mcp)
 
+    # Update opencode.json config file
+    update_config_mcp_entry(mcp, old_name=old_name)
+
     return mcp.to_dict()
 
 
@@ -321,11 +390,15 @@ async def delete_mcp(
     if not mcp:
         raise HTTPException(status_code=404, detail="MCP not found")
 
+    mcp_name = mcp.name
     # 从数据库删除记录
     await db.delete(mcp)
     await db.commit()
 
-    return {"message": "MCP deleted successfully", "mcp_name": mcp.name}
+    # Remove from opencode.json config file
+    remove_config_mcp_entry(mcp_name)
+
+    return {"message": "MCP deleted successfully", "mcp_name": mcp_name}
 
 
 @router.post("/mcps/{mcp_id}/refresh-tools")
