@@ -296,6 +296,11 @@ const SkillMarketplace: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className="cyber-badge-muted">
+                        {skill.category}
+                      </Badge>
+                    </div>
                     {skill.is_public && (
                       <Badge className="cyber-badge-muted">
                         <Globe className="w-3 h-3 mr-1" />
