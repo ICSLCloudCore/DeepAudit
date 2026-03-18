@@ -76,7 +76,7 @@ async def fetch_mcp_tools(server_url: str, config: Optional[dict] = None) -> dic
             
             init_response = await client.post(server_url, json=init_payload, headers=headers)
             init_response.raise_for_status()
-            
+
             # Extract mcp-session-id from response headers
             session_id = init_response.headers.get("mcp-session-id") or init_response.headers.get("MCP-Session-ID")
             
@@ -326,47 +326,6 @@ async def delete_mcp(
     await db.commit()
 
     return {"message": "MCP deleted successfully", "mcp_name": mcp.name}
-
-
-@router.post("/mcps/{mcp_id}/test")
-async def test_mcp_connection(
-    mcp_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Test MCP connection and refresh tools"""
-    result = await db.execute(select(OpenCodeMCP).where(OpenCodeMCP.id == mcp_id))
-    mcp = result.scalar_one_or_none()
-
-    if not mcp:
-        raise HTTPException(status_code=404, detail="MCP not found")
-
-    start_time = time.time()
-    
-    if mcp.mcp_type == MCPType.HTTP and mcp.server_url:
-        tool_result = await fetch_mcp_tools(mcp.server_url, mcp.config)
-        latency_ms = int((time.time() - start_time) * 1000)
-        
-        if tool_result["success"]:
-            # Update the tools in database
-            mcp.tools = tool_result["tools"]
-            await db.commit()
-            
-            return {
-                "success": True, 
-                "tools": tool_result["tools"], 
-                "latency_ms": latency_ms
-            }
-        else:
-            return {
-                "success": False,
-                "error": tool_result["error"],
-                "latency_ms": latency_ms
-            }
-    else:
-        # For non-HTTP MCPs, return mock result
-        latency_ms = int((time.time() - start_time) * 1000)
-        return {"success": True, "tools": [], "latency_ms": latency_ms}
 
 
 @router.post("/mcps/{mcp_id}/refresh-tools")
