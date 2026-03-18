@@ -826,21 +826,19 @@ export default function Projects() {
                   <div className="w-10 h-10 border border-border bg-muted rounded flex items-center justify-center text-muted-foreground">
                     {getRepositoryIcon(project.repository_type)}
                   </div>
-                  <div>
-                    <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
-                      <Link to={`/projects/${project.id}`}>
-                        {project.name}
-                      </Link>
-                    </h3>
-                    <div className="flex items-center mt-1 space-x-2">
-                      <Badge className={`cyber-badge ${project.is_active ? 'cyber-badge-success' : 'cyber-badge-muted'}`}>
-                        {project.is_active ? '活跃' : '暂停'}
-                      </Badge>
-                      <Badge className={`cyber-badge ${isRepositoryProject(project) ? 'cyber-badge-info' : 'cyber-badge-warning'}`}>
-                        {getSourceTypeBadge(project.source_type)}
-                      </Badge>
-                    </div>
-                  </div>
+                  <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
+                    <Link to={`/projects/${project.id}`}>
+                      {project.name}
+                    </Link>
+                  </h3>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Badge className={`cyber-badge ${project.is_active ? 'cyber-badge-success' : 'cyber-badge-muted'}`}>
+                    {project.is_active ? '活跃' : '暂停'}
+                  </Badge>
+                  <Badge className={`cyber-badge ${isRepositoryProject(project) ? 'cyber-badge-info' : 'cyber-badge-warning'}`}>
+                    {getSourceTypeBadge(project.source_type)}
+                  </Badge>
                 </div>
               </div>
 
