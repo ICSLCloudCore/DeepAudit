@@ -43,6 +43,8 @@ import {
   Save,
   Terminal,
   Globe,
+  RefreshCw,
+  Wrench,
 } from "lucide-react";
 import { opencodeApi, type OpenCodeMCP } from "@/shared/api/opencode";
 import { toast } from "sonner";
@@ -73,7 +75,7 @@ const MCPMarketplace: React.FC = () => {
   const [selectedMcp, setSelectedMcp] = useState<OpenCodeMCP | null>(null);
   const [formData, setFormData] = useState<MCPFormData>({
     name: "",
-    mcp_type: "stdio",
+    mcp_type: "http",
     version: "1.0.0",
     description: "",
     server_url: "",
@@ -83,6 +85,7 @@ const MCPMarketplace: React.FC = () => {
     config: "",
   });
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [refreshingTools, setRefreshingTools] = useState<string | null>(null);
 
   useEffect(() => {
     loadMcps();
@@ -109,8 +112,9 @@ const MCPMarketplace: React.FC = () => {
       const result = await opencodeApi.testMcpConnection(id);
       if (result.success) {
         toast.success(`连接测试成功! 工具数量: ${result.tools?.length || 0}, 延迟: ${result.latency_ms}ms`);
+        loadMcps();
       } else {
-        toast.error("连接测试失败!");
+        toast.error(`连接测试失败: ${result.error || "未知错误"}`);
       }
     } catch (error) {
       console.error("Failed to test MCP connection:", error);
@@ -118,9 +122,29 @@ const MCPMarketplace: React.FC = () => {
     }
   };
 
+  const refreshMcpTools = async (id: string) => {
+    try {
+      setRefreshingTools(id);
+      const result = await opencodeApi.refreshMcpTools(id);
+      if (result.success) {
+        toast.success(`工具刷新成功! 工具数量: ${result.tools?.length || 0}`);
+        loadMcps();
+      }
+    } catch (error) {
+      console.error("Failed to refresh MCP tools:", error);
+      toast.error("工具刷新失败");
+    } finally {
+      setRefreshingTools(null);
+    }
+  };
+
   const handleCreateMcp = async () => {
     if (!formData.name) {
       toast.error("请输入 MCP 名称");
+      return;
+    }
+    if (formData.mcp_type === "http" && !formData.server_url) {
+      toast.error("请输入服务器 URL");
       return;
     }
     try {
@@ -165,9 +189,9 @@ const MCPMarketplace: React.FC = () => {
       setIsCreateDialogOpen(false);
       resetForm();
       loadMcps();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to create MCP:", error);
-      toast.error("创建 MCP 失败");
+      toast.error(`创建 MCP 失败: ${error.response?.data?.detail || error.message}`);
     } finally {
       setFormSubmitting(false);
     }
@@ -220,9 +244,9 @@ const MCPMarketplace: React.FC = () => {
       setIsEditSheetOpen(false);
       resetForm();
       loadMcps();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to update MCP:", error);
-      toast.error("更新 MCP 失败");
+      toast.error(`更新 MCP 失败: ${error.response?.data?.detail || error.message}`);
     } finally {
       setFormSubmitting(false);
     }
@@ -245,7 +269,7 @@ const MCPMarketplace: React.FC = () => {
   const resetForm = () => {
     setFormData({
       name: "",
-      mcp_type: "stdio",
+      mcp_type: "http",
       version: "1.0.0",
       description: "",
       server_url: "",
@@ -266,7 +290,7 @@ const MCPMarketplace: React.FC = () => {
     setSelectedMcp(mcp);
     setFormData({
       name: mcp.name || "",
-      mcp_type: mcp.mcp_type || "stdio",
+      mcp_type: mcp.mcp_type || "http",
       version: mcp.version || "1.0.0",
       description: mcp.description || "",
       server_url: mcp.server_url || "",
@@ -323,9 +347,9 @@ const MCPMarketplace: React.FC = () => {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="cyber-dialog border-border">
-            <SelectItem value="stdio">stdio (标准输入输出)</SelectItem>
+            <SelectItem value="http">http (HTTP 服务器)</SelectItem>
             <SelectItem value="sse">sse (Server-Sent Events)</SelectItem>
-            <SelectItem value="http">http (HTTP)</SelectItem>
+            <SelectItem value="stdio">stdio (标准输入输出)</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -381,7 +405,7 @@ const MCPMarketplace: React.FC = () => {
         </>
       ) : (
         <div className="space-y-1.5">
-          <Label htmlFor="server_url" className="font-mono font-bold uppercase text-xs text-muted-foreground">服务器 URL</Label>
+          <Label htmlFor="server_url" className="font-mono font-bold uppercase text-xs text-muted-foreground">服务器 URL *</Label>
           <Input
             id="server_url"
             value={formData.server_url}
@@ -398,7 +422,7 @@ const MCPMarketplace: React.FC = () => {
           id="config"
           value={formData.config}
           onChange={(e) => setFormData({ ...formData, config: e.target.value })}
-          placeholder='{"key": "value"}'
+          placeholder='{"headers": {"Authorization": "Bearer token"}}'
           rows={3}
           className="cyber-input font-mono text-sm"
         />
@@ -521,11 +545,45 @@ const MCPMarketplace: React.FC = () => {
                       {mcp.description || "暂无描述"}
                     </p>
                     
+                    {/* Tools display */}
+                    {mcp.tools && mcp.tools.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+                          <Wrench className="w-3 h-3" />
+                          <span>工具 ({mcp.tools.length})</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {mcp.tools.slice(0, 3).map((tool: any, idx: number) => (
+                            <Badge key={idx} variant="outline" className="text-xs px-2 py-0.5">
+                              {tool.name}
+                            </Badge>
+                          ))}
+                          {mcp.tools.length > 3 && (
+                            <Badge variant="outline" className="text-xs px-2 py-0.5">
+                              +{mcp.tools.length - 3}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="flex justify-between items-center">
                       <div className="text-xs text-muted-foreground font-mono">
                         作者: {mcp.author}
                       </div>
                       <div className="flex gap-1">
+                        {mcp.mcp_type === "http" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs cyber-btn-ghost text-green-400 hover:text-green-300 hover:bg-green-500/10"
+                            onClick={() => refreshMcpTools(mcp.id)}
+                            disabled={refreshingTools === mcp.id}
+                          >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${refreshingTools === mcp.id ? 'animate-spin' : ''}`} />
+                            刷新
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -701,6 +759,34 @@ const MCPMarketplace: React.FC = () => {
                     <p className="font-mono text-foreground">{selectedMcp.author}</p>
                   </div>
                 </div>
+
+                {/* Tools section */}
+                {selectedMcp.tools && selectedMcp.tools.length > 0 && (
+                  <div className="border-t border-border pt-4 space-y-4">
+                    <h4 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2">
+                      <Wrench className="w-4 h-4" />
+                      工具列表 ({selectedMcp.tools.length})
+                    </h4>
+                    <div className="space-y-3">
+                      {selectedMcp.tools.map((tool: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-background border border-border rounded-lg">
+                          <div className="font-mono text-sm font-bold text-foreground">{tool.name}</div>
+                          {tool.description && (
+                            <div className="text-sm text-muted-foreground mt-1">{tool.description}</div>
+                          )}
+                          {tool.inputSchema && (
+                            <details className="mt-2">
+                              <summary className="text-xs text-muted-foreground cursor-pointer">输入参数</summary>
+                              <pre className="mt-2 p-2 bg-muted rounded text-xs font-mono overflow-x-auto">
+                                {JSON.stringify(tool.inputSchema, null, 2)}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="border-t border-border pt-4 space-y-4">
                   <h4 className="text-sm font-bold uppercase text-muted-foreground">配置</h4>

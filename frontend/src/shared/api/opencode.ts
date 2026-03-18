@@ -246,6 +246,11 @@ export const opencodeApi = {
     return response.data;
   },
 
+  refreshMcpTools: async (id: string) => {
+    const response = await apiClient.post(`/opencode/mcps/${id}/refresh-tools`);
+    return response.data;
+  },
+
   // Project opencode serve
   startProjectServe: async (projectId: string) => {
     const response = await apiClient.post(`/opencode/projects/${projectId}/start`);
