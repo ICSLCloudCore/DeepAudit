@@ -35,6 +35,7 @@ import {
   Globe,
   RefreshCw,
   Wrench,
+  Power,
 } from "lucide-react";
 import { opencodeApi, type OpenCodeMCP } from "@/shared/api/opencode";
 import { toast } from "sonner";
@@ -76,6 +77,7 @@ const MCPMarketplace: React.FC = () => {
   });
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [refreshingTools, setRefreshingTools] = useState<string | null>(null);
+  const [togglingActive, setTogglingActive] = useState<string | null>(null);
 
   useEffect(() => {
     loadMcps();
@@ -111,6 +113,20 @@ const MCPMarketplace: React.FC = () => {
       toast.error("工具刷新失败");
     } finally {
       setRefreshingTools(null);
+    }
+  };
+
+  const toggleMcpActive = async (mcp: OpenCodeMCP) => {
+    try {
+      setTogglingActive(mcp.id);
+      await opencodeApi.updateMcp(mcp.id, { is_active: !mcp.is_active });
+      toast.success(`MCP ${mcp.is_active ? "已禁用" : "已启用"}!`);
+      loadMcps();
+    } catch (error: any) {
+      console.error("Failed to toggle MCP active:", error);
+      toast.error(`操作失败: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setTogglingActive(null);
     }
   };
 
@@ -492,7 +508,7 @@ const MCPMarketplace: React.FC = () => {
                   key={mcp.id}
                   className="cyber-card p-4 hover:border-primary transition-all group"
                 >
-                  <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
+                    <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
                     <div className="flex items-start space-x-3">
                       <div className="w-10 h-10 rounded-lg flex items-center justify-center text-violet-400 bg-violet-500/20">
                         {mcp.mcp_type === "stdio" ? (
@@ -511,9 +527,14 @@ const MCPMarketplace: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <Badge className="cyber-badge-muted">
-                      {mcp.mcp_type}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className={mcp.is_active ? "cyber-badge-success" : "cyber-badge-muted"}>
+                        {mcp.is_active ? "启用" : "禁用"}
+                      </Badge>
+                      <Badge className="cyber-badge-muted">
+                        {mcp.mcp_type}
+                      </Badge>
+                    </div>
                   </div>
 
                   <div className="space-y-3">
@@ -548,6 +569,15 @@ const MCPMarketplace: React.FC = () => {
                         作者: {mcp.author}
                       </div>
                       <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={`h-7 px-2 text-xs cyber-btn-ghost ${mcp.is_active ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10' : 'text-green-400 hover:text-green-300 hover:bg-green-500/10'}`}
+                          onClick={() => toggleMcpActive(mcp)}
+                          disabled={togglingActive === mcp.id}
+                        >
+                          <Power className={`w-3 h-3 ${togglingActive === mcp.id ? 'animate-spin' : ''}`} />
+                        </Button>
                         {mcp.mcp_type === "http" && (
                           <Button
                             variant="ghost"

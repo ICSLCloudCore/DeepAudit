@@ -99,6 +99,7 @@ class MCPUpdate(BaseModel):
     args: Optional[List[str]] = Field(None, description="Arguments for stdio MCP")
     env: Optional[dict] = Field(None, description="Environment variables for stdio MCP")
     config: Optional[dict] = Field(None, description="Additional configuration")
+    is_active: Optional[bool] = Field(None, description="Whether the MCP is active")
 
 
 async def fetch_mcp_tools(server_url: str, config: Optional[dict] = None) -> dict:
@@ -244,7 +245,6 @@ async def list_mcps(
     filters = []
     if mcp_type:
         filters.append(OpenCodeMCP.mcp_type == mcp_type)
-    filters.append(OpenCodeMCP.is_active == True)
 
     if search:
         filters.append(
