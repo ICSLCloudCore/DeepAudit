@@ -247,7 +247,7 @@ const SkillMarketplace: React.FC = () => {
                 </label>
                 <Select
                   value={filters.category}
-                  onValueChange={(value) => setFilters({ ...filters, category: value })}
+                  onValueChange={(value) => setFilters({ ...filters, category: value === "all" ? "" : value })}
                 >
                   <SelectTrigger className="cyber-input">
                     <SelectValue placeholder="全部分类" />

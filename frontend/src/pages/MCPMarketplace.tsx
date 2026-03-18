@@ -473,7 +473,7 @@ const MCPMarketplace: React.FC = () => {
                 </label>
                 <Select
                   value={filters.mcp_type}
-                  onValueChange={(value) => setFilters({ ...filters, mcp_type: value })}
+                  onValueChange={(value) => setFilters({ ...filters, mcp_type: value === "all" ? "" : value })}
                 >
                   <SelectTrigger className="cyber-input">
                     <SelectValue placeholder="全部类型" />
