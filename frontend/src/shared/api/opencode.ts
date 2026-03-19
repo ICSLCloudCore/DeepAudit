@@ -121,6 +121,63 @@ export interface TaskExecution {
   updated_at: string;
 }
 
+// OpenCode Session Types
+export type OpenCodeSessionStatus = "active" | "closed" | "error" | "pending";
+export type OpenCodeServerStatus = "starting" | "running" | "error" | "stopped";
+
+export interface OpenCodeSession {
+  id: string;
+  project_id: string;
+  status: OpenCodeSessionStatus;
+  prompt_template_id?: string;
+  prompt_content: string;
+  response_content: string;
+  started_at: string;
+  completed_at?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AvailablePromptItem {
+  id: string;
+  name: string;
+  description?: string;
+  template_type: string;
+  is_default: boolean;
+  is_system: boolean;
+  is_active: boolean;
+}
+
+export interface AvailablePromptsResponse {
+  items: AvailablePromptItem[];
+  total: number;
+}
+
+export interface StartAuditWithPromptRequest {
+  prompt_template_id?: string;
+  prompt_content?: string;
+  variables?: Record<string, string>;
+}
+
+export interface StartAuditWithPromptResponse {
+  session_id: string;
+  project_id: string;
+  status: OpenCodeSessionStatus;
+  opencode_server_status: OpenCodeServerStatus;
+  message: string;
+}
+
+export interface SessionStatusResponse {
+  session_id: string;
+  status: OpenCodeSessionStatus;
+  prompt_content: string;
+  response_content: string;
+  opencode_server_status: OpenCodeServerStatus;
+  started_at?: string;
+  completed_at?: string;
+}
+
 // Agent API
 export const agentApi = {
   list: async (params?: {
@@ -259,6 +316,51 @@ export const opencodeApi = {
 
   stopProjectServe: async (projectId: string) => {
     const response = await apiClient.post(`/opencode/projects/${projectId}/stop`);
+    return response.data;
+  },
+
+  // OpenCode Sessions
+  listSessions: async (projectId: string, params?: {
+    skip?: number;
+    limit?: number;
+  }) => {
+    const response = await apiClient.get(`/opencode/projects/${projectId}/sessions`, { params });
+    return response.data;
+  },
+
+  createSession: async (projectId: string, data: any) => {
+    const response = await apiClient.post(`/opencode/projects/${projectId}/sessions`, data);
+    return response.data;
+  },
+
+  getSession: async (sessionId: string) => {
+    const response = await apiClient.get(`/opencode/sessions/${sessionId}`);
+    return response.data;
+  },
+
+  sendPrompt: async (sessionId: string, data: any) => {
+    const response = await apiClient.post(`/opencode/sessions/${sessionId}/send-prompt`, data);
+    return response.data;
+  },
+
+  closeSession: async (sessionId: string) => {
+    const response = await apiClient.delete(`/opencode/sessions/${sessionId}`);
+    return response.data;
+  },
+
+  // New APIs for Prompt Integration
+  startAuditWithPrompt: async (projectId: string, data: StartAuditWithPromptRequest) => {
+    const response = await apiClient.post(`/opencode/projects/${projectId}/audit-with-prompt`, data);
+    return response.data;
+  },
+
+  getSessionStatus: async (sessionId: string) => {
+    const response = await apiClient.get(`/opencode/sessions/${sessionId}/status`);
+    return response.data;
+  },
+
+  getAvailablePrompts: async (projectId: string) => {
+    const response = await apiClient.get(`/opencode/projects/${projectId}/available-prompts`);
     return response.data;
   },
 };

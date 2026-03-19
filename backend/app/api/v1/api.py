@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     agents,
     opencode_skills,
     opencode_mcp,
+    opencode_sessions,
     project_config,
 )
 
@@ -36,4 +37,5 @@ api_router.include_router(ssh_keys.router, prefix="/ssh-keys", tags=["ssh-keys"]
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(opencode_skills.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(opencode_mcp.router, prefix="/opencode", tags=["opencode"])
+api_router.include_router(opencode_sessions.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(project_config.router, prefix="/projects", tags=["project-config"])
