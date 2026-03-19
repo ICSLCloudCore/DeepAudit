@@ -5,6 +5,7 @@ OpenCode会话服务
 
 import asyncio
 import uuid
+import os
 from typing import Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy import select
@@ -31,16 +32,29 @@ class OpenCodeSessionService:
             return OpenCodeServerStatus.STOPPED
 
         try:
+            import os
+
+            pid_int = int(project.opencode_pid)
+            os.kill(pid_int, 0)
             return OpenCodeServerStatus.RUNNING
+        except ValueError:
+            return OpenCodeServerStatus.ERROR
+        except OSError:
+            return OpenCodeServerStatus.STOPPED
         except Exception:
             return OpenCodeServerStatus.ERROR
 
-    async def start_opencode_server(self, project: Project) -> OpenCodeServerStatus:
+    async def start_opencode_server(
+        self, project: Project, current_user_id: str
+    ) -> OpenCodeServerStatus:
         """
-        启动OpenCode服务器
+        启动OpenCode服务器 - 简化版本
         """
         try:
-            project.opencode_pid = str(uuid.uuid4())
+            if project.opencode_pid:
+                return OpenCodeServerStatus.RUNNING
+
+            project.opencode_pid = "12345"
             project.opencode_port = "5173"
             project.opencode_started_at = datetime.utcnow()
             await self.db.commit()
@@ -174,7 +188,7 @@ class OpenCodeSessionService:
         server_status = await self.check_opencode_server_status(project)
 
         if server_status == OpenCodeServerStatus.STOPPED:
-            server_status = await self.start_opencode_server(project)
+            server_status = await self.start_opencode_server(project, current_user.id)
 
         if server_status == OpenCodeServerStatus.ERROR:
             raise RuntimeError("Failed to start OpenCode server")
@@ -213,12 +227,12 @@ class OpenCodeSessionService:
         后台轮询结果任务
         """
         try:
-            result = await self.poll_opencode_result(project, server_session_id, None)
-
             result_db = await self.db.execute(
                 select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
             )
             db_session = result_db.scalar_one_or_none()
+
+            result = await self.poll_opencode_result(project, server_session_id, db_session)
 
             if db_session:
                 db_session.response_content = result

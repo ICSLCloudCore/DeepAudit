@@ -8,7 +8,16 @@ import re
 import time
 import zipfile
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, BackgroundTasks
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    UploadFile,
+    File,
+    Form,
+    BackgroundTasks,
+)
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
@@ -24,6 +33,7 @@ from app.core.platform_config import ensure_dir_exists
 from app.core.config import settings
 
 router = APIRouter()
+
 
 async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_id: str):
     """Start opencode serve in the background"""
@@ -41,7 +51,7 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
             created_by=user_id,
             task_type="opencode_serve",
             status="pending",
-            scan_config="{}"
+            scan_config="{}",
         )
         db_session.add(task)
         await db_session.commit()
@@ -65,26 +75,32 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
             print(f"[OpenCode] Cloning repository {repo_url} (branch: {branch}) to {extract_dir}")
 
             # Build git clone command
-            clone_cmd = ['git', 'clone', '--depth', '1', '--branch', branch, repo_url, str(extract_dir)]
-            
+            clone_cmd = [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                branch,
+                repo_url,
+                str(extract_dir),
+            ]
+
             # Execute clone command
             result = await execute_command(
                 command=clone_cmd,
                 shell=False,
                 capture_output=True,
-                timeout=300  # 5 minutes timeout for clone
+                timeout=300,  # 5 minutes timeout for clone
             )
 
             if not result.success:
                 print(f"[OpenCode] Failed to clone repository: {result.stderr}")
                 # Try without specific branch in case it doesn't exist
                 print(f"[OpenCode] Retrying clone without specifying branch...")
-                clone_cmd_fallback = ['git', 'clone', '--depth', '1', repo_url, str(extract_dir)]
+                clone_cmd_fallback = ["git", "clone", "--depth", "1", repo_url, str(extract_dir)]
                 result = await execute_command(
-                    command=clone_cmd_fallback,
-                    shell=False,
-                    capture_output=True,
-                    timeout=300
+                    command=clone_cmd_fallback, shell=False, capture_output=True, timeout=300
                 )
                 if not result.success:
                     print(f"[OpenCode] Failed to clone repository (fallback): {result.stderr}")
@@ -100,9 +116,9 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
                 print(f"[OpenCode] ZIP file not found at {zip_file_path}")
                 return
 
-            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+            with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
                 zip_ref.extractall(extract_dir)
-            
+
             project_path = str(extract_dir)
             print(f"[OpenCode] Extracted ZIP to {project_path}")
 
@@ -121,12 +137,7 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
 
         # Execute opencode serve command
         command = f"cd {project_path} ; nohup opencode serve > {log_path} 2>&1 & echo $!"
-        result = await execute_command(
-            command=command,
-            shell=True,
-            capture_output=True,
-            timeout=30
-        )
+        result = await execute_command(command=command, shell=True, capture_output=True, timeout=30)
 
         if not result.success:
             print(f"[OpenCode] Failed to start opencode serve: {result.stderr}")
@@ -140,6 +151,7 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
 
         # Wait a bit for the log to be written
         import asyncio
+
         await asyncio.sleep(2)
 
         # Read log file to find port
@@ -147,10 +159,10 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
         max_attempts = 10
         for attempt in range(max_attempts):
             if os.path.exists(log_path):
-                with open(log_path, 'r') as f:
+                with open(log_path, "r") as f:
                     log_content = f.read()
                     # Try to find port in log (fixed format: http://127.0.0.1:{port})
-                    port_match = re.search(r'http://127\.0\.0\.1:(\d+)', log_content)
+                    port_match = re.search(r"http://127\.0\.0\.1:(\d+)", log_content)
                     if port_match:
                         port = port_match.group(1)
                         break
@@ -170,10 +182,13 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
     except Exception as e:
         print(f"[OpenCode] Error starting opencode serve: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 # Import asyncio for the sleep
 import asyncio
+
 
 @router.post("/projects/{project_id}/start")
 async def start_opencode(
@@ -200,16 +215,19 @@ async def start_opencode(
         try:
             # Check if PID exists (Unix-only)
             import os
-            os.kill(int(project.opencode_pid), 0)
+
+            # Only try to check if it's a valid integer PID
+            pid_int = int(project.opencode_pid)
+            os.kill(pid_int, 0)
             # If no exception, process is running
             return {
                 "success": True,
                 "message": "OpenCode serve is already running",
                 "pid": project.opencode_pid,
-                "port": project.opencode_port
+                "port": project.opencode_port,
             }
         except (OSError, ValueError):
-            # Process not running, reset fields
+            # Process not running or not a valid integer PID, reset fields
             project.opencode_pid = None
             project.opencode_port = None
             project.opencode_log_path = None
@@ -217,12 +235,12 @@ async def start_opencode(
             await db.commit()
 
     # Start in background
-    background_tasks.add_task(start_opencode_serve, project_id, AsyncSessionLocal(), current_user.id)
+    background_tasks.add_task(
+        start_opencode_serve, project_id, AsyncSessionLocal(), current_user.id
+    )
 
-    return {
-        "success": True,
-        "message": "OpenCode serve starting"
-    }
+    return {"success": True, "message": "OpenCode serve starting"}
+
 
 @router.post("/projects/{project_id}/stop")
 async def stop_opencode(
@@ -243,25 +261,28 @@ async def stop_opencode(
         raise HTTPException(status_code=403, detail="Not authorized to access this project")
 
     if not project.opencode_pid:
-        return {
-            "success": True,
-            "message": "OpenCode serve is not running"
-        }
+        return {"success": True, "message": "OpenCode serve is not running"}
 
     # Try to kill the process
     try:
         import os
         import signal
-        os.kill(int(project.opencode_pid), signal.SIGTERM)
+
+        # Only try to kill if it's a valid integer PID
+        pid_int = int(project.opencode_pid)
+        os.kill(pid_int, signal.SIGTERM)
         # Wait a bit and check
         await asyncio.sleep(1)
         try:
-            os.kill(int(project.opencode_pid), 0)
+            os.kill(pid_int, 0)
             # Still running, try SIGKILL
-            os.kill(int(project.opencode_pid), signal.SIGKILL)
+            os.kill(pid_int, signal.SIGKILL)
         except OSError:
             pass
-    except (OSError, ValueError) as e:
+    except ValueError as e:
+        # Not a valid integer PID, just skip killing
+        print(f"[OpenCode] PID is not a valid integer, skipping process kill: {e}")
+    except OSError as e:
         print(f"[OpenCode] Error stopping process: {e}")
 
     # Reset project fields
@@ -273,10 +294,7 @@ async def stop_opencode(
 
     await db.commit()
 
-    return {
-        "success": True,
-        "message": "OpenCode serve stopped"
-    }
+    return {"success": True, "message": "OpenCode serve stopped"}
 
 
 # ==================== Skill Endpoints ====================
@@ -415,30 +433,26 @@ async def upload_skill(
                 if len(root_dirs) != 1:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"ZIP格式不符：必须包含且仅包含一个根目录，当前包含 {len(root_dirs)} 个"
+                        detail=f"ZIP格式不符：必须包含且仅包含一个根目录，当前包含 {len(root_dirs)} 个",
                     )
 
                 # 检查是否包含SKILL.md
                 if not has_skill_md:
                     raise HTTPException(
-                        status_code=400,
-                        detail="ZIP格式不符：根目录下必须包含SKILL.md文件"
+                        status_code=400, detail="ZIP格式不符：根目录下必须包含SKILL.md文件"
                     )
 
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"ZIP文件解析失败：{str(e)}"
-            )
+            raise HTTPException(status_code=400, detail=f"ZIP文件解析失败：{str(e)}")
 
         # 检查目标目录是否已存在
         skill_dir = os.path.join(opencode_skills_dir, skill_dir_name)
         if os.path.exists(skill_dir):
             raise HTTPException(
                 status_code=400,
-                detail=f"技能目录 '{skill_dir_name}' 已存在，请使用其他名称或删除现有技能"
+                detail=f"技能目录 '{skill_dir_name}' 已存在，请使用其他名称或删除现有技能",
             )
 
         # 解压到opencode_skills_dir
@@ -447,7 +461,7 @@ async def upload_skill(
 
         # 保存原始zip文件到项目upload的skills目录下
         skills_zip_file_path = skills_zip_dir / safe_filename
-  
+
         with open(skills_zip_file_path, "wb") as f:
             f.write(file_content)
 
