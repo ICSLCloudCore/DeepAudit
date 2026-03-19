@@ -381,9 +381,9 @@ class OpenCodeSessionService:
                 {"parts": [{"type": "text", "text": prompt_content[:200] + "..."}]},
             )
 
-            print(f"[OpenCode] About to call POST {message_url} with timeout=120.0")
+            print(f"[OpenCode] About to call POST {message_url} with timeout=300.0 (5 minutes)")
 
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(message_url, json=request_data)
 
                 print(f"[OpenCode] Send message status code: {response.status_code}")
