@@ -4,7 +4,7 @@
  */
 
 import { useMemo, useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +52,7 @@ import { OpenCodeAuditDialog } from "@/components/opencode/OpenCodeAuditDialog";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [auditTasks, setAuditTasks] = useState<AuditTask[]>([]);
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
@@ -469,7 +470,8 @@ export default function ProjectDetail() {
 
   const handleStartOpenCodeAudit = (response: StartAuditWithPromptResponse) => {
     loadProjectData();
-    setActiveTab("overview");
+    setShowOpenCodeAuditDialog(false);
+    navigate(`/opencode-audit/${response.session_id}`);
   };
 
   const handleSaveSettings = async () => {
