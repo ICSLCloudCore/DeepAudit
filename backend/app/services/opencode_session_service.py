@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+from app.models.opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType
 from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.models.user import User
@@ -30,6 +31,49 @@ def ensure_dir_exists(path: str):
     """确保目录存在"""
     os.makedirs(path, exist_ok=True)
     print(f"[OpenCode] Ensured directory exists: {path}")
+
+
+async def log_opencode_interaction_to_db(
+    db: AsyncSession,
+    session_id: str,
+    interaction_type: OpenCodeInteractionType,
+    endpoint: str,
+    http_method: str,
+    request_timestamp: datetime,
+    request_payload: Optional[Any] = None,
+    response_timestamp: Optional[datetime] = None,
+    response_payload: Optional[Any] = None,
+    http_status_code: Optional[int] = None,
+    duration_ms: Optional[int] = None,
+    error_message: Optional[str] = None,
+    error_type: Optional[str] = None,
+):
+    """记录OpenCode Server交互到数据库"""
+    try:
+        interaction = OpenCodeInteraction(
+            session_id=session_id,
+            interaction_type=interaction_type,
+            endpoint=endpoint,
+            http_method=http_method,
+            request_timestamp=request_timestamp,
+            response_timestamp=response_timestamp,
+            duration_ms=duration_ms,
+            request_payload=json.dumps(request_payload, default=str) if request_payload else None,
+            response_payload=json.dumps(response_payload, default=str)
+            if response_payload
+            else None,
+            http_status_code=http_status_code,
+            error_message=error_message,
+            error_type=error_type,
+        )
+        db.add(interaction)
+        await db.commit()
+        await db.refresh(interaction)
+        return interaction
+    except Exception as e:
+        print(f"[OpenCode] Failed to log interaction to DB: {e}")
+        await db.rollback()
+        return None
 
 
 def log_opencode_interaction(direction: str, endpoint: str, data: Any = None):
@@ -57,9 +101,12 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Using default OpenCode Server URL: {url}")
         return url
 
-    async def check_opencode_server_health(self, project: Project) -> bool:
+    async def check_opencode_server_health(
+        self, project: Project, db_session_id: Optional[str] = None
+    ) -> bool:
         """检查OpenCode Server健康状态"""
         print(f"[OpenCode] Checking OpenCode Server health...")
+        request_time = datetime.utcnow()
         try:
             url = self.get_opencode_server_url(project)
             health_url = f"{url}/global/health"
@@ -69,6 +116,8 @@ class OpenCodeSessionService:
 
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(health_url)
+                response_time = datetime.utcnow()
+                duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
                 print(f"[OpenCode] Health check status code: {response.status_code}")
                 print(f"[OpenCode] Health check response: {response.text}")
@@ -76,6 +125,22 @@ class OpenCodeSessionService:
                 if response.status_code == 200:
                     data = response.json()
                     log_opencode_interaction("response", "/global/health", data)
+
+                    if db_session_id:
+                        await log_opencode_interaction_to_db(
+                            self.db,
+                            db_session_id,
+                            OpenCodeInteractionType.RESPONSE,
+                            "/global/health",
+                            "GET",
+                            request_time,
+                            None,
+                            response_time,
+                            data,
+                            response.status_code,
+                            duration_ms,
+                        )
+
                     is_healthy = data.get("healthy", False)
                     print(f"[OpenCode] Server healthy: {is_healthy}")
                     return is_healthy
@@ -83,11 +148,48 @@ class OpenCodeSessionService:
                     log_opencode_interaction(
                         "error", "/global/health", {"status_code": response.status_code}
                     )
+
+                    if db_session_id:
+                        await log_opencode_interaction_to_db(
+                            self.db,
+                            db_session_id,
+                            OpenCodeInteractionType.ERROR,
+                            "/global/health",
+                            "GET",
+                            request_time,
+                            None,
+                            response_time,
+                            None,
+                            response.status_code,
+                            duration_ms,
+                            error_message=f"Status code: {response.status_code}",
+                        )
+
                     return False
         except Exception as e:
             print(f"[OpenCode] Health check exception: {e}")
             print(f"[OpenCode] Health check traceback: {traceback.format_exc()}")
             log_opencode_interaction("error", "/global/health", {"error": str(e)})
+
+            if db_session_id:
+                response_time = datetime.utcnow()
+                duration_ms = int((response_time - request_time).total_seconds() * 1000)
+                await log_opencode_interaction_to_db(
+                    self.db,
+                    db_session_id,
+                    OpenCodeInteractionType.ERROR,
+                    "/global/health",
+                    "GET",
+                    request_time,
+                    None,
+                    response_time,
+                    None,
+                    None,
+                    duration_ms,
+                    error_message=str(e),
+                    error_type=type(e).__name__,
+                )
+
             return False
 
     async def check_opencode_server_status(self, project: Project) -> OpenCodeServerStatus:
@@ -146,7 +248,6 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Platform: {sys.platform}")
 
         try:
-
             task_id = str(uuid.uuid4())
             print(f"[OpenCode] Generated task ID: {task_id}")
 
@@ -310,7 +411,6 @@ class OpenCodeSessionService:
         print(f"[OpenCode] ========================================")
 
         try:
-
             url = self.get_opencode_server_url(project)
             session_url = f"{url}/session"
 
@@ -355,8 +455,9 @@ class OpenCodeSessionService:
         """Generate message ID: msg_ + 26 alphanumeric characters"""
         import secrets
         import string
+
         alphabet = string.ascii_letters + string.digits
-        random_part = ''.join(secrets.choice(alphabet) for _ in range(26))
+        random_part = "".join(secrets.choice(alphabet) for _ in range(26))
         message_id = f"msg_{random_part}"
         print(f"[OpenCode] Generated message ID: {message_id}")
         return message_id
@@ -373,7 +474,6 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Using server_session_id: {server_session_id}")
 
         try:
-
             url = self.get_opencode_server_url(project)
             prompt_async_url = f"{url}/session/{server_session_id}/prompt_async"
 
@@ -384,16 +484,13 @@ class OpenCodeSessionService:
 
             request_data = {
                 "messageID": message_id,
-                "parts": [{"type": "text", "text": prompt_content}]
+                "parts": [{"type": "text", "text": prompt_content}],
             }
 
             log_opencode_interaction(
                 "request",
                 f"/session/{server_session_id}/prompt_async",
-                {
-                    "messageID": message_id,
-                    "parts": [{"type": "text", "text": "prompt..."}]
-                },
+                {"messageID": message_id, "parts": [{"type": "text", "text": "prompt..."}]},
             )
 
             print(f"[OpenCode] About to call POST {prompt_async_url}")
@@ -557,11 +654,11 @@ class OpenCodeSessionService:
         return db_session, server_status
 
     async def poll_opencode_result_with_updates(
-        self, 
-        project: Project, 
-        server_session_id: str, 
+        self,
+        project: Project,
+        server_session_id: str,
         message_id: Optional[str],
-        db_session_id: str
+        db_session_id: str,
     ) -> str:
         """
         轮询OpenCode服务器获取结果 - 使用新的message API，检查reason=stop，并增量更新数据库
@@ -577,7 +674,7 @@ class OpenCodeSessionService:
         if not message_id:
             print(f"[OpenCode] No message_id provided, cannot poll")
             return "Error: No message ID provided"
-        
+
         url = self.get_opencode_server_url(project)
         message_url = f"{url}/session/{server_session_id}/message"
 

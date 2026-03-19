@@ -178,6 +178,32 @@ export interface SessionStatusResponse {
   completed_at?: string;
 }
 
+// OpenCode Interaction Types
+export type OpenCodeInteractionType = "request" | "response" | "error";
+
+export interface OpenCodeInteraction {
+  id: string;
+  session_id: string;
+  interaction_type: OpenCodeInteractionType;
+  endpoint: string;
+  http_method: string;
+  request_timestamp: string;
+  response_timestamp?: string;
+  duration_ms?: number;
+  request_payload?: string;
+  response_payload?: string;
+  http_status_code?: number;
+  error_message?: string;
+  error_type?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface OpenCodeInteractionListResponse {
+  items: OpenCodeInteraction[];
+  total: number;
+}
+
 // Agent API
 export const agentApi = {
   list: async (params?: {
@@ -361,6 +387,14 @@ export const opencodeApi = {
 
   getAvailablePrompts: async (projectId: string) => {
     const response = await apiClient.get(`/opencode/projects/${projectId}/available-prompts`);
+    return response.data;
+  },
+
+  getSessionInteractions: async (sessionId: string, params?: {
+    skip?: number;
+    limit?: number;
+  }) => {
+    const response = await apiClient.get(`/opencode/sessions/${sessionId}/interactions`, { params });
     return response.data;
   },
 };

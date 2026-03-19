@@ -19,3 +19,5 @@ from .agent_task import (
 from .opencode_agent import Agent, AgentType
 from .opencode_skill_mcp import OpenCodeSkill, SkillCategory, OpenCodeMCP, MCPType
 from .opencode_project_task import ProjectConfig, TaskExecution, OpenCodeStatus
+from .opencode_session import OpenCodeSession, OpenCodeSessionStatus
+from .opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType

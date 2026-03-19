@@ -13,6 +13,7 @@ import asyncio
 
 from app.db.session import get_db
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+from app.models.opencode_interaction import OpenCodeInteraction
 from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.api.deps import get_current_user
@@ -29,6 +30,8 @@ from app.schemas.opencode_session import (
     AvailablePromptsResponse,
     AvailablePromptItem,
     OpenCodeServerStatus,
+    OpenCodeInteractionResponse,
+    OpenCodeInteractionListResponse,
 )
 from app.services.opencode_session_service import OpenCodeSessionService
 
@@ -301,8 +304,9 @@ async def session_stream(
     if project and project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    from app.db.session import AsyncSessionLocal
+
     async def event_generator():
-        # Send initial event
         yield {
             "event": OpenCodeStreamEventType.DATA.value,
             "data": json.dumps(
@@ -315,12 +319,11 @@ async def session_stream(
         }
 
         last_sent_length = len("开始处理您的提示词...\n\n")
-        max_polls = 300  # 5 minutes
-        poll_interval = 0.5  # 500ms
+        max_polls = 300
+        poll_interval = 0.5
 
         for poll_count in range(max_polls):
             try:
-                # Get latest session from database
                 async with AsyncSessionLocal() as db_session_local:
                     result_db = await db_session_local.execute(
                         select(OpenCodeSession).where(OpenCodeSession.id == session_id)
@@ -340,10 +343,8 @@ async def session_stream(
                         }
                         return
 
-                    # Check if we have new content
                     current_content = current_session.response_content or ""
                     if len(current_content) > last_sent_length:
-                        # Send the new content
                         new_content = current_content[last_sent_length:]
                         last_sent_length = len(current_content)
 
@@ -358,7 +359,6 @@ async def session_stream(
                             ),
                         }
 
-                    # Check if session is completed or errored
                     if current_session.status == OpenCodeSessionStatus.CLOSED:
                         yield {
                             "event": OpenCodeStreamEventType.DONE.value,
@@ -386,11 +386,11 @@ async def session_stream(
             except Exception as e:
                 print(f"[OpenCode] Stream poll error: {e}")
                 import traceback
+
                 print(f"[OpenCode] Stream poll traceback: {traceback.format_exc()}")
 
             await asyncio.sleep(poll_interval)
 
-        # Timeout
         yield {
             "event": OpenCodeStreamEventType.ERROR.value,
             "data": json.dumps(
@@ -497,6 +497,74 @@ async def get_available_prompts(
         ]
 
         return AvailablePromptsResponse(items=items, total=total)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions/{session_id}/interactions", response_model=OpenCodeInteractionListResponse)
+async def get_session_interactions(
+    session_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """获取OpenCode会话的交互历史"""
+    try:
+        result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
+        session = result.scalar_one_or_none()
+
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        result = await db.execute(select(Project).where(Project.id == session.project_id))
+        project = result.scalar_one_or_none()
+
+        if project and project.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        count_query = select(func.count()).select_from(
+            select(OpenCodeInteraction)
+            .where(OpenCodeInteraction.session_id == session_id)
+            .subquery()
+        )
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        query = (
+            select(OpenCodeInteraction)
+            .where(OpenCodeInteraction.session_id == session_id)
+            .order_by(desc(OpenCodeInteraction.request_timestamp))
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await db.execute(query)
+        interactions = result.scalars().all()
+
+        items = [
+            OpenCodeInteractionResponse(
+                id=interaction.id,
+                session_id=interaction.session_id,
+                interaction_type=interaction.interaction_type,
+                endpoint=interaction.endpoint,
+                http_method=interaction.http_method,
+                request_timestamp=interaction.request_timestamp,
+                response_timestamp=interaction.response_timestamp,
+                duration_ms=interaction.duration_ms,
+                request_payload=interaction.request_payload,
+                response_payload=interaction.response_payload,
+                http_status_code=interaction.http_status_code,
+                error_message=interaction.error_message,
+                error_type=interaction.error_type,
+                created_at=interaction.created_at,
+                updated_at=interaction.updated_at,
+            )
+            for interaction in interactions
+        ]
+
+        return OpenCodeInteractionListResponse(items=items, total=total)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
