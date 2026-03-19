@@ -28,6 +28,7 @@ import {
   type AvailablePromptItem,
   type StartAuditWithPromptResponse,
 } from "@/shared/api/opencode";
+import { getPromptTemplates, type PromptTemplate } from "@/shared/api/prompts";
 
 interface OpenCodeAuditDialogProps {
   open: boolean;
@@ -59,16 +60,48 @@ export function OpenCodeAuditDialog({
   const loadAvailablePrompts = async () => {
     try {
       setIsLoading(true);
-      const response = await opencodeApi.getAvailablePrompts(projectId);
-      setAvailablePrompts(response.items);
+      console.log("[OpenCodeAuditDialog] Loading available prompts for project:", projectId);
       
-      const defaultTemplate = response.items.find((t) => t.is_default);
-      if (defaultTemplate) {
-        setSelectedTemplateId(defaultTemplate.id);
+      try {
+        const response = await opencodeApi.getAvailablePrompts(projectId);
+        console.log("[OpenCodeAuditDialog] Available prompts response:", response);
+        setAvailablePrompts(response.items || []);
+        
+        const defaultTemplate = (response.items || []).find((t) => t.is_default);
+        if (defaultTemplate) {
+          setSelectedTemplateId(defaultTemplate.id);
+        }
+      } catch (opencodeError: any) {
+        console.warn("[OpenCodeAuditDialog] Failed to load from opencode API, falling back to prompts API:", opencodeError);
+        
+        try {
+          const fallbackResponse = await getPromptTemplates({ is_active: true, limit: 100 });
+          console.log("[OpenCodeAuditDialog] Fallback prompts response:", fallbackResponse);
+          
+          const mappedPrompts: AvailablePromptItem[] = (fallbackResponse.items || []).map((t: PromptTemplate) => ({
+            id: t.id,
+            name: t.name,
+            description: t.description,
+            template_type: t.template_type,
+            is_default: t.is_default,
+            is_system: t.is_system,
+            is_active: t.is_active,
+          }));
+          
+          setAvailablePrompts(mappedPrompts);
+          
+          const defaultTemplate = mappedPrompts.find((t) => t.is_default);
+          if (defaultTemplate) {
+            setSelectedTemplateId(defaultTemplate.id);
+          }
+          
+          toast.info("使用备选提示词列表");
+        } catch (fallbackError) {
+          console.error("[OpenCodeAuditDialog] Both APIs failed:", fallbackError);
+          toast.error("加载提示词列表失败，请使用自定义提示词");
+          setAvailablePrompts([]);
+        }
       }
-    } catch (error) {
-      console.error("Failed to load available prompts:", error);
-      toast.error("加载提示词列表失败");
     } finally {
       setIsLoading(false);
     }
