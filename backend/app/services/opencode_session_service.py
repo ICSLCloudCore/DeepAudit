@@ -808,10 +808,16 @@ class OpenCodeSessionService:
 
                     if response.status_code == 200:
                         data = response.json()
-                        data = data[-1]
+                        print(f"[OpenCode] Received message data: {json.dumps(data, default=str)}")
+
+                        # 获取最后一条消息
+                        if isinstance(data, list) and len(data) > 0:
+                            data = data[-1]
 
                         # Extract parts
                         parts = data.get("parts", [])
+                        print(f"[OpenCode] Parts found: {len(parts)}")
+
                         if len(parts) == 0:
                             await asyncio.sleep(poll_interval)
                             continue
@@ -819,11 +825,23 @@ class OpenCodeSessionService:
                         # Get the last part text
                         last_part = parts[-1]
                         text = last_part.get("text", "")
-                        if text:
-                            full_response = text
+                        print(f"[OpenCode] Text received, length: {len(text) if text else 0}")
 
-                        if parts[-1].get("reason") == "stop":
-                            print(f"[OpenCode] Polling completed, returning full response")
+                        # 累积响应文本，保留最长的响应
+                        if text and len(text) > len(full_response):
+                            full_response = text
+                            print(
+                                f"[OpenCode] Updated full_response, new length: {len(full_response)}"
+                            )
+
+                        # 检查是否完成
+                        reason = last_part.get("reason")
+                        print(f"[OpenCode] Last part reason: {reason}")
+
+                        if reason == "stop":
+                            print(
+                                f"[OpenCode] Polling completed, returning full response (length: {len(full_response)})"
+                            )
                             return full_response
 
                 await asyncio.sleep(poll_interval)
