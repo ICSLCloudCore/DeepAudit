@@ -288,7 +288,7 @@ async def session_stream(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """获取会话的流式响应"""
+    """获取会话的流式响应 - 实时从数据库获取更新"""
     result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
     session = result.scalar_one_or_none()
 
@@ -302,6 +302,7 @@ async def session_stream(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     async def event_generator():
+        # Send initial event
         yield {
             "event": OpenCodeStreamEventType.DATA.value,
             "data": json.dumps(
@@ -313,63 +314,89 @@ async def session_stream(
             ),
         }
 
-        await asyncio.sleep(1)
+        last_sent_length = len("开始处理您的提示词...\n\n")
+        max_polls = 300  # 5 minutes
+        poll_interval = 0.5  # 500ms
 
-        sample_response = (
-            "这是一个模拟的AI响应示例。\n\n"
-            "## 分析结果\n\n"
-            "根据您的提示词，我进行了以下分析：\n\n"
-            "1. **代码审查**：检查了项目中的主要文件\n"
-            "2. **安全审计**：识别了潜在的安全问题\n"
-            "3. **优化建议**：提供了性能优化建议\n\n"
-            "### 代码示例\n\n"
-            "```python\n"
-            "def hello_world():\n"
-            '    print("Hello, OpenCode!")\n'
-            "```\n\n"
-            "感谢使用DeepAudit x OpenCode！"
-        )
-
-        for i, char in enumerate(sample_response):
-            await asyncio.sleep(0.02)
-
-            yield {
-                "event": OpenCodeStreamEventType.DATA.value,
-                "data": json.dumps(
-                    {
-                        "type": OpenCodeStreamEventType.DATA.value,
-                        "data": char,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                ),
-            }
-
-            if i % 50 == 0:
-                async with AsyncSessionLocal() as db_session:
-                    result = await db_session.execute(
+        for poll_count in range(max_polls):
+            try:
+                # Get latest session from database
+                async with AsyncSessionLocal() as db_session_local:
+                    result_db = await db_session_local.execute(
                         select(OpenCodeSession).where(OpenCodeSession.id == session_id)
                     )
-                    current_session = result.scalar_one_or_none()
-                    if current_session:
-                        current_session.response_content = sample_response[: i + 1]
-                        await db_session.commit()
+                    current_session = result_db.scalar_one_or_none()
 
-        async with AsyncSessionLocal() as db_session:
-            result = await db_session.execute(
-                select(OpenCodeSession).where(OpenCodeSession.id == session_id)
-            )
-            current_session = result.scalar_one_or_none()
-            if current_session:
-                current_session.response_content = sample_response
-                current_session.status = OpenCodeSessionStatus.CLOSED
-                current_session.completed_at = datetime.utcnow()
-                await db_session.commit()
+                    if not current_session:
+                        yield {
+                            "event": OpenCodeStreamEventType.ERROR.value,
+                            "data": json.dumps(
+                                {
+                                    "type": OpenCodeStreamEventType.ERROR.value,
+                                    "error": "Session not found",
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                }
+                            ),
+                        }
+                        return
 
+                    # Check if we have new content
+                    current_content = current_session.response_content or ""
+                    if len(current_content) > last_sent_length:
+                        # Send the new content
+                        new_content = current_content[last_sent_length:]
+                        last_sent_length = len(current_content)
+
+                        yield {
+                            "event": OpenCodeStreamEventType.DATA.value,
+                            "data": json.dumps(
+                                {
+                                    "type": OpenCodeStreamEventType.DATA.value,
+                                    "data": new_content,
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                }
+                            ),
+                        }
+
+                    # Check if session is completed or errored
+                    if current_session.status == OpenCodeSessionStatus.CLOSED:
+                        yield {
+                            "event": OpenCodeStreamEventType.DONE.value,
+                            "data": json.dumps(
+                                {
+                                    "type": OpenCodeStreamEventType.DONE.value,
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                }
+                            ),
+                        }
+                        return
+                    elif current_session.status == OpenCodeSessionStatus.ERROR:
+                        yield {
+                            "event": OpenCodeStreamEventType.ERROR.value,
+                            "data": json.dumps(
+                                {
+                                    "type": OpenCodeStreamEventType.ERROR.value,
+                                    "error": current_session.response_content or "Unknown error",
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                }
+                            ),
+                        }
+                        return
+
+            except Exception as e:
+                print(f"[OpenCode] Stream poll error: {e}")
+                import traceback
+                print(f"[OpenCode] Stream poll traceback: {traceback.format_exc()}")
+
+            await asyncio.sleep(poll_interval)
+
+        # Timeout
         yield {
-            "event": OpenCodeStreamEventType.DONE.value,
+            "event": OpenCodeStreamEventType.ERROR.value,
             "data": json.dumps(
                 {
-                    "type": OpenCodeStreamEventType.DONE.value,
+                    "type": OpenCodeStreamEventType.ERROR.value,
+                    "error": "响应超时",
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             ),

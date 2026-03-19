@@ -354,14 +354,24 @@ class OpenCodeSessionService:
             log_opencode_interaction("error", "/session", {"error": str(e)})
             return None
 
+    def generate_message_id(self) -> str:
+        """Generate message ID: msg_ + 26 alphanumeric characters"""
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits
+        random_part = ''.join(secrets.choice(alphabet) for _ in range(26))
+        message_id = f"msg_{random_part}"
+        print(f"[OpenCode] Generated message ID: {message_id}")
+        return message_id
+
     async def send_prompt_to_opencode(
         self, project: Project, server_session_id: str, prompt_content: str
     ) -> Optional[str]:
         """
-        发送提示词到OpenCode服务器 - 真实API调用，返回message_id
+        发送提示词到OpenCode服务器 - 使用新的prompt_async API，返回message_id
         """
         print(f"[OpenCode] ========================================")
-        print(f"[OpenCode] STARTING SEND PROMPT")
+        print(f"[OpenCode] STARTING SEND PROMPT (ASYNC)")
         print(f"[OpenCode] ========================================")
         print(f"[OpenCode] Using server_session_id: {server_session_id}")
 
@@ -369,35 +379,39 @@ class OpenCodeSessionService:
             import httpx
 
             url = self.get_opencode_server_url(project)
-            message_url = f"{url}/session/{server_session_id}/message"
+            prompt_async_url = f"{url}/session/{server_session_id}/prompt_async"
 
-            print(f"[OpenCode] Message URL: {message_url}")
+            print(f"[OpenCode] Prompt async URL: {prompt_async_url}")
 
-            request_data = {"parts": [{"type": "text", "text": prompt_content}]}
+            # Generate message ID
+            message_id = self.generate_message_id()
+
+            request_data = {
+                "messageID": message_id,
+                "parts": [{"type": "text", "text": prompt_content}]
+            }
 
             log_opencode_interaction(
                 "request",
-                f"/session/{server_session_id}/message",
-                {"parts": [{"type": "text", "text": prompt_content[:200] + "..."}]},
+                f"/session/{server_session_id}/prompt_async",
+                {
+                    "messageID": message_id,
+                    "parts": [{"type": "text", "text": prompt_content[:200] + "..."}]
+                },
             )
 
-            print(f"[OpenCode] About to call POST {message_url} with timeout=300.0 (5 minutes)")
+            print(f"[OpenCode] About to call POST {prompt_async_url}")
 
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(message_url, json=request_data)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(prompt_async_url, json=request_data)
 
-                print(f"[OpenCode] Send message status code: {response.status_code}")
-                print(f"[OpenCode] Send message response: {response.text}")
+                print(f"[OpenCode] Send prompt async status code: {response.status_code}")
+                print(f"[OpenCode] Send prompt async response: {response.text}")
 
-                if response.status_code == 200:
-                    data = response.json()
-                    message_id = data.get("info", {}).get("id") or data.get("message_id")
-
-                    print(f"[OpenCode] Server returned message_id: {message_id}")
-
+                if response.status_code in [200, 202, 204]:
                     log_opencode_interaction(
                         "response",
-                        f"/session/{server_session_id}/message",
+                        f"/session/{server_session_id}/prompt_async",
                         {"status": "accepted", "message_id": message_id},
                     )
                     print(f"[OpenCode] Prompt sent successfully, message_id: {message_id}")
@@ -405,7 +419,7 @@ class OpenCodeSessionService:
                 else:
                     log_opencode_interaction(
                         "error",
-                        f"/session/{server_session_id}/message",
+                        f"/session/{server_session_id}/prompt_async",
                         {"status_code": response.status_code, "text": response.text},
                     )
                     print(f"[OpenCode] Failed to send prompt: {response.status_code}")
@@ -415,7 +429,7 @@ class OpenCodeSessionService:
             print(f"[OpenCode] Failed to send prompt to OpenCode: {e}")
             print(f"[OpenCode] Failed to send prompt traceback: {traceback.format_exc()}")
             log_opencode_interaction(
-                "error", f"/session/{server_session_id}/message", {"error": str(e)}
+                "error", f"/session/{server_session_id}/prompt_async", {"error": str(e)}
             )
             return None
 
@@ -423,59 +437,88 @@ class OpenCodeSessionService:
         self, project: Project, server_session_id: str, message_id: Optional[str] = None
     ) -> str:
         """
-        轮询OpenCode服务器获取结果 - 真实API调用
+        轮询OpenCode服务器获取结果 - 使用新的message API，检查reason=stop
         """
         print(f"[OpenCode] Polling OpenCode Server for result...")
         print(f"[OpenCode] Polling for session: {server_session_id}")
         print(f"[OpenCode] Polling for message_id: {message_id}")
 
-        max_polls = 60
-        poll_interval = 2
+        max_polls = 300  # 5 minutes with 1s interval
+        poll_interval = 1
+        full_response = ""
 
         for poll_count in range(max_polls):
             try:
                 import httpx
 
                 url = self.get_opencode_server_url(project)
-                messages_url = f"{url}/session/{server_session_id}/message"
+                message_url = f"{url}/session/{server_session_id}/message"
 
-                log_opencode_interaction(
-                    "request",
-                    f"/session/{server_session_id}/message",
-                    {"action": "poll", "poll_count": poll_count + 1},
-                )
+                # log_opencode_interaction(
+                #     "request",
+                #     f"/session/{server_session_id}/message/{message_id}",
+                #     {"action": "poll", "poll_count": poll_count + 1},
+                # )
 
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.get(messages_url)
+                    response = await client.get(message_url)
 
                     if response.status_code == 200:
                         data = response.json()
-                        log_opencode_interaction(
-                            "response",
-                            f"/session/{server_session_id}/message",
-                            {"messages_count": len(data) if isinstance(data, list) else 1},
-                        )
 
-                        if isinstance(data, list) and len(data) > 0:
-                            last_message = data[-1]
-                            parts = last_message.get("parts", [])
-                            if parts:
-                                text_parts = [
-                                    p.get("text", "") for p in parts if p.get("type") == "text"
-                                ]
-                                full_response = "\n".join(text_parts)
+                        data = data[-1]
+                        # log_opencode_interaction(
+                        #     "response",
+                        #     f"/session/{server_session_id}/message/{message_id}",
+                        #     {"data_preview": str(data)[:300]},
+                        # )
 
-                                if full_response and len(full_response) > 10:
-                                    log_opencode_interaction(
-                                        "response",
-                                        f"/session/{server_session_id}/message",
-                                        {
-                                            "response_length": len(full_response),
-                                            "response_preview": full_response[:200],
-                                        },
-                                    )
-                                    print(f"[OpenCode] Received response from OpenCode Server")
-                                    return full_response
+                        # Extract parts
+                        parts = data.get("parts", []) if isinstance(data, dict) else []
+                        
+                        part = parts[-1]
+
+                        # Check if we should stop
+                        should_stop = False
+                        
+                        if isinstance(part, dict) and part.get("reason") == "stop":
+                            should_stop = True
+                            print(f"[OpenCode] Received stop reason, stopping polling")
+                            break
+
+                        # Extract text from parts
+                        text_parts = []
+
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                        
+                        current_text = "\n".join(text_parts)
+                        
+                        # Update full response if we got new text
+                        if current_text and len(current_text) > len(full_response):
+                            full_response = current_text
+                            print(f"[OpenCode] Updated response, length: {len(full_response)}")
+                            
+                            # Update database incrementally
+                            async with AsyncSessionLocal() as db_session_local:
+                                from app.models.opencode_session import OpenCodeSession
+                                from sqlalchemy import select
+                                
+                                # We don't have the db_session_id here, but we'll update in _background_poll_result
+                                pass
+
+                        if should_stop:
+                            log_opencode_interaction(
+                                "response",
+                                f"/session/{server_session_id}/message",
+                                {
+                                    "status": "completed",
+                                    "response_length": len(full_response),
+                                    "response_preview": full_response[:200],
+                                },
+                            )
+                            print(f"[OpenCode] Polling completed, returning full response")
+                            return full_response
 
                 await asyncio.sleep(poll_interval)
 
@@ -490,6 +533,10 @@ class OpenCodeSessionService:
                 await asyncio.sleep(poll_interval)
 
         print(f"[OpenCode] Polling timed out after {max_polls} attempts")
+
+        if full_response:
+            print(f"[OpenCode] Returning partial response")
+            return full_response
 
         sample_response = (
             "这是一个模拟的AI响应示例（真实API超时）。\n\n"
@@ -628,6 +675,129 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Audit started successfully, session ID: {db_session.id}")
         return db_session, server_status
 
+    async def poll_opencode_result_with_updates(
+        self, 
+        project: Project, 
+        server_session_id: str, 
+        message_id: Optional[str],
+        db_session_id: str
+    ) -> str:
+        """
+        轮询OpenCode服务器获取结果 - 使用新的message API，检查reason=stop，并增量更新数据库
+        """
+        print(f"[OpenCode] Polling OpenCode Server for result (with updates)...")
+        print(f"[OpenCode] Polling for session: {server_session_id}")
+        print(f"[OpenCode] Polling for message_id: {message_id}")
+
+        max_polls = 300  # 5 minutes with 1s interval
+        poll_interval = 1
+        full_response = ""
+
+        if not message_id:
+            print(f"[OpenCode] No message_id provided, cannot poll")
+            return "Error: No message ID provided"
+
+        for poll_count in range(max_polls):
+            try:
+                import httpx
+
+                url = self.get_opencode_server_url(project)
+                message_url = f"{url}/session/{server_session_id}/message"
+
+                # log_opencode_interaction(
+                #     "request",
+                #     f"/session/{server_session_id}/message/{message_id}",
+                #     {"action": "poll", "poll_count": poll_count + 1},
+                # )
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(message_url)
+
+                    if response.status_code == 200:
+                        data = response.json()
+                        data = data[-1]
+                        # log_opencode_interaction(
+                        #     "response",
+                        #     f"/session/{server_session_id}/message",
+                        #     {"data_preview": str(data)[:300]},
+                        # )
+
+                        # Extract parts
+                        parts = data.get("parts", []) if isinstance(data, dict) else []
+                        part = parts[-1]
+
+                        # Check if we should stop
+                        should_stop = False
+
+                        if isinstance(part, dict) and part.get("reason") == "stop":
+                            should_stop = True
+                            print(f"[OpenCode] Received stop reason, stopping polling")
+                            break
+
+                        # Extract text from parts
+                        text_parts = []
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                        
+                        current_text = "\n".join(text_parts)
+                        
+                        # Update full response if we got new text
+                        if current_text and len(current_text) > len(full_response):
+                            full_response = current_text
+                            print(f"[OpenCode] Updated response, length: {len(full_response)}")
+                            
+                            # Update database incrementally
+                            async with AsyncSessionLocal() as db_session_local:
+                                result_db = await db_session_local.execute(
+                                    select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
+                                )
+                                db_session = result_db.scalar_one_or_none()
+                                if db_session:
+                                    db_session.response_content = full_response
+                                    await db_session_local.commit()
+
+                        if should_stop:
+                            log_opencode_interaction(
+                                "response",
+                                f"/session/{server_session_id}/message/",
+                                {
+                                    "status": "completed",
+                                    "response_length": len(full_response),
+                                    "response_preview": full_response[:200],
+                                },
+                            )
+                            print(f"[OpenCode] Polling completed, returning full response")
+                            return full_response
+
+                await asyncio.sleep(poll_interval)
+
+            except Exception as e:
+                print(f"[OpenCode] Poll attempt {poll_count + 1} failed: {e}")
+                print(f"[OpenCode] Poll attempt traceback: {traceback.format_exc()}")
+                log_opencode_interaction(
+                    "error",
+                    f"/session/{server_session_id}/message",
+                    {"error": str(e), "poll_count": poll_count + 1},
+                )
+                await asyncio.sleep(poll_interval)
+
+        print(f"[OpenCode] Polling timed out after {max_polls} attempts")
+
+        if full_response:
+            print(f"[OpenCode] Returning partial response")
+            return full_response
+
+        sample_response = (
+            "这是一个模拟的AI响应示例（真实API超时）。\n\n"
+            "## 分析结果\n\n"
+            "根据您的提示词，我进行了以下分析：\n\n"
+            "1. **代码审查**：检查了项目中的主要文件\n"
+            "2. **安全审计**：识别了潜在的安全问题\n"
+            "3. **优化建议**：提供了性能优化建议\n\n"
+            "感谢使用DeepAudit x OpenCode！"
+        )
+        return sample_response
+
     async def _background_poll_result(
         self,
         project_id: str,
@@ -650,7 +820,9 @@ class OpenCodeSessionService:
                 )
                 project = result_project.scalar_one_or_none()
 
-                result = await self.poll_opencode_result(project, server_session_id, message_id)
+                result = await self.poll_opencode_result_with_updates(
+                    project, server_session_id, message_id, db_session_id
+                )
 
                 result_db = await db_session_local.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
