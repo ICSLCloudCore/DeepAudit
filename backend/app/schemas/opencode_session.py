@@ -12,6 +12,16 @@ class OpenCodeSessionStatus(str, Enum):
     ACTIVE = "active"
     CLOSED = "closed"
     ERROR = "error"
+    PENDING = "pending"
+
+
+class OpenCodeServerStatus(str, Enum):
+    """OpenCode服务器状态"""
+
+    STARTING = "starting"
+    RUNNING = "running"
+    ERROR = "error"
+    STOPPED = "stopped"
 
 
 class OpenCodeSessionCreate(BaseModel):
@@ -20,6 +30,55 @@ class OpenCodeSessionCreate(BaseModel):
     prompt_template_id: Optional[str] = Field(None, description="提示词模板ID")
     prompt_content: str = Field(..., min_length=1, max_length=10000, description="提示词内容")
     variables: Optional[Dict[str, str]] = Field(default_factory=dict, description="变量值")
+
+
+class StartAuditWithPromptRequest(BaseModel):
+    """启动OpenCode审计请求"""
+
+    prompt_template_id: Optional[str] = Field(None, description="提示词模板ID")
+    prompt_content: Optional[str] = Field(None, description="自定义提示词内容")
+    variables: Optional[Dict[str, str]] = Field(default_factory=dict, description="变量值")
+
+
+class StartAuditWithPromptResponse(BaseModel):
+    """启动OpenCode审计响应"""
+
+    session_id: str
+    project_id: str
+    status: OpenCodeSessionStatus
+    opencode_server_status: OpenCodeServerStatus
+    message: str
+
+
+class SessionStatusResponse(BaseModel):
+    """会话状态响应"""
+
+    session_id: str
+    status: OpenCodeSessionStatus
+    prompt_content: str
+    response_content: str
+    opencode_server_status: OpenCodeServerStatus
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class AvailablePromptItem(BaseModel):
+    """可用提示词项"""
+
+    id: str
+    name: str
+    description: Optional[str] = None
+    template_type: str
+    is_default: bool
+    is_system: bool
+    is_active: bool
+
+
+class AvailablePromptsResponse(BaseModel):
+    """可用提示词列表响应"""
+
+    items: List[AvailablePromptItem]
+    total: int
 
 
 class SendPromptRequest(BaseModel):
