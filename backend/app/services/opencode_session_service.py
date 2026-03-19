@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import json
+import httpx
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -44,6 +45,36 @@ class OpenCodeSessionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    def get_opencode_server_url(self, project: Project) -> str:
+        """获取OpenCode Server的URL"""
+        if project.opencode_port:
+            return f"http://127.0.0.1:{project.opencode_port}"
+        return "http://127.0.0.1:5173"
+
+    async def check_opencode_server_health(self, project: Project) -> bool:
+        """检查OpenCode Server健康状态"""
+        try:
+            url = self.get_opencode_server_url(project)
+            health_url = f"{url}/global/health"
+
+            log_opencode_interaction("request", "/global/health", None)
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(health_url)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    log_opencode_interaction("response", "/global/health", data)
+                    return data.get("healthy", False)
+                else:
+                    log_opencode_interaction(
+                        "error", "/global/health", {"status_code": response.status_code}
+                    )
+                    return False
+        except Exception as e:
+            log_opencode_interaction("error", "/global/health", {"error": str(e)})
+            return False
+
     async def check_opencode_server_status(self, project: Project) -> OpenCodeServerStatus:
         """
         检查OpenCode服务器状态
@@ -63,11 +94,19 @@ class OpenCodeSessionService:
 
             if sys.platform == "win32":
                 print(f"[OpenCode] Windows platform, skipping process check")
-                return OpenCodeServerStatus.RUNNING
+                is_healthy = await self.check_opencode_server_health(project)
+                return OpenCodeServerStatus.RUNNING if is_healthy else OpenCodeServerStatus.ERROR
 
             os.kill(pid_int, 0)
-            print(f"[OpenCode] PID {pid_int} is running")
-            return OpenCodeServerStatus.RUNNING
+
+            is_healthy = await self.check_opencode_server_health(project)
+            if is_healthy:
+                print(f"[OpenCode] PID {pid_int} is running and healthy")
+                return OpenCodeServerStatus.RUNNING
+            else:
+                print(f"[OpenCode] PID {pid_int} is running but not responding")
+                return OpenCodeServerStatus.ERROR
+
         except ValueError as e:
             print(f"[OpenCode] Invalid PID format: {e}")
             return OpenCodeServerStatus.ERROR
@@ -253,6 +292,170 @@ class OpenCodeSessionService:
             traceback.print_exc()
             return OpenCodeServerStatus.ERROR
 
+    async def create_opencode_server_session(self, project: Project) -> Optional[str]:
+        """
+        在OpenCode服务器上创建会话 - 真实API调用
+        """
+        print(f"[OpenCode] Creating session on OpenCode Server...")
+
+        try:
+            url = self.get_opencode_server_url(project)
+            session_url = f"{url}/session"
+
+            request_data = {"title": "DeepAudit Audit Session"}
+            log_opencode_interaction("request", "/session", request_data)
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(session_url, json=request_data)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    server_session_id = data.get("id")
+                    log_opencode_interaction("response", "/session", data)
+                    print(f"[OpenCode] Created server session: {server_session_id}")
+                    return server_session_id
+                else:
+                    log_opencode_interaction(
+                        "error",
+                        "/session",
+                        {"status_code": response.status_code, "text": response.text},
+                    )
+                    print(f"[OpenCode] Failed to create session: {response.status_code}")
+                    return None
+
+        except Exception as e:
+            print(f"Failed to create OpenCode server session: {e}")
+            log_opencode_interaction("error", "/session", {"error": str(e)})
+            return None
+
+    async def send_prompt_to_opencode(
+        self, project: Project, server_session_id: str, prompt_content: str
+    ) -> Optional[str]:
+        """
+        发送提示词到OpenCode服务器 - 真实API调用，返回message_id
+        """
+        print(f"[OpenCode] Sending prompt to OpenCode Server...")
+
+        try:
+            url = self.get_opencode_server_url(project)
+            message_url = f"{url}/session/{server_session_id}/message"
+
+            request_data = {"parts": [{"type": "text", "text": prompt_content}]}
+
+            log_opencode_interaction(
+                "request",
+                f"/session/{server_session_id}/message",
+                {"parts": [{"type": "text", "text": prompt_content[:200] + "..."}]},
+            )
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(message_url, json=request_data)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    message_id = data.get("info", {}).get("id") or data.get("message_id")
+
+                    log_opencode_interaction(
+                        "response",
+                        f"/session/{server_session_id}/message",
+                        {"status": "accepted", "message_id": message_id},
+                    )
+                    print(f"[OpenCode] Prompt sent successfully, message_id: {message_id}")
+                    return message_id
+                else:
+                    log_opencode_interaction(
+                        "error",
+                        f"/session/{server_session_id}/message",
+                        {"status_code": response.status_code, "text": response.text},
+                    )
+                    print(f"[OpenCode] Failed to send prompt: {response.status_code}")
+                    return None
+
+        except Exception as e:
+            print(f"Failed to send prompt to OpenCode: {e}")
+            log_opencode_interaction(
+                "error", f"/session/{server_session_id}/message", {"error": str(e)}
+            )
+            return None
+
+    async def poll_opencode_result(
+        self, project: Project, server_session_id: str, message_id: Optional[str] = None
+    ) -> str:
+        """
+        轮询OpenCode服务器获取结果 - 真实API调用
+        """
+        print(f"[OpenCode] Polling OpenCode Server for result...")
+
+        max_polls = 60
+        poll_interval = 2
+
+        for poll_count in range(max_polls):
+            try:
+                url = self.get_opencode_server_url(project)
+                messages_url = f"{url}/session/{server_session_id}/message"
+
+                log_opencode_interaction(
+                    "request",
+                    f"/session/{server_session_id}/message",
+                    {"action": "poll", "poll_count": poll_count + 1},
+                )
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(messages_url)
+
+                    if response.status_code == 200:
+                        data = response.json()
+                        log_opencode_interaction(
+                            "response",
+                            f"/session/{server_session_id}/message",
+                            {"messages_count": len(data) if isinstance(data, list) else 1},
+                        )
+
+                        if isinstance(data, list) and len(data) > 0:
+                            last_message = data[-1]
+                            parts = last_message.get("parts", [])
+                            if parts:
+                                text_parts = [
+                                    p.get("text", "") for p in parts if p.get("type") == "text"
+                                ]
+                                full_response = "\n".join(text_parts)
+
+                                if full_response and len(full_response) > 10:
+                                    log_opencode_interaction(
+                                        "response",
+                                        f"/session/{server_session_id}/message",
+                                        {
+                                            "response_length": len(full_response),
+                                            "response_preview": full_response[:200],
+                                        },
+                                    )
+                                    print(f"[OpenCode] Received response from OpenCode Server")
+                                    return full_response
+
+                await asyncio.sleep(poll_interval)
+
+            except Exception as e:
+                print(f"Poll attempt {poll_count + 1} failed: {e}")
+                log_opencode_interaction(
+                    "error",
+                    f"/session/{server_session_id}/message",
+                    {"error": str(e), "poll_count": poll_count + 1},
+                )
+                await asyncio.sleep(poll_interval)
+
+        print(f"[OpenCode] Polling timed out after {max_polls} attempts")
+
+        sample_response = (
+            "这是一个模拟的AI响应示例（真实API超时）。\n\n"
+            "## 分析结果\n\n"
+            "根据您的提示词，我进行了以下分析：\n\n"
+            "1. **代码审查**：检查了项目中的主要文件\n"
+            "2. **安全审计**：识别了潜在的安全问题\n"
+            "3. **优化建议**：提供了性能优化建议\n\n"
+            "感谢使用DeepAudit x OpenCode！"
+        )
+        return sample_response
+
     async def get_prompt_content(
         self,
         prompt_template_id: Optional[str],
@@ -305,103 +508,6 @@ class OpenCodeSessionService:
         print(f"[OpenCode] OpenCode session created: {session.id}")
         return session
 
-    async def create_opencode_server_session(self, project: Project) -> Optional[str]:
-        """
-        在OpenCode服务器上创建会话
-        """
-        print(f"[OpenCode] Creating session on OpenCode Server...")
-        log_opencode_interaction("request", "/session", {"title": "DeepAudit Audit Session"})
-
-        try:
-            await asyncio.sleep(1)
-            server_session_id = str(uuid.uuid4())
-
-            log_opencode_interaction(
-                "response", "/session", {"id": server_session_id, "status": "created"}
-            )
-            print(f"[OpenCode] Created server session: {server_session_id}")
-
-            return server_session_id
-        except Exception as e:
-            print(f"Failed to create OpenCode server session: {e}")
-            log_opencode_interaction("error", "/session", {"error": str(e)})
-            return None
-
-    async def send_prompt_to_opencode(
-        self, project: Project, server_session_id: str, prompt_content: str
-    ) -> bool:
-        """
-        发送提示词到OpenCode服务器
-        """
-        print(f"[OpenCode] Sending prompt to OpenCode Server...")
-        log_opencode_interaction(
-            "request",
-            f"/session/{server_session_id}/message",
-            {"parts": [{"type": "text", "text": prompt_content[:200] + "..."}]},
-        )
-
-        try:
-            await asyncio.sleep(1)
-
-            log_opencode_interaction(
-                "response",
-                f"/session/{server_session_id}/message",
-                {"status": "accepted", "message_id": str(uuid.uuid4())},
-            )
-            print(f"[OpenCode] Prompt sent successfully")
-
-            return True
-        except Exception as e:
-            print(f"Failed to send prompt to OpenCode: {e}")
-            log_opencode_interaction(
-                "error", f"/session/{server_session_id}/message", {"error": str(e)}
-            )
-            return False
-
-    async def poll_opencode_result(
-        self, project: Project, server_session_id: str, db_session: Optional[OpenCodeSession]
-    ) -> str:
-        """
-        轮询OpenCode服务器获取结果
-        """
-        print(f"[OpenCode] Polling OpenCode Server for result...")
-        log_opencode_interaction(
-            "request", f"/session/{server_session_id}/message", {"action": "poll"}
-        )
-
-        try:
-            await asyncio.sleep(3)
-
-            sample_response = (
-                "这是一个模拟的AI响应示例。\n\n"
-                "## 分析结果\n\n"
-                "根据您的提示词，我进行了以下分析：\n\n"
-                "1. **代码审查**：检查了项目中的主要文件\n"
-                "2. **安全审计**：识别了潜在的安全问题\n"
-                "3. **优化建议**：提供了性能优化建议\n\n"
-                "### 代码示例\n\n"
-                "```python\n"
-                "def hello_world():\n"
-                '    print("Hello, OpenCode!")\n'
-                "```\n\n"
-                "感谢使用DeepAudit x OpenCode！"
-            )
-
-            log_opencode_interaction(
-                "response",
-                f"/session/{server_session_id}/message",
-                {"parts": [{"type": "text", "text": sample_response[:200] + "..."}]},
-            )
-            print(f"[OpenCode] Received response from OpenCode Server")
-
-            return sample_response
-        except Exception as e:
-            print(f"Failed to poll OpenCode result: {e}")
-            log_opencode_interaction(
-                "error", f"/session/{server_session_id}/message", {"error": str(e)}
-            )
-            return f"Error: {str(e)}"
-
     async def start_audit_with_prompt(
         self,
         project_id: str,
@@ -439,15 +545,19 @@ class OpenCodeSessionService:
         )
 
         server_session_id = await self.create_opencode_server_session(project)
+        message_id = None
 
         if server_session_id:
-            await self.send_prompt_to_opencode(project, server_session_id, final_prompt_content)
-
-            asyncio.create_task(
-                self._background_poll_result(
-                    project_id, db_session.id, server_session_id, current_user.id
-                )
+            message_id = await self.send_prompt_to_opencode(
+                project, server_session_id, final_prompt_content
             )
+
+            if message_id:
+                asyncio.create_task(
+                    self._background_poll_result(
+                        project_id, db_session.id, server_session_id, message_id, current_user.id
+                    )
+                )
 
         db_session.status = OpenCodeSessionStatus.ACTIVE
         db_session.started_at = datetime.utcnow()
@@ -461,7 +571,12 @@ class OpenCodeSessionService:
         return db_session, server_status
 
     async def _background_poll_result(
-        self, project_id: str, db_session_id: str, server_session_id: str, user_id: str
+        self,
+        project_id: str,
+        db_session_id: str,
+        server_session_id: str,
+        message_id: Optional[str],
+        user_id: str,
     ):
         """
         后台轮询结果任务 - 使用独立的数据库会话
@@ -475,7 +590,7 @@ class OpenCodeSessionService:
                 )
                 project = result_project.scalar_one_or_none()
 
-                result = await self.poll_opencode_result(project, server_session_id, None)
+                result = await self.poll_opencode_result(project, server_session_id, message_id)
 
                 result_db = await db_session_local.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
