@@ -341,55 +341,92 @@ export default function CreateTaskDialog({
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
-            {/* 项目选择 */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-mono font-bold uppercase text-muted-foreground">
-                  选择项目
-                </span>
-                <Badge className="cyber-badge-muted font-mono text-xs">
-                  {filteredProjects.length} 个
-                </Badge>
-              </div>
+            {/* 项目选择 - 只在没有预选中项目时显示 */}
+            {!preselectedProjectId && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-mono font-bold uppercase text-muted-foreground">
+                    选择项目
+                  </span>
+                  <Badge className="cyber-badge-muted font-mono text-xs">
+                    {filteredProjects.length} 个
+                  </Badge>
+                </div>
 
-              {/* 搜索框 */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜索项目..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="!pl-9 h-10 cyber-input"
-                />
-              </div>
+                {/* 搜索框 */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="搜索项目..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="!pl-9 h-10 cyber-input"
+                  />
+                </div>
 
-              {/* 项目列表 */}
-              <ScrollArea className="h-[180px] border border-border rounded bg-muted/50">
-                {loading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                {/* 项目列表 */}
+                <ScrollArea className="h-[180px] border border-border rounded bg-muted/50">
+                  {loading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    </div>
+                  ) : filteredProjects.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground font-mono">
+                      <Package className="w-8 h-8 mb-2 opacity-50" />
+                      <span className="text-sm">
+                        {searchTerm ? "未找到" : "暂无项目"}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="p-1">
+                      {filteredProjects.map((project) => (
+                        <ProjectCard
+                          key={project.id}
+                          project={project}
+                          selected={selectedProjectId === project.id}
+                          onSelect={() => setSelectedProjectId(project.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </div>
+            )}
+
+            {/* 已选中项目显示 - 当有预选中项目时显示 */}
+            {preselectedProjectId && selectedProject && (
+              <div className="p-3 border border-primary/30 rounded bg-primary/5">
+                <div className="flex items-center gap-3">
+                  <div className={`p-1.5 rounded ${isRepositoryProject(selectedProject) ? "bg-blue-500/20" : "bg-amber-500/20"}`}>
+                    {isRepositoryProject(selectedProject) ? (
+                      <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    ) : (
+                      <Package className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    )}
                   </div>
-                ) : filteredProjects.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground font-mono">
-                    <Package className="w-8 h-8 mb-2 opacity-50" />
-                    <span className="text-sm">
-                      {searchTerm ? "未找到" : "暂无项目"}
-                    </span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-base font-bold text-foreground">
+                        {selectedProject.name}
+                      </span>
+                      <Badge
+                        className={`text-xs px-1 py-0 font-mono ${isRepositoryProject(selectedProject)
+                            ? "bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                            : "bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                          }`}
+                      >
+                        {isRepositoryProject(selectedProject) ? "REPO" : "ZIP"}
+                      </Badge>
+                    </div>
+                    {selectedProject.description && (
+                      <p className="text-sm text-muted-foreground mt-0.5 font-mono line-clamp-2">
+                        {selectedProject.description}
+                      </p>
+                    )}
                   </div>
-                ) : (
-                  <div className="p-1">
-                    {filteredProjects.map((project) => (
-                      <ProjectCard
-                        key={project.id}
-                        project={project}
-                        selected={selectedProjectId === project.id}
-                        onSelect={() => setSelectedProjectId(project.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
+                </div>
+              </div>
+            )}
 
             {/* 审计模式选择 */}
             {selectedProject && (
