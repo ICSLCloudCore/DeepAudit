@@ -8,6 +8,8 @@ import uuid
 import os
 import re
 import sys
+import httpx
+import subprocess
 import json
 import traceback
 from typing import Optional, Dict, Any
@@ -51,7 +53,7 @@ class OpenCodeSessionService:
             url = f"http://127.0.0.1:{project.opencode_port}"
             print(f"[OpenCode] Using OpenCode Server URL: {url}")
             return url
-        url = "http://127.0.0.1:5173"
+        url = "http://127.0.0.1:4096"
         print(f"[OpenCode] Using default OpenCode Server URL: {url}")
         return url
 
@@ -59,8 +61,6 @@ class OpenCodeSessionService:
         """检查OpenCode Server健康状态"""
         print(f"[OpenCode] Checking OpenCode Server health...")
         try:
-            import httpx
-
             url = self.get_opencode_server_url(project)
             health_url = f"{url}/global/health"
 
@@ -146,8 +146,6 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Platform: {sys.platform}")
 
         try:
-            import uuid
-            import subprocess
 
             task_id = str(uuid.uuid4())
             print(f"[OpenCode] Generated task ID: {task_id}")
@@ -312,7 +310,6 @@ class OpenCodeSessionService:
         print(f"[OpenCode] ========================================")
 
         try:
-            import httpx
 
             url = self.get_opencode_server_url(project)
             session_url = f"{url}/session"
@@ -376,7 +373,6 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Using server_session_id: {server_session_id}")
 
         try:
-            import httpx
 
             url = self.get_opencode_server_url(project)
             prompt_async_url = f"{url}/session/{server_session_id}/prompt_async"
@@ -396,7 +392,7 @@ class OpenCodeSessionService:
                 f"/session/{server_session_id}/prompt_async",
                 {
                     "messageID": message_id,
-                    "parts": [{"type": "text", "text": prompt_content[:200] + "..."}]
+                    "parts": [{"type": "text", "text": "prompt..."}]
                 },
             )
 
@@ -432,122 +428,6 @@ class OpenCodeSessionService:
                 "error", f"/session/{server_session_id}/prompt_async", {"error": str(e)}
             )
             return None
-
-    async def poll_opencode_result(
-        self, project: Project, server_session_id: str, message_id: Optional[str] = None
-    ) -> str:
-        """
-        轮询OpenCode服务器获取结果 - 使用新的message API，检查reason=stop
-        """
-        print(f"[OpenCode] Polling OpenCode Server for result...")
-        print(f"[OpenCode] Polling for session: {server_session_id}")
-        print(f"[OpenCode] Polling for message_id: {message_id}")
-
-        max_polls = 300  # 5 minutes with 1s interval
-        poll_interval = 1
-        full_response = ""
-
-        for poll_count in range(max_polls):
-            try:
-                import httpx
-
-                url = self.get_opencode_server_url(project)
-                message_url = f"{url}/session/{server_session_id}/message"
-
-                # log_opencode_interaction(
-                #     "request",
-                #     f"/session/{server_session_id}/message/{message_id}",
-                #     {"action": "poll", "poll_count": poll_count + 1},
-                # )
-
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.get(message_url)
-
-                    if response.status_code == 200:
-                        data = response.json()
-
-                        data = data[-1]
-                        # log_opencode_interaction(
-                        #     "response",
-                        #     f"/session/{server_session_id}/message/{message_id}",
-                        #     {"data_preview": str(data)[:300]},
-                        # )
-
-                        # Extract parts
-                        parts = data.get("parts", []) if isinstance(data, dict) else []
-                        
-                        part = parts[-1]
-
-                        # Check if we should stop
-                        should_stop = False
-                        
-                        if isinstance(part, dict) and part.get("reason") == "stop":
-                            should_stop = True
-                            print(f"[OpenCode] Received stop reason, stopping polling")
-                            break
-
-                        # Extract text from parts
-                        text_parts = []
-
-                        if isinstance(part, dict) and part.get("type") == "text":
-                            text_parts.append(part.get("text", ""))
-                        
-                        current_text = "\n".join(text_parts)
-                        
-                        # Update full response if we got new text
-                        if current_text and len(current_text) > len(full_response):
-                            full_response = current_text
-                            print(f"[OpenCode] Updated response, length: {len(full_response)}")
-                            
-                            # Update database incrementally
-                            async with AsyncSessionLocal() as db_session_local:
-                                from app.models.opencode_session import OpenCodeSession
-                                from sqlalchemy import select
-                                
-                                # We don't have the db_session_id here, but we'll update in _background_poll_result
-                                pass
-
-                        if should_stop:
-                            log_opencode_interaction(
-                                "response",
-                                f"/session/{server_session_id}/message",
-                                {
-                                    "status": "completed",
-                                    "response_length": len(full_response),
-                                    "response_preview": full_response[:200],
-                                },
-                            )
-                            print(f"[OpenCode] Polling completed, returning full response")
-                            return full_response
-
-                await asyncio.sleep(poll_interval)
-
-            except Exception as e:
-                print(f"[OpenCode] Poll attempt {poll_count + 1} failed: {e}")
-                print(f"[OpenCode] Poll attempt traceback: {traceback.format_exc()}")
-                log_opencode_interaction(
-                    "error",
-                    f"/session/{server_session_id}/message",
-                    {"error": str(e), "poll_count": poll_count + 1},
-                )
-                await asyncio.sleep(poll_interval)
-
-        print(f"[OpenCode] Polling timed out after {max_polls} attempts")
-
-        if full_response:
-            print(f"[OpenCode] Returning partial response")
-            return full_response
-
-        sample_response = (
-            "这是一个模拟的AI响应示例（真实API超时）。\n\n"
-            "## 分析结果\n\n"
-            "根据您的提示词，我进行了以下分析：\n\n"
-            "1. **代码审查**：检查了项目中的主要文件\n"
-            "2. **安全审计**：识别了潜在的安全问题\n"
-            "3. **优化建议**：提供了性能优化建议\n\n"
-            "感谢使用DeepAudit x OpenCode！"
-        )
-        return sample_response
 
     async def get_prompt_content(
         self,
@@ -699,28 +579,17 @@ class OpenCodeSessionService:
 
         for poll_count in range(max_polls):
             try:
-                import httpx
 
                 url = self.get_opencode_server_url(project)
                 message_url = f"{url}/session/{server_session_id}/message"
-
-                # log_opencode_interaction(
-                #     "request",
-                #     f"/session/{server_session_id}/message/{message_id}",
-                #     {"action": "poll", "poll_count": poll_count + 1},
-                # )
-
+                asyncio.sleep(1)
+                
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(message_url)
 
                     if response.status_code == 200:
                         data = response.json()
                         data = data[-1]
-                        # log_opencode_interaction(
-                        #     "response",
-                        #     f"/session/{server_session_id}/message",
-                        #     {"data_preview": str(data)[:300]},
-                        # )
 
                         # Extract parts
                         parts = data.get("parts", []) if isinstance(data, dict) else []
