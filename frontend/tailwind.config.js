@@ -75,8 +75,8 @@ export default {
         },
         // Core Palette - Direct color access
         terminal: {
-          orange: '#FF6B2C',      // Vibrant Orange
-          'orange-dark': '#E55A1F',
+          orange: '#38bdf8',      // Sky Blue
+          'orange-dark': '#0ea5e9',
           red: '#D32F2F',         // Deep Red
           'red-dark': '#B71C1C',
           green: '#00E676',       // Signal Green
@@ -112,7 +112,7 @@ export default {
         'terminal': '1px 1px 0px rgba(0, 0, 0, 0.15)',
         'terminal-md': '2px 2px 0px rgba(0, 0, 0, 0.15)',
         // Glow effects for status indicators
-        'glow-orange': '0 0 8px rgba(255, 107, 44, 0.4)',
+        'glow-orange': '0 0 8px rgba(56, 189, 248, 0.4)',
         'glow-red': '0 0 8px rgba(211, 47, 47, 0.4)',
         'glow-green': '0 0 8px rgba(0, 230, 118, 0.4)',
       },

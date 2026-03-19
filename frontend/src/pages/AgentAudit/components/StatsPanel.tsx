@@ -22,7 +22,7 @@ function CircularProgress({ value, size = 52, strokeWidth = 4, color = "primary"
   const offset = circumference - (value / 100) * circumference;
 
   const colorMap: Record<string, { stroke: string; glow: string }> = {
-    primary: { stroke: '#FF6B2C', glow: 'rgba(255,107,44,0.4)' },
+    primary: { stroke: '#38bdf8', glow: 'rgba(56,189,248,0.4)' },
     emerald: { stroke: '#34d399', glow: 'rgba(52,211,153,0.4)' },
     rose: { stroke: '#fb7185', glow: 'rgba(251,113,133,0.4)' },
     amber: { stroke: '#fbbf24', glow: 'rgba(251,191,36,0.4)' },
@@ -168,7 +168,7 @@ export const StatsPanel = memo(function StatsPanel({ task, findings }: StatsPane
               className="absolute inset-y-0 left-0 rounded-full blur-sm opacity-50"
               style={{
                 width: `${progressPercent}%`,
-                background: 'linear-gradient(to right, #FF6B2C, #FF6B2C)',
+                background: 'linear-gradient(to right, #38bdf8, #0ea5e9)',
               }}
             />
           </div>

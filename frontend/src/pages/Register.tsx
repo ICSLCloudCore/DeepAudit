@@ -71,8 +71,8 @@ export default function Register() {
         className="absolute inset-0 opacity-[0.03]"
         style={{
           backgroundImage: `
-            linear-gradient(rgba(255,107,44,0.5) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,107,44,0.5) 1px, transparent 1px)
+            linear-gradient(rgba(56,189,248,0.5) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(56,189,248,0.5) 1px, transparent 1px)
           `,
           backgroundSize: "32px 32px",
         }}
@@ -113,7 +113,7 @@ export default function Register() {
         {/* Logo & Title */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center p-3 cyber-dialog border border-border/60 rounded-lg mb-6"
-               style={{ boxShadow: '0 0 30px rgba(255,107,44,0.1)' }}>
+               style={{ boxShadow: '0 0 30px rgba(56,189,248,0.1)' }}>
             <img
                src="/logo_godeepaudit.png"
               alt="GoDeepAudit"
@@ -122,7 +122,7 @@ export default function Register() {
           </div>
           <div
             className="text-3xl font-bold tracking-wider mb-2 font-mono"
-            style={{ textShadow: "0 0 30px rgba(255,107,44,0.5), 0 0 60px rgba(255,107,44,0.3)" }}
+            style={{ textShadow: "0 0 30px rgba(56,189,248,0.5), 0 0 60px rgba(56,189,248,0.3)" }}
           >
             <span className="text-primary">GO</span>
             <span className="text-primary">DEEP</span>
@@ -215,7 +215,7 @@ export default function Register() {
               <Button
                 type="submit"
                 className="w-full h-12 text-base font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-foreground border border-primary/50 transition-all"
-                style={{ boxShadow: '0 0 20px rgba(255,107,44,0.3)' }}
+                style={{ boxShadow: '0 0 20px rgba(56,189,248,0.3)' }}
                 disabled={loading}
               >
                 {loading ? (

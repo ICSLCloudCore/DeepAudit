@@ -569,7 +569,7 @@ function ProjectItem({
       </div>
 
       {selected && (
-        <div className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(255,107,44,0.6)]" />
+        <div className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(56,189,248,0.6)]" />
       )}
     </div>
   );

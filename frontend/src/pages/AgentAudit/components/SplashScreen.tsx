@@ -270,7 +270,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           >
             {/* Terminal border glow - dark mode only */}
             <div className="absolute inset-0 rounded-xl border border-primary/30 pointer-events-none hidden dark:block" />
-            <div className="absolute inset-0 rounded-xl shadow-[0_0_30px_rgba(255,107,44,0.2),inset_0_0_30px_rgba(0,0,0,0.5)] pointer-events-none hidden dark:block" />
+            <div className="absolute inset-0 rounded-xl shadow-[0_0_30px_rgba(56,189,248,0.2),inset_0_0_30px_rgba(0,0,0,0.5)] pointer-events-none hidden dark:block" />
 
             {/* Terminal header - adaptive */}
             <div className="relative flex items-center gap-3 px-4 py-2.5 bg-gray-100 dark:bg-gray-950 border-b border-gray-200 dark:border-primary/20">
@@ -321,7 +321,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
                   <span className="text-emerald-600 dark:text-emerald-500/60">$</span>
                   <span className={`w-1.5 h-1.5 rounded-full ${
                     log.includes("[READY]") ? "bg-emerald-500 dark:shadow-[0_0_8px_rgba(52,211,153,0.8)]" :
-                    log.includes("[INIT]") ? "bg-primary dark:shadow-[0_0_8px_rgba(255,107,44,0.8)]" :
+                    log.includes("[INIT]") ? "bg-primary dark:shadow-[0_0_8px_rgba(56,189,248,0.8)]" :
                     log.includes("[SCAN]") ? "bg-violet-500 dark:shadow-[0_0_8px_rgba(167,139,250,0.8)]" :
                     log.includes("[LOAD]") ? "bg-amber-500 dark:shadow-[0_0_8px_rgba(251,191,36,0.8)]" :
                     log.includes("[SYNC]") ? "bg-cyan-500 dark:shadow-[0_0_8px_rgba(34,211,238,0.8)]" :
@@ -415,16 +415,16 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         /* Cyber grid background - adaptive */
         .cyber-grid {
           background-image:
-            linear-gradient(rgba(255,107,44,0.15) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,107,44,0.15) 1px, transparent 1px);
+            linear-gradient(rgba(56,189,248,0.15) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(56,189,248,0.15) 1px, transparent 1px);
           background-size: 50px 50px;
           animation: gridMove 20s linear infinite;
         }
 
         .dark .cyber-grid {
           background-image:
-            linear-gradient(rgba(255,107,44,0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,107,44,0.1) 1px, transparent 1px);
+            linear-gradient(rgba(56,189,248,0.1) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(56,189,248,0.1) 1px, transparent 1px);
         }
 
         @keyframes gridMove {
@@ -437,8 +437,8 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           position: absolute;
           width: 100%;
           height: 2px;
-          background: linear-gradient(90deg, transparent, rgba(255,107,44,0.5), rgba(0,255,255,0.3), transparent);
-          box-shadow: 0 0 10px rgba(255,107,44,0.5), 0 0 20px rgba(0,255,255,0.3);
+          background: linear-gradient(90deg, transparent, rgba(56,189,248,0.5), rgba(0,255,255,0.3), transparent);
+          box-shadow: 0 0 10px rgba(56,189,248,0.5), 0 0 20px rgba(0,255,255,0.3);
           animation: scanLine 4s linear infinite;
         }
 
@@ -481,7 +481,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             180deg,
             transparent 0%,
             rgba(0,255,255,0.3) 10%,
-            rgba(255,107,44,0.5) 50%,
+            rgba(56,189,248,0.5) 50%,
             rgba(0,255,255,0.3) 90%,
             transparent 100%
           );
@@ -548,15 +548,15 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         /* Neon text effect - dark mode only */
         .dark .logo-text {
           text-shadow:
-            0 0 10px rgba(255,107,44,0.8),
-            0 0 20px rgba(255,107,44,0.6),
-            0 0 40px rgba(255,107,44,0.4),
-            0 0 80px rgba(255,107,44,0.2);
+            0 0 10px rgba(56,189,248,0.8),
+            0 0 20px rgba(56,189,248,0.6),
+            0 0 40px rgba(56,189,248,0.4),
+            0 0 80px rgba(56,189,248,0.2);
         }
 
         /* Light mode logo - subtle shadow */
         .logo-text {
-          text-shadow: 0 2px 10px rgba(255,107,44,0.2);
+          text-shadow: 0 2px 10px rgba(56,189,248,0.2);
         }
 
         /* Cyber text styling - dark mode only */

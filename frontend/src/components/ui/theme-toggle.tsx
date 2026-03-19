@@ -79,7 +79,7 @@ export function ThemeToggle({ collapsed = false, className }: ThemeToggleProps) 
           className={cn(
             "w-6 h-6 transition-transform duration-200",
             resolvedTheme === "dark" && "text-amber-400",
-            resolvedTheme === "light" && "text-orange-500"
+            resolvedTheme === "light" && "text-sky-500"
           )}
         />
       </button>
@@ -126,7 +126,7 @@ export function ThemeToggle({ collapsed = false, className }: ThemeToggleProps) 
                 className={cn(
                   "w-3.5 h-3.5 transition-all duration-200",
                   isActive && value === "dark" && "text-amber-400",
-                  isActive && value === "light" && "text-orange-500",
+                  isActive && value === "light" && "text-sky-500",
                   isActive && value === "system" && "text-cyan-400"
                 )}
               />
@@ -175,7 +175,7 @@ export function ThemeToggleCompact({ className }: { className?: string }) {
           "absolute w-5 h-5 transition-all duration-250",
           isDark
             ? "opacity-0 rotate-90 scale-0"
-            : "opacity-100 rotate-0 scale-100 text-orange-500"
+            : "opacity-100 rotate-0 scale-100 text-sky-500"
         )}
       />
       {/* Moon icon */}

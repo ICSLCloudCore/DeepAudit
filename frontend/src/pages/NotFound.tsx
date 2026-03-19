@@ -34,7 +34,7 @@ export default function NotFound() {
           {/* Error Code */}
           <div className="mb-6">
             <span className="text-8xl font-bold text-primary"
-              style={{ textShadow: '0 0 30px rgba(255,107,44,0.5), 0 0 60px rgba(255,107,44,0.3)' }}>
+              style={{ textShadow: '0 0 30px rgba(56,189,248,0.5), 0 0 60px rgba(56,189,248,0.3)' }}>
               404
             </span>
           </div>
