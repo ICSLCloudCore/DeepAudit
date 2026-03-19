@@ -61,29 +61,44 @@ function OpenCodeAuditPageContent() {
     };
   }, [isRunning]);
 
-   const loadSession = useCallback(async () => {
-     if (!sessionId) return;
-     try {
-       setLoading(true);
-       const data = await opencodeApi.getSessionStatus(sessionId);
-       // 确保数据有正确的ID字段
-       const sessionData = {
-         ...data,
-         id: data.id || data.session_id,
-         session_id: data.session_id || data.id
-       };
-       setSession(sessionData);
-       
+  const loadSession = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      setLoading(true);
+      console.log('[OpenCodeAudit] Loading session...');
+      
+      const data = await opencodeApi.getSessionStatus(sessionId);
+      console.log('[OpenCodeAudit] Session data received:', data);
+      
+      // 确保数据有正确的ID字段
+      const sessionData = {
+        ...data,
+        id: data.id || data.session_id,
+        session_id: data.session_id || data.id
+      };
+      setSession(sessionData);
+      
+      // 首次加载时添加会话信息
       if (!logs.length && sessionId) {
         addLog({
           type: 'info',
           title: 'Session loaded',
-          content: `Session ${sessionId.slice(0, 8)} loaded successfully`
+          content: `Session ${sessionId.slice(0, 8)} loaded successfully\nStatus: ${data.status}`
         });
       }
-       
+      
+      // 添加状态变化日志
+      if (data.status && data.status !== session?.status) {
+        addLog({
+          type: 'status',
+          title: 'Status changed',
+          content: `Session status: ${data.status}`
+        });
+      }
+      
       // 只要有响应内容就添加日志，不管session状态如何
       if (data.response_content && data.response_content !== session?.response_content) {
+        console.log('[OpenCodeAudit] New response content:', data.response_content);
         addLog({
           type: 'response',
           title: 'Response received',
@@ -91,20 +106,29 @@ function OpenCodeAuditPageContent() {
         });
       }
     } catch (err) {
-      console.error(err);
+      console.error('[OpenCodeAudit] Failed to load session:', err);
       toast.error("Failed to load session");
       setError("Failed to load session");
+      
+      addLog({
+        type: 'error',
+        title: 'Load failed',
+        content: `Failed to load session: ${err}`
+      });
     } finally {
       setLoading(false);
     }
-  }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content]);
+  }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content, session?.status]);
 
   const loadInteractions = useCallback(async () => {
     if (!sessionId) return;
     try {
+      console.log('[OpenCodeAudit] Loading interactions...');
       const data = await opencodeApi.getSessionInteractions(sessionId, { limit: 50 });
+      console.log('[OpenCodeAudit] Interactions data received:', data);
       
       if (data.items && data.items.length > 0) {
+        console.log('[OpenCodeAudit] Adding', data.items.length, 'interaction logs');
         data.items.reverse().forEach((interaction: OpenCodeInteraction) => {
           const logType = interaction.interaction_type === 'request' ? 'prompt' :
                         interaction.interaction_type === 'response' ? 'response' :
@@ -116,9 +140,21 @@ function OpenCodeAuditPageContent() {
             content: interaction.response_payload || interaction.request_payload || '',
           });
         });
+      } else {
+        console.log('[OpenCodeAudit] No interactions found');
+        addLog({
+          type: 'info',
+          title: 'No interactions yet',
+          content: 'Waiting for OpenCode Server interactions to be recorded...'
+        });
       }
     } catch (err) {
-      console.error('Failed to load interactions:', err);
+      console.error('[OpenCodeAudit] Failed to load interactions:', err);
+      addLog({
+        type: 'error',
+        title: 'Failed to load interactions',
+        content: `Error: ${err}`
+      });
     }
   }, [sessionId, addLog]);
 
