@@ -784,13 +784,13 @@ class OpenCodeSessionService:
         db_session_id: str,
     ) -> str:
         """
-        轮询OpenCode服务器获取结果 - 使用新的message API，检查reason=stop，并增量更新数据库
+        轮询OpenCode服务器获取结果 - 使用新的message API，检查reason=stop
         """
         print(f"[OpenCode] Polling OpenCode Server for result (with updates)...")
         print(f"[OpenCode] Polling for session: {server_session_id}")
         print(f"[OpenCode] Polling for message_id: {message_id}")
 
-        max_polls = 300  # 5 minutes with 1s interval
+        max_polls = 180  # 3 minutes with 1s interval
         poll_interval = 1
         full_response = ""
 
@@ -815,6 +815,12 @@ class OpenCodeSessionService:
                         if len(parts) == 0:
                             await asyncio.sleep(poll_interval)
                             continue
+
+                        # Get the last part text
+                        last_part = parts[-1]
+                        text = last_part.get("text", "")
+                        if text:
+                            full_response = text
 
                         if parts[-1].get("reason") == "stop":
                             print(f"[OpenCode] Polling completed, returning full response")
@@ -868,11 +874,18 @@ class OpenCodeSessionService:
 
                 if db_session:
                     db_session.response_content = result
-                    db_session.status = OpenCodeSessionStatus.CLOSED
+
+                    # 检查是否超时
+                    if result == "timeout":
+                        db_session.status = OpenCodeSessionStatus.ERROR
+                        db_session.response_content = "OpenCode Server response timeout. Please try again or check the server status."
+                    else:
+                        db_session.status = OpenCodeSessionStatus.CLOSED
+
                     db_session.completed_at = datetime.utcnow()
                     await db_session_local.commit()
 
-                    print(f"[OpenCode] Background poll completed successfully")
+                    print(f"[OpenCode] Background poll completed with status: {db_session.status}")
         except Exception as e:
             print(f"[OpenCode] Background poll failed: {e}")
             print(f"[OpenCode] Background poll traceback: {traceback.format_exc()}")
