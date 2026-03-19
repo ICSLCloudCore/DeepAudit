@@ -47,7 +47,8 @@ import {
 import { ProjectIssuesTab } from "@/pages/project-detail/components/ProjectIssuesTab";
 import { ProjectTasksTab } from "@/pages/project-detail/components/ProjectTasksTab";
 import { ProjectStatsCards, type ProjectCombinedStats } from "@/pages/project-detail/components/ProjectStatsCards";
-import { opencodeApi } from "@/shared/api/opencode";
+import { opencodeApi, type StartAuditWithPromptResponse } from "@/shared/api/opencode";
+import { OpenCodeAuditDialog } from "@/components/opencode/OpenCodeAuditDialog";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +58,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
   const [showTerminalDialog, setShowTerminalDialog] = useState(false);
+  const [showOpenCodeAuditDialog, setShowOpenCodeAuditDialog] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<CreateProjectForm>({
     name: "",
@@ -461,6 +463,15 @@ export default function ProjectDetail() {
     setShowCreateTaskDialog(true);
   };
 
+  const handleOpenCodeAudit = () => {
+    setShowOpenCodeAuditDialog(true);
+  };
+
+  const handleStartOpenCodeAudit = (response: StartAuditWithPromptResponse) => {
+    loadProjectData();
+    setActiveTab("overview");
+  };
+
   const handleSaveSettings = async () => {
     if (!id) return;
 
@@ -591,9 +602,15 @@ export default function ProjectDetail() {
         </div>
 
         <div className="flex items-center space-x-3">
-          <Button onClick={handleRunAudit} className="cyber-btn-primary">
-            <Shield className="w-4 h-4 mr-2" />
-            启动审计
+          <div className="relative group">
+            <Button onClick={handleRunAudit} className="cyber-btn-primary">
+              <Shield className="w-4 h-4 mr-2" />
+              启动审计
+            </Button>
+          </div>
+          <Button onClick={handleOpenCodeAudit} variant="outline" className="cyber-btn-outline">
+            <Terminal className="w-4 h-4 mr-2" />
+            OpenCode 审计
           </Button>
           <Button variant="outline" onClick={handleOpenSettings} className="cyber-btn-outline">
             <Edit className="w-4 h-4 mr-2" />
@@ -997,6 +1014,14 @@ export default function ProjectDetail() {
         onOpenChange={setShowTerminalDialog}
         taskId={currentTaskId}
         taskType="repository"
+      />
+
+      {/* OpenCode审计对话框 */}
+      <OpenCodeAuditDialog
+        open={showOpenCodeAuditDialog}
+        projectId={id || ""}
+        onClose={() => setShowOpenCodeAuditDialog(false)}
+        onStart={handleStartOpenCodeAudit}
       />
     </div>
   );
