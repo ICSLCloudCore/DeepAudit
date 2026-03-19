@@ -65,10 +65,8 @@ function OpenCodeAuditPageContent() {
     if (!sessionId) return;
     try {
       setLoading(true);
-      console.log('[OpenCodeAudit] Loading session...');
       
       const data = await opencodeApi.getSessionStatus(sessionId);
-      console.log('[OpenCodeAudit] Session data received:', data);
       
       // 确保数据有正确的ID字段
       const sessionData = {
@@ -78,84 +76,43 @@ function OpenCodeAuditPageContent() {
       };
       setSession(sessionData);
       
-      // 首次加载时添加会话信息
-      if (!logs.length && sessionId) {
+      // 首次加载时：显示发送的prompt
+      if (!logs.length && sessionId && data.prompt_content) {
         addLog({
-          type: 'info',
-          title: 'Session loaded',
-          content: `Session ${sessionId.slice(0, 8)} loaded successfully\nStatus: ${data.status}`
+          type: 'prompt',
+          title: 'Prompt sent',
+          content: data.prompt_content
         });
       }
       
-      // 添加状态变化日志
-      if (data.status && data.status !== session?.status) {
-        addLog({
-          type: 'status',
-          title: 'Status changed',
-          content: `Session status: ${data.status}`
-        });
-      }
-      
-      // 只要有响应内容就添加日志，不管session状态如何
+      // 当有响应内容时：显示返回的结果
       if (data.response_content && data.response_content !== session?.response_content) {
-        console.log('[OpenCodeAudit] New response content:', data.response_content);
         addLog({
           type: 'response',
           title: 'Response received',
           content: data.response_content
         });
       }
-    } catch (err) {
-      console.error('[OpenCodeAudit] Failed to load session:', err);
-      toast.error("Failed to load session");
-      setError("Failed to load session");
       
-      addLog({
-        type: 'error',
-        title: 'Load failed',
-        content: `Failed to load session: ${err}`
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content, session?.status]);
-
-  const loadInteractions = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      console.log('[OpenCodeAudit] Loading interactions...');
-      const data = await opencodeApi.getSessionInteractions(sessionId, { limit: 50 });
-      console.log('[OpenCodeAudit] Interactions data received:', data);
-      
-      if (data.items && data.items.length > 0) {
-        console.log('[OpenCodeAudit] Adding', data.items.length, 'interaction logs');
-        data.items.reverse().forEach((interaction: OpenCodeInteraction) => {
-          const logType = interaction.interaction_type === 'request' ? 'prompt' :
-                        interaction.interaction_type === 'response' ? 'response' :
-                        'error';
-          
-          addLog({
-            type: logType,
-            title: `${interaction.http_method} ${interaction.endpoint}`,
-            content: interaction.response_payload || interaction.request_payload || '',
-          });
-        });
-      } else {
-        console.log('[OpenCodeAudit] No interactions found');
+      // 当session完成时：显示关闭提示
+      if (isComplete && !session?.completed_at) {
         addLog({
-          type: 'info',
-          title: 'No interactions yet',
-          content: 'Waiting for OpenCode Server interactions to be recorded...'
+          type: 'status',
+          title: 'Session completed',
+          content: `Audit session ${data.status === 'closed' ? 'completed successfully' : 'failed'}`
         });
       }
     } catch (err) {
-      console.error('[OpenCodeAudit] Failed to load interactions:', err);
-      addLog({
-        type: 'error',
-        title: 'Failed to load interactions',
-        content: `Error: ${err}`
-      });
+      toast.error("Failed to load session");
+      setError("Failed to load session");
+    } finally {
+      setLoading(false);
     }
+  }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content, session?.completed_at, isComplete]);
+
+  const loadInteractions = useCallback(async () => {
+    // 暂时禁用交互历史加载，只显示必要信息
+    // 用户不需要看到详细的HTTP交互
   }, [sessionId, addLog]);
 
   useEffect(() => {
@@ -169,7 +126,7 @@ function OpenCodeAuditPageContent() {
   }, [sessionId, loadSession, loadInteractions]);
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId || !isRunning) {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
@@ -177,7 +134,6 @@ function OpenCodeAuditPageContent() {
       return;
     }
 
-    // 即使session不是running状态，我们也继续轮询直到确认session完成且有响应
     pollIntervalRef.current = setInterval(() => {
       loadSession();
     }, POLLING_INTERVALS.SESSION_STATUS);
@@ -187,18 +143,7 @@ function OpenCodeAuditPageContent() {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [sessionId, loadSession]);
-
-  // 当session完成且有响应内容时，停止轮询
-  useEffect(() => {
-    if (sessionId && isComplete && session?.response_content) {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-        console.log('[OpenCodeAudit] Session complete, stopped polling');
-      }
-    }
-  }, [sessionId, isComplete, session?.response_content]);
+  }, [sessionId, isRunning, loadSession]);
 
   useEffect(() => {
     if (isAutoScroll && logEndRef.current) {
