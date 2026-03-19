@@ -307,7 +307,9 @@ class OpenCodeSessionService:
         """
         在OpenCode服务器上创建会话 - 真实API调用
         """
-        print(f"[OpenCode] Creating session on OpenCode Server...")
+        print(f"[OpenCode] ========================================")
+        print(f"[OpenCode] STARTING CREATE OPENDCODE SESSION")
+        print(f"[OpenCode] ========================================")
 
         try:
             import httpx
@@ -319,6 +321,8 @@ class OpenCodeSessionService:
 
             request_data = {"title": "DeepAudit Audit Session"}
             log_opencode_interaction("request", "/session", request_data)
+
+            print(f"[OpenCode] About to call POST {session_url}")
 
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(session_url, json=request_data)
@@ -356,7 +360,9 @@ class OpenCodeSessionService:
         """
         发送提示词到OpenCode服务器 - 真实API调用，返回message_id
         """
-        print(f"[OpenCode] Sending prompt to OpenCode Server...")
+        print(f"[OpenCode] ========================================")
+        print(f"[OpenCode] STARTING SEND PROMPT")
+        print(f"[OpenCode] ========================================")
         print(f"[OpenCode] Using server_session_id: {server_session_id}")
 
         try:
@@ -375,7 +381,9 @@ class OpenCodeSessionService:
                 {"parts": [{"type": "text", "text": prompt_content[:200] + "..."}]},
             )
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            print(f"[OpenCode] About to call POST {message_url} with timeout=120.0")
+
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(message_url, json=request_data)
 
                 print(f"[OpenCode] Send message status code: {response.status_code}")
@@ -557,6 +565,9 @@ class OpenCodeSessionService:
         """
         启动带提示词的OpenCode审计
         """
+        print(f"[OpenCode] ========================================")
+        print(f"[OpenCode] STARTING AUDIT WITH PROMPT")
+        print(f"[OpenCode] ========================================")
         print(f"[OpenCode] Starting audit with prompt for project {project_id}")
 
         result = await self.db.execute(select(Project).where(Project.id == project_id))
@@ -582,8 +593,11 @@ class OpenCodeSessionService:
             project_id, prompt_template_id, final_prompt_content, current_user
         )
 
+        print(f"[OpenCode] About to call create_opencode_server_session...")
         server_session_id = await self.create_opencode_server_session(project)
         message_id = None
+
+        print(f"[OpenCode] create_opencode_server_session returned: {server_session_id}")
 
         if server_session_id:
             print(f"[OpenCode] Got server_session_id: {server_session_id}, now sending prompt...")
