@@ -856,19 +856,19 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Background poll - server_session_id: {server_session_id}")
         print(f"[OpenCode] Background poll - message_id: {message_id}")
 
-         try:
-             async with AsyncSessionLocal() as db_session_local:
-                 result_project = await db_session_local.execute(
-                     select(Project).where(Project.id == project_id)
-                 )
-                 project = result_project.scalar_one_or_none()
+        try:
+            async with AsyncSessionLocal() as db_session_local:
+                result_project = await db_session_local.execute(
+                    select(Project).where(Project.id == project_id)
+                )
+                project = result_project.scalar_one_or_none()
 
-                 # 设置当前会话ID，用于交互记录
-                 self.set_current_session_id(db_session_id)
+                # 设置当前会话ID，用于交互记录
+                self.set_current_session_id(db_session_id)
 
-                 result = await self.poll_opencode_result_with_updates(
-                     project, server_session_id, message_id, db_session_id
-                 )
+                result = await self.poll_opencode_result_with_updates(
+                    project, server_session_id, message_id, db_session_id
+                )
 
                 result_db = await db_session_local.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
