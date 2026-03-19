@@ -19,7 +19,6 @@ from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.opencode_session import OpenCodeServerStatus
-from app.utils.async_command import execute_command
 
 
 def ensure_dir_exists(path: str):
@@ -100,29 +99,34 @@ class OpenCodeSessionService:
                 branch = project.default_branch or "main"
                 print(f"[OpenCode] Repository URL: {repo_url}, branch: {branch}")
                 if repo_url:
-                    clone_cmd = [
-                        "git",
-                        "clone",
-                        "--depth",
-                        "1",
-                        "--branch",
-                        branch,
-                        repo_url,
-                        str(extract_dir),
-                    ]
-                    print(f"[OpenCode] Executing clone command: {' '.join(clone_cmd)}")
-                    result = await execute_command(clone_cmd, shell=False, timeout=300)
-                    print(
-                        f"[OpenCode] Clone result - success: {result.success}, returncode: {result.returncode}"
-                    )
-                    if result.stdout:
-                        print(f"[OpenCode] Clone stdout: {result.stdout[:200]}")
-                    if result.stderr:
-                        print(f"[OpenCode] Clone stderr: {result.stderr}")
-
-                    if result.success:
-                        project_path = str(extract_dir)
-                        print(f"[OpenCode] Successfully cloned to: {project_path}")
+                    print(f"[OpenCode] Cloning repository (using subprocess directly)...")
+                    try:
+                        clone_process = subprocess.Popen(
+                            [
+                                "git",
+                                "clone",
+                                "--depth",
+                                "1",
+                                "--branch",
+                                branch,
+                                repo_url,
+                                str(extract_dir),
+                            ],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                        )
+                        clone_stdout, clone_stderr = clone_process.communicate(timeout=300)
+                        print(f"[OpenCode] Clone return code: {clone_process.returncode}")
+                        if clone_process.returncode == 0:
+                            project_path = str(extract_dir)
+                            print(f"[OpenCode] Successfully cloned to: {project_path}")
+                        else:
+                            print(
+                                f"[OpenCode] Clone failed: {clone_stderr.decode() if clone_stderr else 'Unknown error'}"
+                            )
+                    except subprocess.TimeoutExpired:
+                        print(f"[OpenCode] Clone timed out")
+                        clone_process.kill()
 
             elif project.source_type == "zip":
                 print(f"[OpenCode] Handling ZIP source type")
