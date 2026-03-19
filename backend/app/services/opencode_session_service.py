@@ -7,6 +7,7 @@ import asyncio
 import uuid
 import os
 import re
+import sys
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -18,52 +19,13 @@ from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.opencode_session import OpenCodeServerStatus
+from app.utils.async_command import execute_command
 
 
 def ensure_dir_exists(path: str):
     """确保目录存在"""
     os.makedirs(path, exist_ok=True)
-
-
-async def execute_command(
-    command: str | list[str],
-    shell: bool = False,
-    capture_output: bool = True,
-    timeout: int = 60,
-):
-    """执行命令的简单实现"""
-    import subprocess
-    import asyncio
-
-    try:
-        if shell:
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=subprocess.PIPE if capture_output else None,
-                stderr=subprocess.PIPE if capture_output else None,
-            )
-        else:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=subprocess.PIPE if capture_output else None,
-                stderr=subprocess.PIPE if capture_output else None,
-            )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            process.kill()
-            await process.wait()
-            return {"success": False, "stdout": "", "stderr": "Command timed out", "returncode": -1}
-
-        return {
-            "success": process.returncode == 0,
-            "stdout": stdout.decode() if stdout and capture_output else "",
-            "stderr": stderr.decode() if stderr and capture_output else "",
-            "returncode": process.returncode,
-        }
-    except Exception as e:
-        return {"success": False, "stdout": "", "stderr": str(e), "returncode": -1}
+    print(f"[OpenCode] Ensured directory exists: {path}")
 
 
 class OpenCodeSessionService:
@@ -76,20 +38,37 @@ class OpenCodeSessionService:
         """
         检查OpenCode服务器状态
         """
+        print(f"[OpenCode] Checking server status for project {project.id}")
+        print(f"[OpenCode] Current opencode_pid: {project.opencode_pid}")
+
         if not project.opencode_pid:
+            print(f"[OpenCode] No PID found, server is stopped")
             return OpenCodeServerStatus.STOPPED
 
         try:
             import os
 
             pid_int = int(project.opencode_pid)
+            print(f"[OpenCode] Checking if PID {pid_int} is running...")
+
+            if sys.platform == "win32":
+                print(f"[OpenCode] Windows platform, skipping process check")
+                return OpenCodeServerStatus.RUNNING
+
             os.kill(pid_int, 0)
+            print(f"[OpenCode] PID {pid_int} is running")
             return OpenCodeServerStatus.RUNNING
-        except ValueError:
+        except ValueError as e:
+            print(f"[OpenCode] Invalid PID format: {e}")
             return OpenCodeServerStatus.ERROR
-        except OSError:
+        except OSError as e:
+            print(f"[OpenCode] PID {project.opencode_pid} is not running: {e}")
             return OpenCodeServerStatus.STOPPED
-        except Exception:
+        except Exception as e:
+            print(f"[OpenCode] Error checking server status: {e}")
+            import traceback
+
+            traceback.print_exc()
             return OpenCodeServerStatus.ERROR
 
     async def start_opencode_server(
@@ -98,18 +77,28 @@ class OpenCodeSessionService:
         """
         启动OpenCode服务器 - 获取真实PID
         """
+        print(f"[OpenCode] Starting OpenCode server for project {project.id}")
+        print(f"[OpenCode] Project source type: {project.source_type}")
+        print(f"[OpenCode] Platform: {sys.platform}")
+
         try:
             import uuid
+            import subprocess
 
             task_id = str(uuid.uuid4())
+            print(f"[OpenCode] Generated task ID: {task_id}")
 
             project_path = None
-            extract_dir = Path(f"/tmp/{task_id}")
+            extract_dir = (
+                Path(f"/tmp/{task_id}") if sys.platform != "win32" else Path(f"C:/temp/{task_id}")
+            )
+            print(f"[OpenCode] Extract directory: {extract_dir}")
             extract_dir.mkdir(parents=True, exist_ok=True)
 
             if project.source_type == "repository":
                 repo_url = project.repository_url
                 branch = project.default_branch or "main"
+                print(f"[OpenCode] Repository URL: {repo_url}, branch: {branch}")
                 if repo_url:
                     clone_cmd = [
                         "git",
@@ -121,71 +110,129 @@ class OpenCodeSessionService:
                         repo_url,
                         str(extract_dir),
                     ]
+                    print(f"[OpenCode] Executing clone command: {' '.join(clone_cmd)}")
                     result = await execute_command(clone_cmd, shell=False, timeout=300)
-                    if result["success"]:
+                    print(
+                        f"[OpenCode] Clone result - success: {result.success}, returncode: {result.returncode}"
+                    )
+                    if result.stdout:
+                        print(f"[OpenCode] Clone stdout: {result.stdout[:200]}")
+                    if result.stderr:
+                        print(f"[OpenCode] Clone stderr: {result.stderr}")
+
+                    if result.success:
                         project_path = str(extract_dir)
+                        print(f"[OpenCode] Successfully cloned to: {project_path}")
 
             elif project.source_type == "zip":
+                print(f"[OpenCode] Handling ZIP source type")
                 try:
                     from app.core.config import settings
 
                     zip_file_path = Path(settings.ZIP_STORAGE_PATH) / f"{project.id}.zip"
+                    print(f"[OpenCode] ZIP file path: {zip_file_path}")
                     if zip_file_path.exists():
+                        print(f"[OpenCode] ZIP file exists, extracting...")
                         import zipfile
 
                         with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
                             zip_ref.extractall(extract_dir)
                         project_path = str(extract_dir)
-                except Exception:
-                    pass
+                        print(f"[OpenCode] Successfully extracted ZIP to: {project_path}")
+                    else:
+                        print(f"[OpenCode] ZIP file does not exist: {zip_file_path}")
+                except Exception as e:
+                    print(f"[OpenCode] Error handling ZIP: {e}")
+                    import traceback
+
+                    traceback.print_exc()
 
             if not project_path:
-                project_path = f"/tmp/opencode_project_{project.id}"
+                print(f"[OpenCode] No project path found, using temporary directory")
+                project_path = (
+                    f"/tmp/opencode_project_{project.id}"
+                    if sys.platform != "win32"
+                    else f"C:/temp/opencode_project_{project.id}"
+                )
                 ensure_dir_exists(project_path)
 
-            log_dir = f"/tmp/opencode_logs"
+            print(f"[OpenCode] Final project path: {project_path}")
+
+            log_dir = f"/tmp/opencode_logs" if sys.platform != "win32" else "C:/temp/opencode_logs"
             ensure_dir_exists(log_dir)
 
             random_id = str(uuid.uuid4())[:8]
             log_path = os.path.join(log_dir, f"{random_id}.log")
+            print(f"[OpenCode] Log path: {log_path}")
 
-            command = f"cd {project_path} ; nohup opencode serve > {log_path} 2>&1 & echo $!"
-            result = await execute_command(command=command, shell=True, timeout=30)
+            print(f"[OpenCode] Preparing to start opencode serve...")
 
-            if not result["success"]:
-                print(f"[OpenCode] Failed to start opencode serve: {result['stderr']}")
-                return OpenCodeServerStatus.ERROR
+            original_cwd = os.getcwd()
+            print(f"[OpenCode] Original working directory: {original_cwd}")
 
-            pid = result["stdout"].strip()
-            if not pid.isdigit():
-                print(f"[OpenCode] Invalid PID: {pid}")
-                return OpenCodeServerStatus.ERROR
+            print(f"[OpenCode] Changing to project directory: {project_path}")
+            os.chdir(project_path)
 
-            await asyncio.sleep(2)
+            print(f"[OpenCode] Starting opencode serve with subprocess.Popen...")
 
+            log_file = open(log_path, "w")
+
+            popen_kwargs = {
+                "stdout": log_file,
+                "stderr": subprocess.STDOUT,
+            }
+
+            if sys.platform != "win32" and hasattr(os, "setsid"):
+                popen_kwargs["preexec_fn"] = os.setsid
+
+            process = subprocess.Popen(["opencode", "serve"], **popen_kwargs)
+
+            pid = process.pid
+            print(f"[OpenCode] Started opencode serve with PID: {pid}")
+
+            os.chdir(original_cwd)
+            print(f"[OpenCode] Restored original working directory: {original_cwd}")
+
+            print(f"[OpenCode] Waiting for server to start...")
+            await asyncio.sleep(3)
+
+            print(f"[OpenCode] Reading log file to find port...")
             port = None
-            max_attempts = 10
+            max_attempts = 20
             for attempt in range(max_attempts):
                 if os.path.exists(log_path):
-                    with open(log_path, "r") as f:
-                        log_content = f.read()
-                        port_match = re.search(r"http://127\.0\.0\.1:(\d+)", log_content)
-                        if port_match:
-                            port = port_match.group(1)
-                            break
+                    try:
+                        with open(log_path, "r") as f:
+                            log_content = f.read()
+                            print(
+                                f"[OpenCode] Log content (attempt {attempt + 1}): {log_content[:500]}"
+                            )
+                            port_match = re.search(r"http://127\.0\.0\.1:(\d+)", log_content)
+                            if port_match:
+                                port = port_match.group(1)
+                                print(f"[OpenCode] Found port: {port}")
+                                break
+                    except Exception as e:
+                        print(f"[OpenCode] Error reading log: {e}")
+                else:
+                    print(f"[OpenCode] Log file does not exist yet: {log_path}")
                 await asyncio.sleep(1)
 
-            project.opencode_pid = pid
+            if not port:
+                print(f"[OpenCode] Could not find port in log file after {max_attempts} attempts")
+
+            print(f"[OpenCode] Updating project with opencode info...")
+            project.opencode_pid = str(pid)
             project.opencode_port = port
             project.opencode_log_path = log_path
             project.opencode_started_at = datetime.utcnow()
             await self.db.commit()
 
-            print(f"[OpenCode] Started opencode serve: PID={pid}, Port={port}")
+            print(f"[OpenCode] Successfully started opencode serve: PID={pid}, Port={port}")
             return OpenCodeServerStatus.RUNNING
 
         except Exception as e:
-            print(f"Failed to start OpenCode server: {e}")
+            print(f"[OpenCode] Failed to start OpenCode server: {e}")
             import traceback
 
             traceback.print_exc()
@@ -304,6 +351,8 @@ class OpenCodeSessionService:
         """
         启动带提示词的OpenCode审计
         """
+        print(f"[OpenCode] Starting audit with prompt for project {project_id}")
+
         result = await self.db.execute(select(Project).where(Project.id == project_id))
         project = result.scalar_one_or_none()
 
@@ -313,6 +362,7 @@ class OpenCodeSessionService:
         server_status = await self.check_opencode_server_status(project)
 
         if server_status == OpenCodeServerStatus.STOPPED:
+            print(f"[OpenCode] Server is stopped, starting it...")
             server_status = await self.start_opencode_server(project, current_user.id)
 
         if server_status == OpenCodeServerStatus.ERROR:
@@ -343,6 +393,7 @@ class OpenCodeSessionService:
         project.opencode_current_session_id = db_session.id
         await self.db.commit()
 
+        print(f"[OpenCode] Audit started successfully, session ID: {db_session.id}")
         return db_session, server_status
 
     async def _background_poll_result(
