@@ -73,7 +73,7 @@ function OpenCodeAuditPageContent() {
          session_id: data.session_id || data.id
        };
        setSession(sessionData);
-      
+       
       if (!logs.length && sessionId) {
         addLog({
           type: 'info',
@@ -81,7 +81,8 @@ function OpenCodeAuditPageContent() {
           content: `Session ${sessionId.slice(0, 8)} loaded successfully`
         });
       }
-      
+       
+      // 只要有响应内容就添加日志，不管session状态如何
       if (data.response_content && data.response_content !== session?.response_content) {
         addLog({
           type: 'response',
@@ -132,7 +133,7 @@ function OpenCodeAuditPageContent() {
   }, [sessionId, loadSession, loadInteractions]);
 
   useEffect(() => {
-    if (!sessionId || !isRunning) {
+    if (!sessionId) {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
@@ -140,6 +141,7 @@ function OpenCodeAuditPageContent() {
       return;
     }
 
+    // 即使session不是running状态，我们也继续轮询直到确认session完成且有响应
     pollIntervalRef.current = setInterval(() => {
       loadSession();
     }, POLLING_INTERVALS.SESSION_STATUS);
@@ -149,7 +151,18 @@ function OpenCodeAuditPageContent() {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [sessionId, isRunning, loadSession]);
+  }, [sessionId, loadSession]);
+
+  // 当session完成且有响应内容时，停止轮询
+  useEffect(() => {
+    if (sessionId && isComplete && session?.response_content) {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+        console.log('[OpenCodeAudit] Session complete, stopped polling');
+      }
+    }
+  }, [sessionId, isComplete, session?.response_content]);
 
   useEffect(() => {
     if (isAutoScroll && logEndRef.current) {
