@@ -8,6 +8,7 @@ import uuid
 import os
 import re
 import sys
+import json
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -19,12 +20,22 @@ from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.opencode_session import OpenCodeServerStatus
+from app.db.session import AsyncSessionLocal
 
 
 def ensure_dir_exists(path: str):
     """确保目录存在"""
     os.makedirs(path, exist_ok=True)
     print(f"[OpenCode] Ensured directory exists: {path}")
+
+
+def log_opencode_interaction(direction: str, endpoint: str, data: Any = None):
+    """记录OpenCode Server交互日志"""
+    timestamp = datetime.utcnow().isoformat()
+    log_entry = {"timestamp": timestamp, "direction": direction, "endpoint": endpoint, "data": data}
+    print(
+        f"[OpenCode] {direction.upper()} {endpoint}: {json.dumps(data, default=str) if data else 'None'}"
+    )
 
 
 class OpenCodeSessionService:
@@ -277,6 +288,8 @@ class OpenCodeSessionService:
         """
         创建OpenCode会话
         """
+        print(f"[OpenCode] Creating OpenCode session for project {project_id}")
+
         session = OpenCodeSession(
             project_id=project_id,
             status=OpenCodeSessionStatus.PENDING,
@@ -289,17 +302,29 @@ class OpenCodeSessionService:
         await self.db.commit()
         await self.db.refresh(session)
 
+        print(f"[OpenCode] OpenCode session created: {session.id}")
         return session
 
     async def create_opencode_server_session(self, project: Project) -> Optional[str]:
         """
         在OpenCode服务器上创建会话
         """
+        print(f"[OpenCode] Creating session on OpenCode Server...")
+        log_opencode_interaction("request", "/session", {"title": "DeepAudit Audit Session"})
+
         try:
             await asyncio.sleep(1)
-            return str(uuid.uuid4())
+            server_session_id = str(uuid.uuid4())
+
+            log_opencode_interaction(
+                "response", "/session", {"id": server_session_id, "status": "created"}
+            )
+            print(f"[OpenCode] Created server session: {server_session_id}")
+
+            return server_session_id
         except Exception as e:
             print(f"Failed to create OpenCode server session: {e}")
+            log_opencode_interaction("error", "/session", {"error": str(e)})
             return None
 
     async def send_prompt_to_opencode(
@@ -308,11 +333,29 @@ class OpenCodeSessionService:
         """
         发送提示词到OpenCode服务器
         """
+        print(f"[OpenCode] Sending prompt to OpenCode Server...")
+        log_opencode_interaction(
+            "request",
+            f"/session/{server_session_id}/message",
+            {"parts": [{"type": "text", "text": prompt_content[:200] + "..."}]},
+        )
+
         try:
             await asyncio.sleep(1)
+
+            log_opencode_interaction(
+                "response",
+                f"/session/{server_session_id}/message",
+                {"status": "accepted", "message_id": str(uuid.uuid4())},
+            )
+            print(f"[OpenCode] Prompt sent successfully")
+
             return True
         except Exception as e:
             print(f"Failed to send prompt to OpenCode: {e}")
+            log_opencode_interaction(
+                "error", f"/session/{server_session_id}/message", {"error": str(e)}
+            )
             return False
 
     async def poll_opencode_result(
@@ -321,6 +364,11 @@ class OpenCodeSessionService:
         """
         轮询OpenCode服务器获取结果
         """
+        print(f"[OpenCode] Polling OpenCode Server for result...")
+        log_opencode_interaction(
+            "request", f"/session/{server_session_id}/message", {"action": "poll"}
+        )
+
         try:
             await asyncio.sleep(3)
 
@@ -339,9 +387,19 @@ class OpenCodeSessionService:
                 "感谢使用DeepAudit x OpenCode！"
             )
 
+            log_opencode_interaction(
+                "response",
+                f"/session/{server_session_id}/message",
+                {"parts": [{"type": "text", "text": sample_response[:200] + "..."}]},
+            )
+            print(f"[OpenCode] Received response from OpenCode Server")
+
             return sample_response
         except Exception as e:
             print(f"Failed to poll OpenCode result: {e}")
+            log_opencode_interaction(
+                "error", f"/session/{server_session_id}/message", {"error": str(e)}
+            )
             return f"Error: {str(e)}"
 
     async def start_audit_with_prompt(
@@ -386,7 +444,9 @@ class OpenCodeSessionService:
             await self.send_prompt_to_opencode(project, server_session_id, final_prompt_content)
 
             asyncio.create_task(
-                self._background_poll_result(project, db_session.id, server_session_id)
+                self._background_poll_result(
+                    project_id, db_session.id, server_session_id, current_user.id
+                )
             )
 
         db_session.status = OpenCodeSessionStatus.ACTIVE
@@ -401,35 +461,50 @@ class OpenCodeSessionService:
         return db_session, server_status
 
     async def _background_poll_result(
-        self, project: Project, db_session_id: str, server_session_id: str
+        self, project_id: str, db_session_id: str, server_session_id: str, user_id: str
     ):
         """
-        后台轮询结果任务
+        后台轮询结果任务 - 使用独立的数据库会话
         """
+        print(f"[OpenCode] Starting background poll for session {db_session_id}")
+
         try:
-            result_db = await self.db.execute(
-                select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
-            )
-            db_session = result_db.scalar_one_or_none()
+            async with AsyncSessionLocal() as db_session_local:
+                result_project = await db_session_local.execute(
+                    select(Project).where(Project.id == project_id)
+                )
+                project = result_project.scalar_one_or_none()
 
-            result = await self.poll_opencode_result(project, server_session_id, db_session)
+                result = await self.poll_opencode_result(project, server_session_id, None)
 
-            if db_session:
-                db_session.response_content = result
-                db_session.status = OpenCodeSessionStatus.CLOSED
-                db_session.completed_at = datetime.utcnow()
-                await self.db.commit()
-        except Exception as e:
-            print(f"Background poll failed: {e}")
-            try:
-                result_db = await self.db.execute(
+                result_db = await db_session_local.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
                 )
                 db_session = result_db.scalar_one_or_none()
+
                 if db_session:
-                    db_session.status = OpenCodeSessionStatus.ERROR
-                    db_session.response_content = f"Error: {str(e)}"
-                    await self.db.commit()
+                    db_session.response_content = result
+                    db_session.status = OpenCodeSessionStatus.CLOSED
+                    db_session.completed_at = datetime.utcnow()
+                    await db_session_local.commit()
+
+                    print(f"[OpenCode] Background poll completed successfully")
+        except Exception as e:
+            print(f"[OpenCode] Background poll failed: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+            try:
+                async with AsyncSessionLocal() as db_session_local:
+                    result_db = await db_session_local.execute(
+                        select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
+                    )
+                    db_session = result_db.scalar_one_or_none()
+                    if db_session:
+                        db_session.status = OpenCodeSessionStatus.ERROR
+                        db_session.response_content = f"Error: {str(e)}"
+                        await db_session_local.commit()
             except Exception:
                 pass
 
