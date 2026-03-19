@@ -29,7 +29,8 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 // ============ State Types ============
 
 export interface OpenCodeSession {
-  id: string;
+  session_id: string;
+  id?: string;
   project_id: string;
   status: 'pending' | 'active' | 'closed' | 'error';
   prompt_content: string;

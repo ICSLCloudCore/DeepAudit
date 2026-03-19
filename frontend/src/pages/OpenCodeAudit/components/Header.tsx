@@ -39,9 +39,9 @@ export function Header({ session, isRunning, onNewAudit }: HeaderProps) {
               <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Session</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-foreground text-sm font-mono truncate max-w-[200px] font-medium">
-                {session.id.slice(0, 8)}
-              </span>
+               <span className="text-foreground text-sm font-mono truncate max-w-[200px] font-medium">
+                 {(session.id || session.session_id || '').slice(0, 8)}
+               </span>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono uppercase tracking-wider">
                   {SESSION_STATUS_CONFIG[session.status]?.text || session.status}

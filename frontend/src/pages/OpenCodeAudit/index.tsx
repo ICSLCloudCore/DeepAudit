@@ -61,14 +61,20 @@ function OpenCodeAuditPageContent() {
     };
   }, [isRunning]);
 
-  const loadSession = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      setLoading(true);
-      const data = await opencodeApi.getSessionStatus(sessionId);
-      setSession(data);
+   const loadSession = useCallback(async () => {
+     if (!sessionId) return;
+     try {
+       setLoading(true);
+       const data = await opencodeApi.getSessionStatus(sessionId);
+       // 确保数据有正确的ID字段
+       const sessionData = {
+         ...data,
+         id: data.id || data.session_id,
+         session_id: data.session_id || data.id
+       };
+       setSession(sessionData);
       
-      if (!logs.length) {
+      if (!logs.length && sessionId) {
         addLog({
           type: 'info',
           title: 'Session loaded',
@@ -95,7 +101,7 @@ function OpenCodeAuditPageContent() {
   const loadInteractions = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const data = await getSessionInteractions(sessionId, { limit: 50 });
+      const data = await opencodeApi.getSessionInteractions(sessionId, { limit: 50 });
       
       if (data.items && data.items.length > 0) {
         data.items.reverse().forEach((interaction: OpenCodeInteraction) => {

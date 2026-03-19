@@ -97,9 +97,9 @@ export function StatsPanel({ session }: StatsPanelProps) {
         <div className="text-[10px] text-muted-foreground font-mono tracking-wider uppercase mb-2">
           Session ID
         </div>
-        <div className="text-xs font-mono text-foreground/70 break-all">
-          {session.id}
-        </div>
+         <div className="text-xs font-mono text-foreground/70 break-all">
+           {session.id || session.session_id || ''}
+         </div>
       </div>
     </div>
   );
