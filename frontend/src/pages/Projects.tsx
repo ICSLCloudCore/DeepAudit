@@ -891,19 +891,17 @@ export default function Projects() {
               <div className="p-4 border-t border-border bg-muted/50 grid grid-cols-4 gap-2">
                 <Link to={`/projects/${project.id}`}>
                   <Button variant="outline" className="w-full cyber-btn-outline h-8 text-xs">
-                    <Code className="w-3 h-3 mr-1" />
-                    详情
+                    <Code className="w-3 h-3 mr-1" />详情
                   </Button>
                 </Link>
                 <Button size="sm" className="cyber-btn-primary h-8 text-xs" onClick={() => handleCreateTask(project.id)}>
-                  <Shield className="w-3 h-3 mr-1" />
-                  审计
+                  <Shield className="w-3 h-3 mr-1" />审计
                 </Button>
-                <Button size="sm" variant="outline" className="cyber-btn-ghost h-8" onClick={() => handleEditClick(project)}>
-                  <Edit className="w-3 h-3" />
+                <Button size="sm" variant="outline" className="cyber-btn-outline h-8" onClick={() => handleEditClick(project)}>
+                  <Edit className="w-3 h-3" />编辑
                 </Button>
-                <Button size="sm" variant="outline" className="cyber-btn-ghost h-8 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30" onClick={() => handleDeleteClick(project)}>
-                  <Trash2 className="w-3 h-3" />
+                <Button size="sm" variant="outline" className="cyber-btn-outline h-8 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30" onClick={() => handleDeleteClick(project)}>
+                  <Trash2 className="w-3 h-3" />删除
                 </Button>
               </div>
             </div>
