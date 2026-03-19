@@ -192,7 +192,7 @@ export function OpenCodeAuditDialog({
             </span>
             
             <Tabs value={mode} onValueChange={(v) => setMode(v as "template" | "custom")} className="w-full">
-              <TabsList className="grid grid-cols-2 w-full bg-muted border border-border">
+              <TabsList className="w-full">
                 <TabsTrigger value="template" className="font-mono text-xs font-bold uppercase">
                   <BookOpen className="w-4 h-4 mr-2" />
                   提示词模板
