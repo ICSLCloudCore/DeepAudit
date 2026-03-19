@@ -90,6 +90,129 @@ class OpenCodeSessionService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._current_session_id: Optional[str] = None
+
+    def set_current_session_id(self, session_id: str):
+        """设置当前会话ID，用于交互记录"""
+        self._current_session_id = session_id
+
+    async def _make_opencode_request(
+        self,
+        method: str,
+        url: str,
+        endpoint: str,
+        json_data: Optional[Dict[str, Any]] = None,
+        timeout: float = 10.0,
+    ) -> tuple[Optional[httpx.Response], Optional[Exception]]:
+        """
+        包装OpenCode Server请求，自动记录交互到数据库
+        """
+        request_time = datetime.utcnow()
+
+        try:
+            log_opencode_interaction("request", endpoint, json_data)
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                if method.upper() == "GET":
+                    response = await client.get(url)
+                elif method.upper() == "POST":
+                    response = await client.post(url, json=json_data)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+
+            response_time = datetime.utcnow()
+            duration_ms = int((response_time - request_time).total_seconds() * 1000)
+
+            print(f"[OpenCode] Response status: {response.status_code}")
+            print(f"[OpenCode] Response content: {response.text[:500]}")
+
+            if self._current_session_id:
+                if response.status_code in [200, 202, 204]:
+                    try:
+                        response_data = response.json()
+                        log_opencode_interaction("response", endpoint, response_data)
+
+                        await log_opencode_interaction_to_db(
+                            self.db,
+                            self._current_session_id,
+                            OpenCodeInteractionType.RESPONSE,
+                            endpoint,
+                            method.upper(),
+                            request_time,
+                            json_data,
+                            response_time,
+                            response_data,
+                            response.status_code,
+                            duration_ms,
+                        )
+                    except Exception:
+                        log_opencode_interaction("response", endpoint, {"text": response.text})
+
+                        await log_opencode_interaction_to_db(
+                            self.db,
+                            self._current_session_id,
+                            OpenCodeInteractionType.RESPONSE,
+                            endpoint,
+                            method.upper(),
+                            request_time,
+                            json_data,
+                            response_time,
+                            {"text": response.text},
+                            response.status_code,
+                            duration_ms,
+                        )
+                else:
+                    log_opencode_interaction(
+                        "error",
+                        endpoint,
+                        {"status_code": response.status_code, "text": response.text},
+                    )
+
+                    if self._current_session_id:
+                        await log_opencode_interaction_to_db(
+                            self.db,
+                            self._current_session_id,
+                            OpenCodeInteractionType.ERROR,
+                            endpoint,
+                            method.upper(),
+                            request_time,
+                            json_data,
+                            response_time,
+                            None,
+                            response.status_code,
+                            duration_ms,
+                            error_message=f"HTTP {response.status_code}",
+                        )
+
+            return response, None
+
+        except Exception as e:
+            print(f"[OpenCode] Request exception: {e}")
+            print(f"[OpenCode] Request traceback: {traceback.format_exc()}")
+
+            log_opencode_interaction("error", endpoint, {"error": str(e)})
+
+            response_time = datetime.utcnow()
+            duration_ms = int((response_time - request_time).total_seconds() * 1000)
+
+            if self._current_session_id:
+                await log_opencode_interaction_to_db(
+                    self.db,
+                    self._current_session_id,
+                    OpenCodeInteractionType.ERROR,
+                    endpoint,
+                    method.upper(),
+                    request_time,
+                    json_data,
+                    response_time,
+                    None,
+                    None,
+                    duration_ms,
+                    error_message=str(e),
+                    error_type=type(e).__name__,
+                )
+
+            return None, e
 
     def get_opencode_server_url(self, project: Project) -> str:
         """获取OpenCode Server的URL"""

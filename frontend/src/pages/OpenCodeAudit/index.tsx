@@ -18,7 +18,8 @@ import type { LogItem } from "./types";
 
 import {
   getOpenCodeSessionStatus,
-  startOpenCodeAuditWithPrompt,
+  getSessionInteractions,
+  type OpenCodeInteraction,
 } from "@/shared/api/opencode";
 
 function OpenCodeAuditPageContent() {
@@ -92,6 +93,29 @@ function OpenCodeAuditPageContent() {
     }
   }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content]);
 
+  const loadInteractions = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const data = await getSessionInteractions(sessionId, { limit: 50 });
+      
+      if (data.items && data.items.length > 0) {
+        data.items.reverse().forEach((interaction: OpenCodeInteraction) => {
+          const logType = interaction.interaction_type === 'request' ? 'prompt' :
+                        interaction.interaction_type === 'response' ? 'response' :
+                        'error';
+          
+          addLog({
+            type: logType,
+            title: `${interaction.http_method} ${interaction.endpoint}`,
+            content: interaction.response_payload || interaction.request_payload || '',
+          });
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load interactions:', err);
+    }
+  }, [sessionId, addLog]);
+
   useEffect(() => {
     if (!sessionId) {
       setShowSplash(true);
@@ -99,7 +123,8 @@ function OpenCodeAuditPageContent() {
     }
     setShowSplash(false);
     loadSession();
-  }, [sessionId, loadSession]);
+    loadInteractions();
+  }, [sessionId, loadSession, loadInteractions]);
 
   useEffect(() => {
     if (!sessionId || !isRunning) {
