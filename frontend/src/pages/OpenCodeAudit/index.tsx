@@ -111,8 +111,35 @@ function OpenCodeAuditPageContent() {
   }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content, session?.completed_at, isComplete]);
 
   const loadInteractions = useCallback(async () => {
-    // 暂时禁用交互历史加载，只显示必要信息
-    // 用户不需要看到详细的HTTP交互
+    if (!sessionId) return;
+    try {
+      const data = await opencodeApi.getSessionInteractions(sessionId, { limit: 100 });
+      
+      if (data.items && data.items.length > 0) {
+        data.items.reverse().forEach((interaction: OpenCodeInteraction) => {
+          // 过滤掉健康检查和轮询的请求
+          const endpoint = interaction.endpoint || '';
+          const isHealthCheck = endpoint.includes('/health');
+          const isPolling = endpoint.includes('/message') && interaction.http_method === 'GET';
+          
+          if (isHealthCheck || isPolling) {
+            return; // 跳过健康检查和轮询
+          }
+          
+          const logType = interaction.interaction_type === 'request' ? 'prompt' :
+                        interaction.interaction_type === 'response' ? 'response' :
+                        'error';
+          
+          addLog({
+            type: logType,
+            title: `${interaction.http_method} ${interaction.endpoint}`,
+            content: interaction.response_payload || interaction.request_payload || '',
+          });
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load interactions:', err);
+    }
   }, [sessionId, addLog]);
 
   useEffect(() => {
