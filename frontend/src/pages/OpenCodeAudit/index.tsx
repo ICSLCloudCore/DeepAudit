@@ -17,8 +17,7 @@ import { createLogItem } from "./utils";
 import type { LogItem } from "./types";
 
 import {
-  getOpenCodeSessionStatus,
-  getSessionInteractions,
+  opencodeApi,
   type OpenCodeInteraction,
 } from "@/shared/api/opencode";
 
@@ -66,7 +65,7 @@ function OpenCodeAuditPageContent() {
     if (!sessionId) return;
     try {
       setLoading(true);
-      const data = await getOpenCodeSessionStatus(sessionId);
+      const data = await opencodeApi.getSessionStatus(sessionId);
       setSession(data);
       
       if (!logs.length) {
