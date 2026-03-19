@@ -6,8 +6,10 @@ OpenCode会话服务
 import asyncio
 import uuid
 import os
+import re
 from typing import Optional, Dict, Any
 from datetime import datetime
+from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +18,52 @@ from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.opencode_session import OpenCodeServerStatus
+
+
+def ensure_dir_exists(path: str):
+    """确保目录存在"""
+    os.makedirs(path, exist_ok=True)
+
+
+async def execute_command(
+    command: str | list[str],
+    shell: bool = False,
+    capture_output: bool = True,
+    timeout: int = 60,
+):
+    """执行命令的简单实现"""
+    import subprocess
+    import asyncio
+
+    try:
+        if shell:
+            process = await asyncio.create_subprocess_shell(
+                command,
+                stdout=subprocess.PIPE if capture_output else None,
+                stderr=subprocess.PIPE if capture_output else None,
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=subprocess.PIPE if capture_output else None,
+                stderr=subprocess.PIPE if capture_output else None,
+            )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return {"success": False, "stdout": "", "stderr": "Command timed out", "returncode": -1}
+
+        return {
+            "success": process.returncode == 0,
+            "stdout": stdout.decode() if stdout and capture_output else "",
+            "stderr": stderr.decode() if stderr and capture_output else "",
+            "returncode": process.returncode,
+        }
+    except Exception as e:
+        return {"success": False, "stdout": "", "stderr": str(e), "returncode": -1}
 
 
 class OpenCodeSessionService:
@@ -48,22 +96,99 @@ class OpenCodeSessionService:
         self, project: Project, current_user_id: str
     ) -> OpenCodeServerStatus:
         """
-        启动OpenCode服务器 - 简化版本
+        启动OpenCode服务器 - 获取真实PID
         """
         try:
-            if project.opencode_pid:
-                return OpenCodeServerStatus.RUNNING
+            import uuid
 
-            project.opencode_pid = "12345"
-            project.opencode_port = "5173"
-            project.opencode_started_at = datetime.utcnow()
-            await self.db.commit()
+            task_id = str(uuid.uuid4())
+
+            project_path = None
+            extract_dir = Path(f"/tmp/{task_id}")
+            extract_dir.mkdir(parents=True, exist_ok=True)
+
+            if project.source_type == "repository":
+                repo_url = project.repository_url
+                branch = project.default_branch or "main"
+                if repo_url:
+                    clone_cmd = [
+                        "git",
+                        "clone",
+                        "--depth",
+                        "1",
+                        "--branch",
+                        branch,
+                        repo_url,
+                        str(extract_dir),
+                    ]
+                    result = await execute_command(clone_cmd, shell=False, timeout=300)
+                    if result["success"]:
+                        project_path = str(extract_dir)
+
+            elif project.source_type == "zip":
+                try:
+                    from app.core.config import settings
+
+                    zip_file_path = Path(settings.ZIP_STORAGE_PATH) / f"{project.id}.zip"
+                    if zip_file_path.exists():
+                        import zipfile
+
+                        with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
+                            zip_ref.extractall(extract_dir)
+                        project_path = str(extract_dir)
+                except Exception:
+                    pass
+
+            if not project_path:
+                project_path = f"/tmp/opencode_project_{project.id}"
+                ensure_dir_exists(project_path)
+
+            log_dir = f"/tmp/opencode_logs"
+            ensure_dir_exists(log_dir)
+
+            random_id = str(uuid.uuid4())[:8]
+            log_path = os.path.join(log_dir, f"{random_id}.log")
+
+            command = f"cd {project_path} ; nohup opencode serve > {log_path} 2>&1 & echo $!"
+            result = await execute_command(command=command, shell=True, timeout=30)
+
+            if not result["success"]:
+                print(f"[OpenCode] Failed to start opencode serve: {result['stderr']}")
+                return OpenCodeServerStatus.ERROR
+
+            pid = result["stdout"].strip()
+            if not pid.isdigit():
+                print(f"[OpenCode] Invalid PID: {pid}")
+                return OpenCodeServerStatus.ERROR
 
             await asyncio.sleep(2)
 
+            port = None
+            max_attempts = 10
+            for attempt in range(max_attempts):
+                if os.path.exists(log_path):
+                    with open(log_path, "r") as f:
+                        log_content = f.read()
+                        port_match = re.search(r"http://127\.0\.0\.1:(\d+)", log_content)
+                        if port_match:
+                            port = port_match.group(1)
+                            break
+                await asyncio.sleep(1)
+
+            project.opencode_pid = pid
+            project.opencode_port = port
+            project.opencode_log_path = log_path
+            project.opencode_started_at = datetime.utcnow()
+            await self.db.commit()
+
+            print(f"[OpenCode] Started opencode serve: PID={pid}, Port={port}")
             return OpenCodeServerStatus.RUNNING
+
         except Exception as e:
             print(f"Failed to start OpenCode server: {e}")
+            import traceback
+
+            traceback.print_exc()
             return OpenCodeServerStatus.ERROR
 
     async def get_prompt_content(
@@ -140,7 +265,7 @@ class OpenCodeSessionService:
             return False
 
     async def poll_opencode_result(
-        self, project: Project, server_session_id: str, db_session: OpenCodeSession
+        self, project: Project, server_session_id: str, db_session: Optional[OpenCodeSession]
     ) -> str:
         """
         轮询OpenCode服务器获取结果
