@@ -4,7 +4,7 @@ OpenCode会话管理 API 端点
 
 import json
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import select, and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,14 @@ from app.schemas.opencode_session import (
     SendPromptRequest,
     OpenCodeStreamEventType,
     OpenCodeStreamEvent,
+    StartAuditWithPromptRequest,
+    StartAuditWithPromptResponse,
+    SessionStatusResponse,
+    AvailablePromptsResponse,
+    AvailablePromptItem,
+    OpenCodeServerStatus,
 )
+from app.services.opencode_session_service import OpenCodeSessionService
 
 router = APIRouter()
 
@@ -372,3 +379,98 @@ async def session_stream(
 
 
 from app.db.session import AsyncSessionLocal
+
+
+@router.post(
+    "/projects/{project_id}/audit-with-prompt", response_model=StartAuditWithPromptResponse
+)
+async def start_audit_with_prompt(
+    project_id: str,
+    audit_in: StartAuditWithPromptRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """启动OpenCode审计（带Prompt选择）"""
+    try:
+        service = OpenCodeSessionService(db)
+        session, server_status = await service.start_audit_with_prompt(
+            project_id=project_id,
+            prompt_template_id=audit_in.prompt_template_id,
+            prompt_content=audit_in.prompt_content,
+            variables=audit_in.variables,
+            current_user=current_user,
+        )
+
+        return StartAuditWithPromptResponse(
+            session_id=session.id,
+            project_id=session.project_id,
+            status=session.status,
+            opencode_server_status=server_status,
+            message="审计已启动",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions/{session_id}/status", response_model=SessionStatusResponse)
+async def get_session_status(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """获取OpenCode会话状态"""
+    try:
+        service = OpenCodeSessionService(db)
+        session, server_status = await service.get_session_status(
+            session_id=session_id, current_user=current_user
+        )
+
+        return SessionStatusResponse(
+            session_id=session.id,
+            status=session.status,
+            prompt_content=session.prompt_content,
+            response_content=session.response_content,
+            opencode_server_status=server_status,
+            started_at=session.started_at,
+            completed_at=session.completed_at,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/available-prompts", response_model=AvailablePromptsResponse)
+async def get_available_prompts(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """获取项目可用提示词列表"""
+    try:
+        service = OpenCodeSessionService(db)
+        templates, total = await service.get_available_prompts(
+            project_id=project_id, current_user=current_user
+        )
+
+        items = [
+            AvailablePromptItem(
+                id=t.id,
+                name=t.name,
+                description=t.description,
+                template_type=t.template_type,
+                is_default=t.is_default,
+                is_system=t.is_system,
+                is_active=t.is_active,
+            )
+            for t in templates
+        ]
+
+        return AvailablePromptsResponse(items=items, total=total)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
