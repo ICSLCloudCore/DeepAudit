@@ -16,6 +16,7 @@ class OpenCodeSessionStatus(str, enum.Enum):
     ACTIVE = "active"
     CLOSED = "closed"
     ERROR = "error"
+    PENDING = "pending"
 
 
 class OpenCodeSession(Base):
