@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     opencode_mcp,
     opencode_sessions,
     project_config,
+    opencode_audit_tasks,
 )
 
 api_router = APIRouter()
@@ -39,3 +40,6 @@ api_router.include_router(opencode_skills.router, prefix="/opencode", tags=["ope
 api_router.include_router(opencode_mcp.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(opencode_sessions.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(project_config.router, prefix="/projects", tags=["project-config"])
+api_router.include_router(
+    opencode_audit_tasks.router, prefix="/opencode-audit-tasks", tags=["opencode-audit-tasks"]
+)

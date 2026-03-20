@@ -25,7 +25,8 @@ import {
   Terminal,
   Bot,
   Zap,
-  Download
+  Download,
+  Code2,
 } from "lucide-react";
 import { api } from "@/shared/config/database";
 import { apiClient } from "@/shared/api/serverClient";
@@ -37,13 +38,14 @@ import TerminalProgressDialog from "@/components/audit/TerminalProgressDialog";
 import ExportReportDialog from "@/components/reports/ExportReportDialog";
 import { calculateTaskProgress } from "@/shared/utils/utils";
 import { getAgentTasks, cancelAgentTask, getAgentFindings, type AgentTask, type AgentFinding } from "@/shared/api/agentTasks";
+import { getOpenCodeAuditTasks, cancelOpenCodeAuditTask, type OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";
 import ReportExportDialog from "@/pages/AgentAudit/components/ReportExportDialog";
 
 // Zombie task detection config
 const ZOMBIE_TIMEOUT = 180000; // 3 minutes without progress is potentially stuck
 
 // 任务类型标签
-type TaskTab = "regular" | "agent";
+type TaskTab = "regular" | "agent" | "opencode";
 
 export default function AuditTasks() {
   const navigate = useNavigate();
@@ -72,12 +74,18 @@ export default function AuditTasks() {
   const [exportAgentTask, setExportAgentTask] = useState<AgentTask | null>(null);
   const [exportAgentFindings, setExportAgentFindings] = useState<AgentFinding[]>([]);
 
+  // OpenCode任务状态
+  const [openCodeTasks, setOpenCodeTasks] = useState<OpenCodeAuditTask[]>([]);
+  const [openCodeLoading, setOpenCodeLoading] = useState(true);
+  const [cancellingOpenCodeTaskId, setCancellingOpenCodeTaskId] = useState<string | null>(null);
+
   // Zombie task detection: track progress and time for each task
   const taskProgressRef = useRef<Map<string, { progress: number; time: number }>>(new Map());
 
   useEffect(() => {
     loadTasks();
     loadAgentTasks();
+    loadOpenCodeTasks();
   }, []);
 
   // 加载Agent任务（支持静默更新，不触发 loading 状态）
@@ -96,6 +104,26 @@ export default function AuditTasks() {
     } finally {
       if (!silent) {
         setAgentLoading(false);
+      }
+    }
+  };
+
+  // 加载OpenCode任务（支持静默更新，不触发 loading 状态）
+  const loadOpenCodeTasks = async (silent = false) => {
+    try {
+      if (!silent) {
+        setOpenCodeLoading(true);
+      }
+      const data = await getOpenCodeAuditTasks();
+      setOpenCodeTasks(data);
+    } catch (error) {
+      console.error('Failed to load opencode tasks:', error);
+      if (!silent) {
+        toast.error("加载OpenCode任务失败");
+      }
+    } finally {
+      if (!silent) {
+        setOpenCodeLoading(false);
       }
     }
   };
@@ -180,6 +208,18 @@ export default function AuditTasks() {
     return () => clearInterval(intervalId);
   }, [agentTasks.map(t => t.id + t.status).join(',')]);
 
+  // 自动刷新OpenCode任务（静默更新，不显示 loading）
+  useEffect(() => {
+    const activeOpenCodeTasks = openCodeTasks.filter(
+      task => task.status === 'running' || task.status === 'pending'
+    );
+
+    if (activeOpenCodeTasks.length === 0) return;
+
+    const intervalId = setInterval(() => loadOpenCodeTasks(true), 5000);
+    return () => clearInterval(intervalId);
+  }, [openCodeTasks.map(t => t.id + t.status).join(',')]);
+
   const handleCancelTask = async (taskId: string) => {
     if (cancellingTaskId) return;
 
@@ -210,6 +250,23 @@ export default function AuditTasks() {
       toast.error(error?.response?.data?.detail || "取消Agent任务失败");
     } finally {
       setCancellingAgentTaskId(null);
+    }
+  };
+
+  const handleCancelOpenCodeTask = async (taskId: string) => {
+    if (cancellingOpenCodeTaskId) return;
+
+    try {
+      setCancellingOpenCodeTaskId(taskId);
+      await cancelOpenCodeAuditTask(taskId);
+      toast.success("OpenCode任务已取消");
+      // 取消后刷新列表，不使用静默模式以显示最新状态
+      await loadOpenCodeTasks(false);
+    } catch (error: any) {
+      console.error('取消OpenCode任务失败:', error);
+      toast.error(error?.response?.data?.detail || "取消OpenCode任务失败");
+    } finally {
+      setCancellingOpenCodeTaskId(null);
     }
   };
 
@@ -314,6 +371,13 @@ export default function AuditTasks() {
     return matchesSearch && matchesStatus;
   });
 
+  const filteredOpenCodeTasks = openCodeTasks.filter(task => {
+    const matchesSearch = (task.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.project?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || task.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   // 统计数据
   const regularStats = {
     total: tasks.length,
@@ -329,9 +393,20 @@ export default function AuditTasks() {
     failed: agentTasks.filter(t => t.status === 'failed').length,
   };
 
-  const currentStats = activeTab === "agent" ? agentStats : regularStats;
+  const openCodeStats = {
+    total: openCodeTasks.length,
+    completed: openCodeTasks.filter(t => t.status === 'completed').length,
+    running: openCodeTasks.filter(t => t.status === 'running').length,
+    failed: openCodeTasks.filter(t => t.status === 'failed').length,
+  };
 
-  if ((activeTab === "regular" && loading) || (activeTab === "agent" && agentLoading)) {
+  const currentStats = activeTab === "agent" ? agentStats : activeTab === "opencode" ? openCodeStats : regularStats;
+
+  if (
+    (activeTab === "regular" && loading) || 
+    (activeTab === "agent" && agentLoading) ||
+    (activeTab === "opencode" && openCodeLoading)
+  ) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-4">
@@ -348,7 +423,7 @@ export default function AuditTasks() {
       <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
 
       {/* Tab 切换 - 卡片式设计 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
         {/* Agent任务卡片 */}
         <button
           onClick={() => setActiveTab("agent")}
@@ -502,6 +577,83 @@ export default function AuditTasks() {
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-cyan-500 to-transparent" />
           )}
         </button>
+
+        {/* OPENCODE审计任务卡片 */}
+        <button
+          onClick={() => setActiveTab("opencode")}
+          className={`
+            relative group text-left p-5 rounded-xl font-mono
+            transition-all duration-300 border-2 overflow-hidden
+            ${activeTab === "opencode"
+              ? "bg-gradient-to-br from-fuchsia-500/20 via-fuchsia-500/10 to-transparent border-fuchsia-500 shadow-lg shadow-fuchsia-500/20"
+              : "bg-muted border-border hover:border-fuchsia-500/50 hover:bg-card/80"
+            }
+          `}
+        >
+          {/* 背景装饰 */}
+          <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl transition-opacity duration-300 ${activeTab === "opencode" ? "bg-fuchsia-500/20 opacity-100" : "bg-fuchsia-500/5 opacity-0 group-hover:opacity-50"
+            }`} />
+
+          <div className="relative flex items-start gap-4">
+            {/* 图标区域 */}
+            <div className={`
+              flex-shrink-0 w-14 h-14 rounded-xl flex items-center justify-center
+              transition-all duration-300
+              ${activeTab === "opencode"
+                ? "bg-fuchsia-500/30 shadow-lg shadow-fuchsia-500/30"
+                : "bg-muted/80 group-hover:bg-fuchsia-500/20"
+              }
+            `}>
+              <Code2 className={`w-7 h-7 transition-colors duration-300 ${activeTab === "opencode" ? "text-fuchsia-400" : "text-muted-foreground group-hover:text-fuchsia-400"
+                }`} />
+            </div>
+
+            {/* 内容区域 */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className={`text-lg font-mono font-bold uppercase tracking-[0.15em] transition-colors duration-300 ${activeTab === "opencode" ? "text-fuchsia-400 text-glow-fuchsia" : "text-foreground group-hover:text-fuchsia-400"}`}>
+                  OPENCODE审计
+                </h3>
+                {openCodeStats.running > 0 && (
+                  <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-fuchsia-500/30 text-fuchsia-400 border border-fuchsia-500/50 animate-pulse">
+                    {openCodeStats.running} 运行中
+                  </span>
+                )}
+                {activeTab === "opencode" && (
+                  <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-fuchsia-500 text-background">
+                    当前
+                  </span>
+                )}
+              </div>
+              <p className={`text-sm transition-colors duration-300 ${activeTab === "opencode" ? "text-foreground" : "text-muted-foreground group-hover:text-muted-foreground"
+                }`}>
+                OpenCode 环境驱动的交互式代码审计，支持自定义提示词和灵活配置
+              </p>
+
+              {/* 统计数据 */}
+              <div className="flex items-center gap-4 mt-3 text-xs">
+                <span className={`transition-colors duration-300 ${activeTab === "opencode" ? "text-muted-foreground" : "text-muted-foreground"}`}>
+                  共 <span className="font-bold text-foreground">{openCodeStats.total}</span> 个任务
+                </span>
+                <span className="text-emerald-400">
+                  <CheckCircle className="w-3 h-3 inline mr-1" />
+                  {openCodeStats.completed}
+                </span>
+                {openCodeStats.failed > 0 && (
+                  <span className="text-rose-400">
+                    <AlertTriangle className="w-3 h-3 inline mr-1" />
+                    {openCodeStats.failed}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 选中指示条 */}
+          {activeTab === "opencode" && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-fuchsia-500 via-fuchsia-500 to-transparent" />
+          )}
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -561,7 +713,13 @@ export default function AuditTasks() {
           <div className="flex-1 relative w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 z-10" />
             <Input
-              placeholder={activeTab === "agent" ? "搜索Agent任务名称..." : "搜索项目名称或任务类型..."}
+              placeholder={
+                activeTab === "agent" 
+                  ? "搜索Agent任务名称..." 
+                  : activeTab === "opencode" 
+                    ? "搜索OpenCode任务名称..." 
+                    : "搜索项目名称或任务类型..."
+              }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="cyber-input !pl-10"
@@ -940,6 +1098,161 @@ export default function AuditTasks() {
                   创建任务
                 </Button>
               )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* OpenCode Task List */}
+      {activeTab === "opencode" && (
+        <>
+          {filteredOpenCodeTasks.length > 0 ? (
+            <div className="space-y-4 relative z-10">
+              {filteredOpenCodeTasks.map((task) => (
+                <div key={task.id} className="cyber-card p-6">
+                  {/* Task Header */}
+                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-border">
+                    <div className="flex items-center space-x-4">
+                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${task.status === 'completed' ? 'bg-emerald-500/20' :
+                        task.status === 'running' ? 'bg-fuchsia-500/20' :
+                          task.status === 'failed' ? 'bg-rose-500/20' :
+                            'bg-muted'
+                        }`}>
+                        <Code2 className={`w-6 h-6 ${task.status === 'completed' ? 'text-emerald-400' :
+                          task.status === 'running' ? 'text-fuchsia-400' :
+                            task.status === 'failed' ? 'text-rose-400' :
+                              'text-muted-foreground'
+                          }`} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-xl text-foreground uppercase tracking-wide">
+                          {task.name || 'OpenCode审计任务'}
+                        </h3>
+                        <p className="text-sm text-muted-foreground font-mono">
+                          {task.current_step || task.task_type}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {getStatusBadge(task.status)}
+                      {task.status === 'running' && (
+                        <div className="flex items-center gap-1.5 text-green-400">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4 font-mono">
+                    <div className="text-center p-3 bg-muted rounded-lg border border-border">
+                      <p className="text-2xl font-bold text-foreground">{task.total_files}</p>
+                      <p className="text-xs text-muted-foreground uppercase">文件数</p>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg border border-border">
+                      <p className="text-2xl font-bold text-foreground">{task.processed_files}</p>
+                      <p className="text-xs text-muted-foreground uppercase">已处理</p>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg border border-border">
+                      <p className="text-2xl font-bold text-amber-400">{task.findings_count}</p>
+                      <p className="text-xs text-muted-foreground uppercase">发现问题</p>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg border border-border">
+                      <p className="text-2xl font-bold text-fuchsia-400">{task.total_lines.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground uppercase">代码行数</p>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg border border-border">
+                      <p className="text-2xl font-bold text-primary">{task.security_score.toFixed(1)}</p>
+                      <p className="text-xs text-muted-foreground uppercase">安全评分</p>
+                    </div>
+                  </div>
+
+                  {/* Severity Distribution */}
+                  {task.findings_count > 0 && (
+                    <div className="flex gap-4 mb-4 font-mono text-xs">
+                      {task.critical_count > 0 && (
+                        <span className="text-rose-500">Critical: {task.critical_count}</span>
+                      )}
+                      {task.high_count > 0 && (
+                        <span className="text-orange-500">High: {task.high_count}</span>
+                      )}
+                      {task.medium_count > 0 && (
+                        <span className="text-yellow-500">Medium: {task.medium_count}</span>
+                      )}
+                      {task.low_count > 0 && (
+                        <span className="text-green-500">Low: {task.low_count}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Progress Bar */}
+                  <div className="mb-4 font-mono">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-bold text-muted-foreground uppercase">审计进度</span>
+                      <span className="text-sm text-muted-foreground">
+                        {task.processed_files || 0} / {task.total_files || 0} 文件
+                      </span>
+                    </div>
+                    <Progress
+                      value={task.progress_percentage || 0}
+                      className="h-2 bg-muted [&>div]:bg-fuchsia-500"
+                    />
+                    <div className="text-right mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        {(task.progress_percentage || 0).toFixed(0)}% 完成
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Task Footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
+                    <div className="flex items-center space-x-6 text-sm text-muted-foreground font-mono">
+                      <div className="flex items-center">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        {formatDate(task.created_at)}
+                      </div>
+                      {task.completed_at && (
+                        <div className="flex items-center">
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          {formatDate(task.completed_at)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-3">
+                      {(task.status === 'running' || task.status === 'pending') && (
+                        <Button
+                          size="sm"
+                          className="cyber-btn bg-rose-500/90 border-rose-500/50 text-foreground hover:bg-rose-500 h-9"
+                          onClick={() => handleCancelOpenCodeTask(task.id)}
+                          disabled={cancellingOpenCodeTaskId === task.id}
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          {cancellingOpenCodeTaskId === task.id ? '取消中...' : '取消'}
+                        </Button>
+                      )}
+                      {/* 任务详情按钮 */}
+                      <Button size="sm" className="cyber-btn-outline h-9">
+                        <FileText className="w-4 h-4 mr-2" />
+                        查看详情
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="cyber-card p-16 text-center relative z-10 border-dashed">
+              <Code2 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-foreground mb-2 uppercase">
+                {searchTerm || statusFilter !== "all" ? '未找到匹配的OpenCode任务' : '暂无OpenCode审计任务'}
+              </h3>
+              <p className="text-muted-foreground mb-6 font-mono">
+                {searchTerm || statusFilter !== "all" ? '尝试调整搜索条件或筛选器' : '创建第一个OpenCode审计任务开始交互式代码审计'}
+              </p>
             </div>
           )}
         </>

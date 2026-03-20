@@ -40,6 +40,9 @@ class Project(Base):
     members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
     tasks = relationship("AuditTask", back_populates="project", cascade="all, delete-orphan")
     agent_tasks = relationship("AgentTask", back_populates="project", cascade="all, delete-orphan")
+    opencode_audit_tasks = relationship(
+        "OpenCodeAuditTask", back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class ProjectMember(Base):
