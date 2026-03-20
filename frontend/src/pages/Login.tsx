@@ -109,32 +109,6 @@ export default function Login() {
         }}
       />
 
-      {/* Corner Decorations */}
-      <div className="absolute top-4 left-4 text-sm font-mono text-muted-foreground z-30 space-y-1">
-        <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4" />
-          <span>SYS_ID: 0x84F2</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4" />
-          <span>ENCRYPT: AES-256</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Fingerprint className="w-4 h-4" />
-          <span>AUTH: READY</span>
-        </div>
-      </div>
-
-      <div className="absolute top-4 right-4 text-sm font-mono text-muted-foreground text-right z-30 space-y-1">
-        <div>SECURE_CONN: TRUE</div>
-        <div>PORT: 443</div>
-        <div>TLS: 1.3</div>
-      </div>
-
-      <div className="absolute bottom-4 left-4 text-sm font-mono text-muted-foreground z-30">
-        GODEEPAUDIT_AUTH_v3
-      </div>
-
       <div className="absolute bottom-4 right-4 text-sm font-mono text-muted-foreground z-30">
         {new Date().toISOString().split("T")[0]}
       </div>
@@ -159,9 +133,6 @@ export default function Login() {
             <span className="text-primary">DEEP</span>
             <span className="text-foreground">AUDIT</span>
           </div>
-          <p className="text-base font-mono text-muted-foreground">
-            // Autonomous Security Agent
-          </p>
         </div>
 
         {/* Login Form Card */}
