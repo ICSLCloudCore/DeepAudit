@@ -25,9 +25,9 @@ export interface RouteConfig {
 
 const routes: RouteConfig[] = [
   {
-    name: "Agent审计",
+    name: "仪表盘",
     path: "/",
-    element: <AgentAudit />,
+    element: <Dashboard />,
     visible: true,
   },
   {
@@ -52,7 +52,7 @@ const routes: RouteConfig[] = [
     name: "仪表盘",
     path: "/dashboard",
     element: <Dashboard />,
-    visible: true,
+    visible: false,
   },
   {
     name: "项目管理",

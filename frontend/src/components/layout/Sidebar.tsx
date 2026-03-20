@@ -20,13 +20,12 @@ import {
     UserCircle,
     Shield,
     MessageSquare,
-    Bot,
 } from "lucide-react";
 import routes from "@/app/routes";
 
 // Icon mapping for routes with consistent sizing
 const routeIcons: Record<string, React.ReactNode> = {
-    "/": <Bot className="w-[18px] h-[18px]" />,
+    "/": <LayoutDashboard className="w-[18px] h-[18px]" />,
     "/dashboard": <LayoutDashboard className="w-[18px] h-[18px]" />,
     "/projects": <FolderGit2 className="w-[18px] h-[18px]" />,
     "/instant-analysis": <Zap className="w-[18px] h-[18px]" />,
