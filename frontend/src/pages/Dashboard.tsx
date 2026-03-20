@@ -524,10 +524,10 @@ export default function Dashboard() {
               <h3 className="section-title">快速操作</h3>
             </div>
             <div className="space-y-2">
-              <Link to="/agent-audit" className="block">
+              <Link to="/projects" className="block">
                 <Button className="w-full justify-start cyber-btn-primary h-10">
                   <Bot className="w-4 h-4 mr-2" />
-                  Agent 智能审计
+                  项目管理
                 </Button>
               </Link>
               <Link to="/instant-analysis" className="block">
@@ -536,16 +536,16 @@ export default function Dashboard() {
                   即时代码分析
                 </Button>
               </Link>
-              <Link to="/projects" className="block">
+              <Link to="/skill-marketplace" className="block">
                 <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
                   <GitBranch className="w-4 h-4 mr-2" />
-                  创建新项目
+                  Skill
                 </Button>
               </Link>
-              <Link to="/audit-tasks" className="block">
+              <Link to="/mcp-marketplace" className="block">
                 <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
                   <Shield className="w-4 h-4 mr-2" />
-                  启动审计任务
+                  MCP
                 </Button>
               </Link>
             </div>
