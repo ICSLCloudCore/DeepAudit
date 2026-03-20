@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Download New GoDeepAudit Logo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 50px;
+            background: #1a1a1a;
+        }
+        h1 { color: white; margin-bottom: 30px; }
+        canvas { border: 2px solid #333; margin-bottom: 20px; }
+        button {
+            padding: 15px 40px;
+            font-size: 18px;
+            background: #38bdf8;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:hover { background: #0ea5e9; }
+    </style>
+</head>
+<body>
+    <h1>New GoDeepAudit Logo Preview</h1>
+    <canvas id="logoCanvas" width="512" height="512"></canvas>
+    <br>
+    <button onclick="downloadLogo()">Download logo_godeepaudit.png</button>
+
+    <script>
+        const canvas = document.getElementById('logoCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function drawLogo() {
+            ctx.fillStyle = '#071828';
+            ctx.fillRect(0, 0, 512, 512);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 512; i += 20) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, 512);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(512, i);
+                ctx.stroke();
+            }
+            
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(4, 4, 12, 12);
+            ctx.fillRect(496, 4, 12, 12);
+            ctx.fillRect(4, 496, 12, 12);
+            ctx.fillRect(496, 496, 12, 12);
+            
+            ctx.save();
+            ctx.translate(85, 60);
+            
+            ctx.beginPath();
+            ctx.moveTo(171, 20);
+            ctx.lineTo(256, 50);
+            ctx.lineTo(256, 120);
+            ctx.lineTo(256, 210);
+            ctx.lineTo(210, 310);
+            ctx.lineTo(171, 325);
+            ctx.lineTo(132, 310);
+            ctx.lineTo(86, 260);
+            ctx.lineTo(86, 210);
+            ctx.lineTo(86, 120);
+            ctx.lineTo(86, 50);
+            ctx.closePath();
+            
+            const gradient = ctx.createLinearGradient(86, 20, 256, 325);
+            gradient.addColorStop(0, '#38bdf8');
+            gradient.addColorStop(1, '#0ea5e9');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.ellipse(135, 140, 35, 40, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(207, 140, 35, 40, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#071828';
+            ctx.beginPath();
+            ctx.arc(140, 145, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(212, 145, 18, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(133, 138, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(205, 138, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#071828';
+            ctx.beginPath();
+            ctx.ellipse(171, 195, 15, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+            
+            ctx.save();
+            ctx.translate(330, 280);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.arc(50, 50, 35, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(75, 75);
+            ctx.lineTo(105, 105);
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            ctx.restore();
+            
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.4;
+            ctx.beginPath();
+            ctx.moveTo(50, 150);
+            ctx.lineTo(80, 150);
+            ctx.lineTo(80, 180);
+            ctx.lineTo(120, 180);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(390, 150);
+            ctx.lineTo(360, 150);
+            ctx.lineTo(360, 180);
+            ctx.lineTo(320, 180);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(50, 360);
+            ctx.lineTo(80, 360);
+            ctx.lineTo(80, 330);
+            ctx.lineTo(120, 330);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(390, 360);
+            ctx.lineTo(360, 360);
+            ctx.lineTo(360, 330);
+            ctx.lineTo(320, 330);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            
+            ctx.save();
+            ctx.translate(206, 380);
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.roundRect(0, 0, 100, 45, 8);
+            ctx.fill();
+            ctx.fillStyle = '#071828';
+            ctx.font = 'bold 24px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('GO', 50, 22);
+            ctx.restore();
+        }
+
+        function downloadLogo() {
+            const link = document.createElement('a');
+            link.download = 'logo_godeepaudit.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        drawLogo();
+    </script>
+</body>
+</html>
