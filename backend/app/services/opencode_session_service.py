@@ -810,35 +810,56 @@ class OpenCodeSessionService:
                         data = response.json()
                         print(f"[OpenCode] Received message data: {json.dumps(data, default=str)}")
 
-                        # 获取最后一条消息
-                        if isinstance(data, list) and len(data) > 0:
-                            data = data[-1]
+                        text_content = ""
+                        is_finished = False
 
-                        # Extract parts
-                        parts = data.get("parts", [])
-                        print(f"[OpenCode] Parts found: {len(parts)}")
+                        if isinstance(data, list):
+                            for message in reversed(data):  # 从最新消息开始找
+                                info = message.get("info", {})
+                                role = info.get("role")
 
-                        if len(parts) == 0:
-                            await asyncio.sleep(poll_interval)
-                            continue
+                                if role == "assistant":  # 只看assistant的消息
+                                    print(f"[OpenCode] Found assistant message")
 
-                        # Get the last part text
-                        last_part = parts[-1]
-                        text = last_part.get("text", "")
-                        print(f"[OpenCode] Text received, length: {len(text) if text else 0}")
+                                    # 检查info中的finish标志
+                                    finish_flag = info.get("finish")
+                                    if finish_flag == "stop":
+                                        is_finished = True
+                                        print(f"[OpenCode] Found finish flag: stop")
 
-                        # 累积响应文本，保留最长的响应
-                        if text and len(text) > len(full_response):
-                            full_response = text
+                                    parts = message.get("parts", [])
+                                    print(f"[OpenCode] Parts in assistant message: {len(parts)}")
+
+                                    for part in parts:
+                                        part_type = part.get("type")
+
+                                        if part_type == "text":  # <-- 找到type为"text"的部分
+                                            text = part.get("text", "")
+                                            if text:
+                                                text_content = text  # <-- 提取这个text字段的值！
+                                                print(
+                                                    f"[OpenCode] Found text content, length: {len(text_content)}"
+                                                )
+                                                print(
+                                                    f"[OpenCode] Text preview: {text_content[:100]}..."
+                                                )
+
+                                        # 检查step-finish中的reason
+                                        if part_type == "step-finish":
+                                            reason = part.get("reason")
+                                            if reason == "stop":
+                                                is_finished = True
+                                                print(f"[OpenCode] Found step-finish reason: stop")
+
+                        # 更新full_response
+                        if text_content and len(text_content) > len(full_response):
+                            full_response = text_content
                             print(
                                 f"[OpenCode] Updated full_response, new length: {len(full_response)}"
                             )
 
-                        # 检查是否完成
-                        reason = last_part.get("reason")
-                        print(f"[OpenCode] Last part reason: {reason}")
-
-                        if reason == "stop":
+                        # 完成时返回
+                        if is_finished and full_response:
                             print(
                                 f"[OpenCode] Polling completed, returning full response (length: {len(full_response)})"
                             )
