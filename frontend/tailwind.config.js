@@ -113,6 +113,7 @@ export default {
         'terminal-md': '2px 2px 0px rgba(0, 0, 0, 0.15)',
         // Glow effects for status indicators
         'glow-orange': '0 0 8px rgba(255, 107, 44, 0.4)',
+        'glow-sky': '0 0 8px rgba(56, 189, 248, 0.4)',
         'glow-red': '0 0 8px rgba(211, 47, 47, 0.4)',
         'glow-green': '0 0 8px rgba(0, 230, 118, 0.4)',
       },

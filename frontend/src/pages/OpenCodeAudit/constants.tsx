@@ -144,7 +144,7 @@ export const UI_CONFIG = {
 // ============ Color Palette ============
 
 export const COLORS = {
-  primary: '#FF6B2C',
+  primary: '#38bdf8',
   success: '#34d399',
   error: '#fb7185',
   warning: '#fbbf24',

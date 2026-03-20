@@ -258,12 +258,12 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
 
       <style>{`
         .cyber-grid {
-          background-image: linear-gradient(rgba(255,107,44,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(255,107,44,0.15) 1px, transparent 1px);
+          background-image: linear-gradient(rgba(56,189,248,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.15) 1px, transparent 1px);
           background-size: 50px 50px;
           animation: gridMove 20s linear infinite;
         }
         .dark .cyber-grid {
-          background-image: linear-gradient(rgba(255,107,44,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,107,44,0.1) 1px, transparent 1px);
+          background-image: linear-gradient(rgba(56,189,248,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.1) 1px, transparent 1px);
         }
         @keyframes gridMove {
           0% { background-position: 0 0; }
@@ -273,8 +273,8 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           position: absolute;
           width: 100%;
           height: 2px;
-          background: linear-gradient(90deg, transparent, rgba(255,107,44,0.5), rgba(0,255,255,0.3), transparent);
-          box-shadow: 0 0 10px rgba(255,107,44,0.5), 0 0 20px rgba(0,255,255,0.3);
+          background: linear-gradient(90deg, transparent, rgba(56,189,248,0.5), rgba(0,255,255,0.3), transparent);
+          box-shadow: 0 0 10px rgba(56,189,248,0.5), 0 0 20px rgba(0,255,255,0.3);
           animation: scanLine 4s linear infinite;
         }
         @keyframes scanLine {

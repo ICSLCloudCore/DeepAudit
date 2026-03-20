@@ -123,7 +123,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                             {/* Logo Icon */}
                             <div className="relative flex-shrink-0">
                                 <div
-                                    className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(255,107,44,0.3)]"
+                                     className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(56,189,248,0.3)]"
                                     style={{
                                         background: 'linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(var(--primary) / 0.05))',
                                         border: '1px solid hsl(var(--primary) / 0.4)'
@@ -143,7 +143,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                             <div className={`transition-all duration-300 ${collapsed ? 'w-0 opacity-0 overflow-hidden' : 'flex-1 min-w-0 opacity-100'}`}>
                                 <div
                                     className="text-xl font-bold tracking-wider font-mono leading-tight"
-                                    style={{ textShadow: '0 0 25px rgba(255,107,44,0.4)' }}
+                                    style={{ textShadow: '0 0 25px rgba(56,189,248,0.4)' }}
                                 >
                                     <span className="text-primary">GO</span>
                                     <span className="text-primary">DEEP</span>
@@ -183,7 +183,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                                         className={`
                                             flex items-center gap-3 px-3 py-2 transition-all duration-300 group relative rounded-lg
                                             ${isActive
-                                                ? 'bg-primary/15 border border-primary/40 shadow-[0_0_15px_rgba(255,107,44,0.1)]'
+                                                 ? 'bg-primary/15 border border-primary/40 shadow-[0_0_15px_rgba(56,189,248,0.1)]'
                                                 : 'border border-transparent hover:bg-card/60 hover:border-border/50'
                                             }
                                         `}
@@ -205,7 +205,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                                     >
                                         {/* Active indicator */}
                                         {isActive && (
-                                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r shadow-[0_0_8px_rgba(255,107,44,0.5)]" />
+                                             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r shadow-[0_0_8px_rgba(56,189,248,0.5)]" />
                                         )}
 
                                         {/* Icon */}

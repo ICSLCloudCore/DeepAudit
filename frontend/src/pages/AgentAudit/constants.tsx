@@ -214,7 +214,7 @@ export const UI_CONFIG = {
 // ============ Color Palette ============
 
 export const COLORS = {
-  primary: '#FF6B2C',
+  primary: '#38bdf8',
   success: '#34d399',  // emerald-400
   error: '#fb7185',    // rose-400
   warning: '#fbbf24',  // amber-400

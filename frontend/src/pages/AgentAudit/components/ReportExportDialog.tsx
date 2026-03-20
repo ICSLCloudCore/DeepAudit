@@ -886,8 +886,8 @@ export const ReportExportDialog = memo(function ReportExportDialog({
       --text-primary: #f8fafc;
       --text-secondary: #94a3b8;
       --text-muted: #64748b;
-      --accent: #ff6b2c;
-      --accent-glow: rgba(255, 107, 44, 0.2);
+       --accent: #38bdf8;
+       --accent-glow: rgba(56, 189, 248, 0.2);
       --border: #1e293b;
       --border-light: #334155;
       --success: #10b981;
