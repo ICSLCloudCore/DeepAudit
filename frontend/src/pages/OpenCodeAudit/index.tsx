@@ -10,7 +10,7 @@ import { Terminal, Loader2, ArrowDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-import { SplashScreen, Header, LogEntry, StatsPanel } from "./components";
+import { SplashScreen, Header, LogEntry, StatsPanel, MessageList } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
 import { ACTION_VERBS, POLLING_INTERVALS } from "./constants";
 import { createLogItem } from "./utils";
@@ -22,6 +22,9 @@ import {
 } from "@/shared/api/opencode";
 
 import { createOpenCodeSessionStream } from "@/shared/api/opencodeSessionStream";
+
+// 临时：导入模拟数据
+import { mockMessages } from "./mockData";
 
 function OpenCodeAuditPageContent() {
   const { sessionId, projectId } = useParams<{ sessionId?: string; projectId?: string }>();
@@ -256,33 +259,6 @@ function OpenCodeAuditPageContent() {
     }
   }, [logs, isAutoScroll]);
 
-  // 新增：SSE 失败回退机制 - 如果 SSE 没有连接，启动轮询
-  useEffect(() => {
-    if (!sessionId || !isRunning) {
-      return;
-    }
-
-    // 如果 SSE 没有连接，启动轮询作为备用
-    if (!sseConnected && !pollIntervalRef.current) {
-      console.log('[OpenCode] SSE not connected, starting polling as fallback');
-      pollIntervalRef.current = setInterval(() => {
-        loadSession();
-      }, POLLING_INTERVALS.SESSION_STATUS);
-    } else if (sseConnected && pollIntervalRef.current) {
-      // 如果 SSE 连接了，停止轮询
-      console.log('[OpenCode] SSE connected, stopping polling');
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-    };
-  }, [sessionId, isRunning, sseConnected, loadSession]);
-
   const handleNewAudit = () => {
     setShowSplash(true);
   };
@@ -357,35 +333,8 @@ function OpenCodeAuditPageContent() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-muted/30">
-            {logs.length === 0 ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center text-muted-foreground">
-                  {isRunning ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                      <span className="text-sm font-mono tracking-wide">
-                        WAITING FOR OPENDCODE ACTIVITY...
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-sm font-mono tracking-wide">
-                      NO ACTIVITY YET
-                    </span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {logs.map(item => (
-                  <LogEntry
-                    key={item.id}
-                    item={item}
-                    isExpanded={expandedLogIds.has(item.id)}
-                    onToggle={() => toggleLogExpanded(item.id)}
-                  />
-                ))}
-              </div>
-            )}
+            {/* 临时：使用模拟数据测试新组件 */}
+            <MessageList messages={mockMessages} isStreaming={isRunning} />
             <div ref={logEndRef} />
           </div>
 
