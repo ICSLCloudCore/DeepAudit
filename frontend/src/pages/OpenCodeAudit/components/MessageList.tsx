@@ -19,3 +19,5 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming 
     </div>
   );
 };
+
+export default MessageList;

@@ -18,3 +18,5 @@ export const StepStartPartComponent: React.FC<StepStartPartComponentProps> = ({ 
     </div>
   );
 };
+
+export default StepStartPartComponent;

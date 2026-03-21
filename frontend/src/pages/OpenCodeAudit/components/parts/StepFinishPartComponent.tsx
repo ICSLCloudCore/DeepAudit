@@ -24,3 +24,5 @@ export const StepFinishPartComponent: React.FC<StepFinishPartComponentProps> = (
     </div>
   );
 };
+
+export default StepFinishPartComponent;

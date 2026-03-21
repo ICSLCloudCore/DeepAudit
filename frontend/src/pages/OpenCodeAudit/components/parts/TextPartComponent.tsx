@@ -12,3 +12,5 @@ export const TextPartComponent: React.FC<TextPartComponentProps> = ({ part }) =>
     </div>
   );
 };
+
+export default TextPartComponent;

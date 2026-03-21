@@ -35,3 +35,5 @@ export const PartRenderer: React.FC<PartRendererProps> = ({ part }) => {
   }
   return <div>Unknown part type</div>;
 };
+
+export default PartRenderer;

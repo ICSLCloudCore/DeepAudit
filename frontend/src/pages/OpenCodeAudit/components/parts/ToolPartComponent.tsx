@@ -62,3 +62,5 @@ export const ToolPartComponent: React.FC<ToolPartComponentProps> = ({ part }) =>
     </div>
   );
 };
+
+export default ToolPartComponent;

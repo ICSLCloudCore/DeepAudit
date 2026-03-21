@@ -4,7 +4,6 @@
  */
 
 // ============ 导入新的消息类型 ============
-export * from './messageTypes';
 import type { OpenCodeMessage, Part } from './messageTypes';
 
 // ============ Log Types ============

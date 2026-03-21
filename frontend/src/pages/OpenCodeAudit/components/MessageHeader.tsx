@@ -30,3 +30,5 @@ export const MessageHeader: React.FC<MessageHeaderProps> = ({ info }) => {
     </div>
   );
 };
+
+export default MessageHeader;

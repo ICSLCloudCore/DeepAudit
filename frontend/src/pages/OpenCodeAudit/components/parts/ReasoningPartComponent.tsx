@@ -29,3 +29,5 @@ export const ReasoningPartComponent: React.FC<ReasoningPartComponentProps> = ({ 
     </div>
   );
 };
+
+export default ReasoningPartComponent;
