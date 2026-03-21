@@ -10,16 +10,18 @@ import { Terminal, Loader2, ArrowDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-import { SplashScreen, Header, LogEntry, StatsPanel, MessageList } from "./components";
+import { SplashScreen, Header, LogEntry, StatsPanel } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
 import { ACTION_VERBS, POLLING_INTERVALS } from "./constants";
 import { createLogItem } from "./utils";
-import type { LogItem, OpenCodeMessage } from "./types";
+import type { LogItem } from "./types";
 
 import {
   opencodeApi,
   type OpenCodeInteraction,
 } from "@/shared/api/opencode";
+
+import { createOpenCodeSessionStream } from "@/shared/api/opencodeSessionStream";
 
 function OpenCodeAuditPageContent() {
   const { sessionId, projectId } = useParams<{ sessionId?: string; projectId?: string }>();
@@ -41,6 +43,7 @@ function OpenCodeAuditPageContent() {
   const logEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
+  const streamHandlerRef = useRef<any>(null);
 
   useEffect(() => {
     if (sessionId !== previousSessionIdRef.current) {
@@ -159,9 +162,43 @@ function OpenCodeAuditPageContent() {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
+      if (streamHandlerRef.current) {
+        streamHandlerRef.current.disconnect();
+        streamHandlerRef.current = null;
+      }
       return;
     }
 
+    // 启动 SSE 流式连接
+    const handler = createOpenCodeSessionStream(sessionId, {
+      onData: (newData, accumulated) => {
+        // 实时更新 session 的响应内容
+        setSession(prev => prev ? { ...prev, response_content: accumulated } : null);
+        // 同时也可以添加到 log 中
+        if (!logs.length || logs[logs.length - 1].type !== 'response') {
+          addLog({
+            type: 'response',
+            title: 'Response received',
+            content: accumulated
+          });
+        } else {
+          // 更新最后一条 response log
+          const lastLog = logs[logs.length - 1];
+          updateLog(lastLog.id, { content: accumulated });
+        }
+      },
+      onDone: () => {
+        console.log('[OpenCodeStream] Stream completed');
+      },
+      onError: (error) => {
+        console.error('[OpenCodeStream] Stream error:', error);
+      }
+    });
+    
+    streamHandlerRef.current = handler;
+    handler.connect();
+
+    // 保留轮询作为备用
     pollIntervalRef.current = setInterval(() => {
       loadSession();
     }, POLLING_INTERVALS.SESSION_STATUS);
@@ -170,8 +207,11 @@ function OpenCodeAuditPageContent() {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
       }
+      if (streamHandlerRef.current) {
+        streamHandlerRef.current.disconnect();
+      }
     };
-  }, [sessionId, isRunning, loadSession]);
+  }, [sessionId, isRunning, loadSession, setSession, addLog, updateLog, logs]);
 
   useEffect(() => {
     if (isAutoScroll && logEndRef.current) {
