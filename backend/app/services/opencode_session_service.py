@@ -857,16 +857,14 @@ class OpenCodeSessionService:
                             print(
                                 f"[OpenCode] Updated full_response, new length: {len(full_response)}"
                             )
-                            
+
                             # 新增：实时更新数据库
                             try:
-                                from app.database import AsyncSessionLocal
-                                from sqlalchemy import select
-                                from app.models.opencode_session import OpenCodeSession
-                                
                                 async with AsyncSessionLocal() as write_db:
                                     result_write = await write_db.execute(
-                                        select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
+                                        select(OpenCodeSession).where(
+                                            OpenCodeSession.id == db_session_id
+                                        )
                                     )
                                     session_to_update = result_write.scalar_one_or_none()
                                     if session_to_update:
@@ -874,7 +872,14 @@ class OpenCodeSessionService:
                                         await write_db.commit()
                                         print(f"[OpenCode] Real-time database update successful")
                             except Exception as write_err:
-                                print(f"[OpenCode] Failed to update database in real-time: {write_err}")
+                                print(
+                                    f"[OpenCode] Failed to update database in real-time: {write_err}"
+                                )
+                                import traceback
+
+                                print(
+                                    f"[OpenCode] Real-time update traceback: {traceback.format_exc()}"
+                                )
 
                         # 完成时返回
                         if is_finished and full_response:
