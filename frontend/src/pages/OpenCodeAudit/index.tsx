@@ -190,8 +190,16 @@ function OpenCodeAuditPageContent() {
         // 只在内容真正变化时更新，避免闪烁
         if (accumulated !== lastContentRef.current) {
           lastContentRef.current = accumulated;
-          // 实时更新 session 的响应内容
-          setSession(prev => prev ? { ...prev, response_content: accumulated } : null);
+          // 实时更新 session 的响应内容，但保留 status 等其他字段，避免状态闪烁
+          setSession(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              response_content: accumulated,
+              // 确保 status 保持不变，避免闪烁
+              status: prev.status
+            };
+          });
           
           // 更新最后一条 response log（如果存在）
           if (logs.length > 0 && logs[logs.length - 1].type === 'response') {
