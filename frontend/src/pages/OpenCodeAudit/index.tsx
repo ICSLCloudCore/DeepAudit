@@ -218,10 +218,14 @@ function OpenCodeAuditPageContent() {
       onDone: () => {
         console.log('[OpenCodeStream] Stream completed');
         setSseConnected(false);
+        // 会话完成时，重新加载会话以获取最新状态
+        loadSession();
       },
       onError: (error) => {
         console.error('[OpenCodeStream] Stream error:', error);
         setSseConnected(false);
+        // 出错时也尝试重新加载会话
+        loadSession();
       }
     });
     
