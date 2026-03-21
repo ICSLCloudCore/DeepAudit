@@ -39,11 +39,13 @@ function OpenCodeAuditPageContent() {
   const [showSplash, setShowSplash] = useState(!sessionId);
   const [statusVerb, setStatusVerb] = useState(ACTION_VERBS[0]);
   const [statusDots, setStatusDots] = useState(0);
+  const [sseConnected, setSseConnected] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
   const streamHandlerRef = useRef<any>(null);
+  const lastContentRef = useRef<string>('');
 
   useEffect(() => {
     if (sessionId !== previousSessionIdRef.current) {
@@ -68,6 +70,11 @@ function OpenCodeAuditPageContent() {
   const loadSession = useCallback(async () => {
     if (!sessionId) return;
     try {
+      // 如果 SSE 已连接，就不再通过轮询更新，避免冲突
+      if (sseConnected && !isComplete) {
+        return;
+      }
+      
       setLoading(true);
       
       const data = await opencodeApi.getSessionStatus(sessionId);
@@ -91,11 +98,15 @@ function OpenCodeAuditPageContent() {
       
       // 当有响应内容时：显示返回的结果
       if (data.response_content && data.response_content !== session?.response_content) {
-        addLog({
-          type: 'response',
-          title: 'Response received',
-          content: data.response_content
-        });
+        // 检查是否已经有 response log 了
+        const hasResponseLog = logs.some(log => log.type === 'response');
+        if (!hasResponseLog) {
+          addLog({
+            type: 'response',
+            title: 'Response received',
+            content: data.response_content
+          });
+        }
       }
       
       // 当session完成时：显示关闭提示
@@ -112,7 +123,7 @@ function OpenCodeAuditPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content, session?.completed_at, isComplete]);
+  }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content, session?.completed_at, isComplete, sseConnected]);
 
   const loadInteractions = useCallback(async () => {
     if (!sessionId) return;
@@ -166,42 +177,48 @@ function OpenCodeAuditPageContent() {
         streamHandlerRef.current.disconnect();
         streamHandlerRef.current = null;
       }
+      setSseConnected(false);
       return;
     }
+
+    // 重置 lastContent
+    lastContentRef.current = '';
 
     // 启动 SSE 流式连接
     const handler = createOpenCodeSessionStream(sessionId, {
       onData: (newData, accumulated) => {
-        // 实时更新 session 的响应内容
-        setSession(prev => prev ? { ...prev, response_content: accumulated } : null);
-        // 同时也可以添加到 log 中
-        if (!logs.length || logs[logs.length - 1].type !== 'response') {
-          addLog({
-            type: 'response',
-            title: 'Response received',
-            content: accumulated
-          });
-        } else {
-          // 更新最后一条 response log
-          const lastLog = logs[logs.length - 1];
-          updateLog(lastLog.id, { content: accumulated });
+        // 只在内容真正变化时更新，避免闪烁
+        if (accumulated !== lastContentRef.current) {
+          lastContentRef.current = accumulated;
+          // 实时更新 session 的响应内容
+          setSession(prev => prev ? { ...prev, response_content: accumulated } : null);
+          
+          // 更新最后一条 response log（如果存在）
+          if (logs.length > 0 && logs[logs.length - 1].type === 'response') {
+            const lastLog = logs[logs.length - 1];
+            updateLog(lastLog.id, { content: accumulated });
+          }
         }
       },
       onDone: () => {
         console.log('[OpenCodeStream] Stream completed');
+        setSseConnected(false);
       },
       onError: (error) => {
         console.error('[OpenCodeStream] Stream error:', error);
+        setSseConnected(false);
       }
     });
     
     streamHandlerRef.current = handler;
     handler.connect();
+    setSseConnected(true);
 
-    // 保留轮询作为备用
-    pollIntervalRef.current = setInterval(() => {
-      loadSession();
-    }, POLLING_INTERVALS.SESSION_STATUS);
+    // 只有在 SSE 连接失败时才使用轮询作为备用
+    // 暂时注释掉轮询，避免与 SSE 冲突造成闪烁
+    // pollIntervalRef.current = setInterval(() => {
+    //   loadSession();
+    // }, POLLING_INTERVALS.SESSION_STATUS);
 
     return () => {
       if (pollIntervalRef.current) {
@@ -210,14 +227,42 @@ function OpenCodeAuditPageContent() {
       if (streamHandlerRef.current) {
         streamHandlerRef.current.disconnect();
       }
+      setSseConnected(false);
     };
-  }, [sessionId, isRunning, loadSession, setSession, addLog, updateLog, logs]);
+  }, [sessionId, isRunning, setSession, addLog, updateLog, logs]);
 
   useEffect(() => {
     if (isAutoScroll && logEndRef.current) {
       logEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs, isAutoScroll]);
+
+  // 新增：SSE 失败回退机制 - 如果 SSE 没有连接，启动轮询
+  useEffect(() => {
+    if (!sessionId || !isRunning) {
+      return;
+    }
+
+    // 如果 SSE 没有连接，启动轮询作为备用
+    if (!sseConnected && !pollIntervalRef.current) {
+      console.log('[OpenCode] SSE not connected, starting polling as fallback');
+      pollIntervalRef.current = setInterval(() => {
+        loadSession();
+      }, POLLING_INTERVALS.SESSION_STATUS);
+    } else if (sseConnected && pollIntervalRef.current) {
+      // 如果 SSE 连接了，停止轮询
+      console.log('[OpenCode] SSE connected, stopping polling');
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [sessionId, isRunning, sseConnected, loadSession]);
 
   const handleNewAudit = () => {
     setShowSplash(true);

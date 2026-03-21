@@ -793,6 +793,7 @@ class OpenCodeSessionService:
         max_polls = 3600  # 1 hour with 1s interval
         poll_interval = 1
         full_response = ""
+        update_counter = 0  # 新增：用于控制数据库更新频率
 
         if not message_id:
             print(f"[OpenCode] No message_id provided, cannot poll")
@@ -858,28 +859,27 @@ class OpenCodeSessionService:
                                 f"[OpenCode] Updated full_response, new length: {len(full_response)}"
                             )
 
-                            # 新增：实时更新数据库
-                            try:
-                                async with AsyncSessionLocal() as write_db:
-                                    result_write = await write_db.execute(
-                                        select(OpenCodeSession).where(
-                                            OpenCodeSession.id == db_session_id
+                            # 新增：定期更新数据库（每 5 次轮询更新一次，减少连接压力）
+                            update_counter += 1
+                            if update_counter % 5 == 0:
+                                try:
+                                    async with AsyncSessionLocal() as write_db:
+                                        result_write = await write_db.execute(
+                                            select(OpenCodeSession).where(
+                                                OpenCodeSession.id == db_session_id
+                                            )
                                         )
+                                        session_to_update = result_write.scalar_one_or_none()
+                                        if session_to_update:
+                                            session_to_update.response_content = full_response
+                                            await write_db.commit()
+                                            print(
+                                                f"[OpenCode] Real-time database update successful (counter: {update_counter})"
+                                            )
+                                except Exception as write_err:
+                                    print(
+                                        f"[OpenCode] Failed to update database in real-time: {write_err}"
                                     )
-                                    session_to_update = result_write.scalar_one_or_none()
-                                    if session_to_update:
-                                        session_to_update.response_content = full_response
-                                        await write_db.commit()
-                                        print(f"[OpenCode] Real-time database update successful")
-                            except Exception as write_err:
-                                print(
-                                    f"[OpenCode] Failed to update database in real-time: {write_err}"
-                                )
-                                import traceback
-
-                                print(
-                                    f"[OpenCode] Real-time update traceback: {traceback.format_exc()}"
-                                )
 
                         # 完成时返回
                         if is_finished and full_response:
