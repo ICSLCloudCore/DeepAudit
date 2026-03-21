@@ -795,7 +795,7 @@ class OpenCodeSessionService:
         poll_interval = 1
         full_response = ""
         last_written_response = ""  # 跟踪上次写入数据库的内容
-        processed_message_ids = set()  # 新增：跟踪已处理的消息ID
+        processed_message_ids = dict()  # 新增：跟踪已处理的消息ID
 
         if not message_id:
             print(f"[OpenCode] No message_id provided, cannot poll")
@@ -823,16 +823,11 @@ class OpenCodeSessionService:
                                 msg_id = info.get("id")
                                 role = info.get("role")
 
-                                # 检查是否已经处理过这个消息
-                                if msg_id and msg_id in processed_message_ids:
-                                    continue
-
                                 if role == "assistant":  # 只看assistant的消息
-                                    print(f"[OpenCode] Found new assistant message: {msg_id}")
-
-                                    # 标记为已处理
-                                    if msg_id:
-                                        processed_message_ids.add(msg_id)
+                                    print(f"[OpenCode] Get assistant message: {msg_id}")
+                                    # 检查是否已经处理过这个消息
+                                    if msg_id and msg_id not in processed_message_ids:
+                                        processed_message_ids[msg_id] = []
 
                                     # 检查info中的finish标志
                                     finish_flag = info.get("finish")
@@ -844,6 +839,11 @@ class OpenCodeSessionService:
                                     print(f"[OpenCode] Parts in assistant message: {len(parts)}")
 
                                     for part in parts:
+                                        if part.get("id") in processed_message_ids[msg_id]:
+                                            continue
+                                        else:
+                                            processed_message_ids[msg_id].append(part.get("id"))
+
                                         part_type = part.get("type")
 
                                         if part_type == "text":  # <-- 找到type为"text"的部分
