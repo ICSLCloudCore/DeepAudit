@@ -10,6 +10,8 @@ import type {
   LogItem,
   OpenCodeSession,
   ConnectionStatus,
+  OpenCodeMessage,
+  Part,
 } from "../types";
 import { createLogItem, isSessionRunning, isSessionComplete } from "../utils";
 
@@ -18,11 +20,13 @@ import { createLogItem, isSessionRunning, isSessionComplete } from "../utils";
 const initialState: OpenCodeAuditState = {
   session: null,
   logs: [],
+  messages: [], // 新增：空的消息数组
   isLoading: false,
   error: null,
   connectionStatus: 'disconnected',
   isAutoScroll: true,
   expandedLogIds: new Set(),
+  expandedParts: new Set(), // 新增：空的展开 part 集合
 };
 
 // ============ Reducer ============
@@ -84,6 +88,45 @@ function openCodeAuditReducer(
       return { ...state, expandedLogIds: newExpanded };
     }
 
+    // 新增：消息相关 actions
+    case 'SET_MESSAGES':
+      return { ...state, messages: action.payload };
+
+    case 'ADD_MESSAGE':
+      return { ...state, messages: [...state.messages, action.payload] };
+
+    case 'UPDATE_MESSAGE': {
+      const { id, updates } = action.payload;
+      return {
+        ...state,
+        messages: state.messages.map(msg =>
+          msg.info.id === id ? { ...msg, ...updates } : msg
+        ),
+      };
+    }
+
+    case 'ADD_PART': {
+      const { messageId, part } = action.payload;
+      return {
+        ...state,
+        messages: state.messages.map(msg =>
+          msg.info.id === messageId
+            ? { ...msg, parts: [...msg.parts, part] }
+            : msg
+        ),
+      };
+    }
+
+    case 'TOGGLE_PART_EXPANDED': {
+      const newExpanded = new Set(state.expandedParts);
+      if (newExpanded.has(action.payload)) {
+        newExpanded.delete(action.payload);
+      } else {
+        newExpanded.add(action.payload);
+      }
+      return { ...state, expandedParts: newExpanded };
+    }
+
     case 'RESET':
       return { ...initialState };
 
@@ -141,6 +184,27 @@ export function useOpenCodeAuditState() {
     dispatch({ type: 'TOGGLE_LOG_EXPANDED', payload: id });
   }, []);
 
+  // 新增：消息相关 action creators
+  const setMessages = useCallback((messages: OpenCodeMessage[]) => {
+    dispatch({ type: 'SET_MESSAGES', payload: messages });
+  }, []);
+
+  const addMessage = useCallback((message: OpenCodeMessage) => {
+    dispatch({ type: 'ADD_MESSAGE', payload: message });
+  }, []);
+
+  const updateMessage = useCallback((id: string, updates: Partial<OpenCodeMessage>) => {
+    dispatch({ type: 'UPDATE_MESSAGE', payload: { id, updates } });
+  }, []);
+
+  const addPart = useCallback((messageId: string, part: Part) => {
+    dispatch({ type: 'ADD_PART', payload: { messageId, part } });
+  }, []);
+
+  const togglePartExpanded = useCallback((id: string) => {
+    dispatch({ type: 'TOGGLE_PART_EXPANDED', payload: id });
+  }, []);
+
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' });
   }, []);
@@ -172,6 +236,12 @@ export function useOpenCodeAuditState() {
     setConnectionStatus,
     setAutoScroll,
     toggleLogExpanded,
+    // 新增：消息相关 actions
+    setMessages,
+    addMessage,
+    updateMessage,
+    addPart,
+    togglePartExpanded,
     reset,
 
     // Direct dispatch for complex operations

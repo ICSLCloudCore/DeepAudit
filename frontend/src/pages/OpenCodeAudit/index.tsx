@@ -10,11 +10,11 @@ import { Terminal, Loader2, ArrowDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-import { SplashScreen, Header, LogEntry, StatsPanel } from "./components";
+import { SplashScreen, Header, LogEntry, StatsPanel, MessageList } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
 import { ACTION_VERBS, POLLING_INTERVALS } from "./constants";
 import { createLogItem } from "./utils";
-import type { LogItem } from "./types";
+import type { LogItem, OpenCodeMessage } from "./types";
 
 import {
   opencodeApi,
@@ -26,10 +26,11 @@ function OpenCodeAuditPageContent() {
   const navigate = useNavigate();
   
   const {
-    session, logs, isLoading, error,
+    session, logs, messages, isLoading, error,
     isAutoScroll, expandedLogIds, isRunning, isComplete,
     setSession, setLogs, addLog, updateLog, removeLog,
     setLoading, setError, setAutoScroll, toggleLogExpanded,
+    setMessages, // 新增
     reset, dispatch,
   } = useOpenCodeAuditState();
 

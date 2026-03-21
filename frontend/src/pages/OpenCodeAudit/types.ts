@@ -3,6 +3,10 @@
  * Type definitions for the OpenCode Audit page
  */
 
+// ============ 导入新的消息类型 ============
+export * from './messageTypes';
+import type { OpenCodeMessage, Part } from './messageTypes';
+
 // ============ Log Types ============
 
 export type LogType =
@@ -43,11 +47,13 @@ export interface OpenCodeSession {
 export interface OpenCodeAuditState {
   session: OpenCodeSession | null;
   logs: LogItem[];
+  messages: OpenCodeMessage[]; // 新增：结构化消息列表
   isLoading: boolean;
   error: string | null;
   connectionStatus: ConnectionStatus;
   isAutoScroll: boolean;
   expandedLogIds: Set<string>;
+  expandedParts: Set<string>; // 新增：展开的 Part ID 集合
 }
 
 // ============ Action Types ============
@@ -63,6 +69,12 @@ export type OpenCodeAuditAction =
   | { type: 'SET_CONNECTION_STATUS'; payload: ConnectionStatus }
   | { type: 'SET_AUTO_SCROLL'; payload: boolean }
   | { type: 'TOGGLE_LOG_EXPANDED'; payload: string }
+  // 新增：消息相关 actions
+  | { type: 'SET_MESSAGES'; payload: OpenCodeMessage[] }
+  | { type: 'ADD_MESSAGE'; payload: OpenCodeMessage }
+  | { type: 'UPDATE_MESSAGE'; payload: { id: string; updates: Partial<OpenCodeMessage> } }
+  | { type: 'ADD_PART'; payload: { messageId: string; part: Part } }
+  | { type: 'TOGGLE_PART_EXPANDED'; payload: string }
   | { type: 'RESET' };
 
 // ============ Component Props ============
