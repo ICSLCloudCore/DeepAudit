@@ -820,19 +820,19 @@ class OpenCodeSessionService:
                             # 按时间顺序处理消息（从旧到新）
                             for message in data:
                                 info = message.get("info", {})
-                                message_id = info.get("id")
+                                msg_id = info.get("id")
                                 role = info.get("role")
 
                                 # 检查是否已经处理过这个消息
-                                if message_id and message_id in processed_message_ids:
+                                if msg_id and msg_id in processed_message_ids:
                                     continue
 
                                 if role == "assistant":  # 只看assistant的消息
-                                    print(f"[OpenCode] Found new assistant message: {message_id}")
+                                    print(f"[OpenCode] Found new assistant message: {msg_id}")
 
                                     # 标记为已处理
-                                    if message_id:
-                                        processed_message_ids.add(message_id)
+                                    if msg_id:
+                                        processed_message_ids.add(msg_id)
 
                                     # 检查info中的finish标志
                                     finish_flag = info.get("finish")
@@ -892,8 +892,8 @@ class OpenCodeSessionService:
 
                                     print(f"[OpenCode] Update traceback: {traceback.format_exc()}")
 
-                        # 完成时立即更新数据库并返回
-                        if is_finished and full_response:
+                        # 完成时立即更新数据库并返回 - 即使 full_response 为空也要结束会话
+                        if is_finished:
                             print(
                                 f"[OpenCode] Polling completed, returning full response (length: {len(full_response)})"
                             )
