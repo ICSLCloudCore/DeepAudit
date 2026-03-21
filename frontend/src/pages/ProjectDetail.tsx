@@ -604,12 +604,12 @@ export default function ProjectDetail() {
         </div>
 
         <div className="flex items-center space-x-3">
-          <div className="relative group">
+          {/* <div className="relative group">
             <Button onClick={handleRunAudit} className="cyber-btn-primary">
               <Shield className="w-4 h-4 mr-2" />
               启动审计
             </Button>
-          </div>
+          </div> */}
           <Button onClick={handleOpenCodeAudit} variant="outline" className="cyber-btn-outline">
             <Terminal className="w-4 h-4 mr-2" />
             OpenCode 审计
