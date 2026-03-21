@@ -793,7 +793,8 @@ class OpenCodeSessionService:
         max_polls = 3600  # 1 hour with 1s interval
         poll_interval = 1
         full_response = ""
-        update_counter = 0  # 新增：用于控制数据库更新频率
+        last_written_response = ""  # 跟踪上次写入数据库的内容
+        processed_message_ids = set()  # 新增：跟踪已处理的消息ID
 
         if not message_id:
             print(f"[OpenCode] No message_id provided, cannot poll")
@@ -811,16 +812,26 @@ class OpenCodeSessionService:
                         data = response.json()
                         print(f"[OpenCode] Received message data: {json.dumps(data, default=str)}")
 
-                        text_content = ""
+                        new_text_content = ""
                         is_finished = False
 
                         if isinstance(data, list):
-                            for message in reversed(data):  # 从最新消息开始找
+                            # 按时间顺序处理消息（从旧到新）
+                            for message in data:
                                 info = message.get("info", {})
+                                message_id = info.get("id")
                                 role = info.get("role")
 
+                                # 检查是否已经处理过这个消息
+                                if message_id and message_id in processed_message_ids:
+                                    continue
+
                                 if role == "assistant":  # 只看assistant的消息
-                                    print(f"[OpenCode] Found assistant message")
+                                    print(f"[OpenCode] Found new assistant message: {message_id}")
+
+                                    # 标记为已处理
+                                    if message_id:
+                                        processed_message_ids.add(message_id)
 
                                     # 检查info中的finish标志
                                     finish_flag = info.get("finish")
@@ -837,13 +848,13 @@ class OpenCodeSessionService:
                                         if part_type == "text":  # <-- 找到type为"text"的部分
                                             text = part.get("text", "")
                                             if text:
-                                                text_content = text  # <-- 提取这个text字段的值！
-                                                print(
-                                                    f"[OpenCode] Found text content, length: {len(text_content)}"
+                                                new_text_content += (
+                                                    text  # <-- 追加到新内容中，而不是替换！
                                                 )
                                                 print(
-                                                    f"[OpenCode] Text preview: {text_content[:100]}..."
+                                                    f"[OpenCode] Found text content, length: {len(text)}"
                                                 )
+                                                print(f"[OpenCode] Text preview: {text[:100]}...")
 
                                         # 检查step-finish中的reason
                                         if part_type == "step-finish":
@@ -852,16 +863,15 @@ class OpenCodeSessionService:
                                                 is_finished = True
                                                 print(f"[OpenCode] Found step-finish reason: stop")
 
-                        # 更新full_response
-                        if text_content and len(text_content) > len(full_response):
-                            full_response = text_content
+                        # 更新full_response - 如果有新内容，就追加
+                        if new_text_content:
+                            full_response += new_text_content
                             print(
                                 f"[OpenCode] Updated full_response, new length: {len(full_response)}"
                             )
 
-                            # 新增：定期更新数据库（每 5 次轮询更新一次，减少连接压力）
-                            update_counter += 1
-                            if update_counter % 5 == 0:
+                            # 只在内容真正变化时才写入数据库，减少连接压力
+                            if full_response != last_written_response:
                                 try:
                                     async with AsyncSessionLocal() as write_db:
                                         result_write = await write_db.execute(
@@ -873,13 +883,13 @@ class OpenCodeSessionService:
                                         if session_to_update:
                                             session_to_update.response_content = full_response
                                             await write_db.commit()
-                                            print(
-                                                f"[OpenCode] Real-time database update successful (counter: {update_counter})"
-                                            )
+                                            last_written_response = full_response
+                                            print(f"[OpenCode] Database updated with new content")
                                 except Exception as write_err:
-                                    print(
-                                        f"[OpenCode] Failed to update database in real-time: {write_err}"
-                                    )
+                                    print(f"[OpenCode] Failed to update database: {write_err}")
+                                    import traceback
+
+                                    print(f"[OpenCode] Update traceback: {traceback.format_exc()}")
 
                         # 完成时返回
                         if is_finished and full_response:
