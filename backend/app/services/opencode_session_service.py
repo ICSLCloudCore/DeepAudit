@@ -234,20 +234,13 @@ class OpenCodeSessionService:
             url = self.get_opencode_server_url(project)
             health_url = f"{url}/global/health"
 
-            print(f"[OpenCode] Health check URL: {health_url}")
-            log_opencode_interaction("request", "/global/health", None)
-
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(health_url)
                 response_time = datetime.utcnow()
                 duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
-                print(f"[OpenCode] Health check status code: {response.status_code}")
-                print(f"[OpenCode] Health check response: {response.text}")
-
                 if response.status_code == 200:
                     data = response.json()
-                    log_opencode_interaction("response", "/global/health", data)
 
                     if db_session_id:
                         await log_opencode_interaction_to_db(
@@ -291,8 +284,6 @@ class OpenCodeSessionService:
                     return False
         except Exception as e:
             print(f"[OpenCode] Health check exception: {e}")
-            print(f"[OpenCode] Health check traceback: {traceback.format_exc()}")
-            log_opencode_interaction("error", "/global/health", {"error": str(e)})
 
             if db_session_id:
                 response_time = datetime.utcnow()
@@ -332,11 +323,6 @@ class OpenCodeSessionService:
 
             pid_int = int(project.opencode_pid)
             print(f"[OpenCode] Checking if PID {pid_int} is running...")
-
-            if sys.platform == "win32":
-                print(f"[OpenCode] Windows platform, skipping process check")
-                is_healthy = await self.check_opencode_server_health(project)
-                return OpenCodeServerStatus.RUNNING if is_healthy else OpenCodeServerStatus.ERROR
 
             os.kill(pid_int, 0)
             print(f"[OpenCode] PID {pid_int} is running")
@@ -537,41 +523,23 @@ class OpenCodeSessionService:
             url = self.get_opencode_server_url(project)
             session_url = f"{url}/session"
 
-            print(f"[OpenCode] Session creation URL: {session_url}")
-
             request_data = {"title": "DeepAudit Audit Session"}
-            log_opencode_interaction("request", "/session", request_data)
-
-            print(f"[OpenCode] About to call POST {session_url}")
 
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(session_url, json=request_data)
-
-                print(f"[OpenCode] Session creation status code: {response.status_code}")
-                print(f"[OpenCode] Session creation response: {response.text}")
 
                 if response.status_code == 200:
                     data = response.json()
                     server_session_id = data.get("id")
 
-                    print(f"[OpenCode] Server returned session ID: {server_session_id}")
-
-                    log_opencode_interaction("response", "/session", data)
-                    print(f"[OpenCode] Created server session: {server_session_id}")
+                    print(f"[OpenCode] Created server session.")
                     return server_session_id
                 else:
-                    log_opencode_interaction(
-                        "error",
-                        "/session",
-                        {"status_code": response.status_code, "text": response.text},
-                    )
                     print(f"[OpenCode] Failed to create session: {response.status_code}")
                     return None
 
         except Exception as e:
             print(f"[OpenCode] Failed to create OpenCode server session: {e}")
-            print(f"[OpenCode] Failed to create session traceback: {traceback.format_exc()}")
-            log_opencode_interaction("error", "/session", {"error": str(e)})
             return None
 
     def generate_message_id(self) -> str:
@@ -600,8 +568,6 @@ class OpenCodeSessionService:
             url = self.get_opencode_server_url(project)
             prompt_async_url = f"{url}/session/{server_session_id}/prompt_async"
 
-            print(f"[OpenCode] Prompt async URL: {prompt_async_url}")
-
             # Generate message ID
             message_id = self.generate_message_id()
 
@@ -610,43 +576,18 @@ class OpenCodeSessionService:
                 "parts": [{"type": "text", "text": prompt_content}],
             }
 
-            log_opencode_interaction(
-                "request",
-                f"/session/{server_session_id}/prompt_async",
-                {"messageID": message_id, "parts": [{"type": "text", "text": "prompt..."}]},
-            )
-
-            print(f"[OpenCode] About to call POST {prompt_async_url}")
-
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(prompt_async_url, json=request_data)
 
-                print(f"[OpenCode] Send prompt async status code: {response.status_code}")
-                print(f"[OpenCode] Send prompt async response: {response.text}")
-
                 if response.status_code in [200, 202, 204]:
-                    log_opencode_interaction(
-                        "response",
-                        f"/session/{server_session_id}/prompt_async",
-                        {"status": "accepted", "message_id": message_id},
-                    )
-                    print(f"[OpenCode] Prompt sent successfully, message_id: {message_id}")
+                    print(f"[OpenCode] Prompt sent successfully.")
                     return message_id
                 else:
-                    log_opencode_interaction(
-                        "error",
-                        f"/session/{server_session_id}/prompt_async",
-                        {"status_code": response.status_code, "text": response.text},
-                    )
                     print(f"[OpenCode] Failed to send prompt: {response.status_code}")
                     return None
 
         except Exception as e:
             print(f"[OpenCode] Failed to send prompt to OpenCode: {e}")
-            print(f"[OpenCode] Failed to send prompt traceback: {traceback.format_exc()}")
-            log_opencode_interaction(
-                "error", f"/session/{server_session_id}/prompt_async", {"error": str(e)}
-            )
             return None
 
     async def get_prompt_content(
@@ -698,7 +639,7 @@ class OpenCodeSessionService:
         await self.db.commit()
         await self.db.refresh(session)
 
-        print(f"[OpenCode] OpenCode session created: {session.id}")
+        print(f"[OpenCode] OpenCode db_session_id created: {session.id}")
         return session
 
     async def start_audit_with_prompt(
@@ -740,14 +681,10 @@ class OpenCodeSessionService:
             project_id, prompt_template_id, final_prompt_content, current_user
         )
 
-        print(f"[OpenCode] About to call create_opencode_server_session...")
         server_session_id = await self.create_opencode_server_session(project)
         message_id = None
 
-        print(f"[OpenCode] create_opencode_server_session returned: {server_session_id}")
-
         if server_session_id:
-            print(f"[OpenCode] Got server_session_id: {server_session_id}, now sending prompt...")
             message_id = await self.send_prompt_to_opencode(
                 project, server_session_id, final_prompt_content
             )
@@ -782,7 +719,7 @@ class OpenCodeSessionService:
         server_session_id: str,
         message_id: Optional[str],
         db_session_id: str,
-    ) -> str:
+    ) -> tuple[str, bool]:
         """
         轮询OpenCode服务器获取结果 - 使用新的message API，检查reason=stop
         """
@@ -790,13 +727,11 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Polling for session: {server_session_id}")
         print(f"[OpenCode] Polling for message_id: {message_id}")
 
-        max_polls = 3600  # 1 hour with 1s interval
-        poll_interval = 1
+        max_polls = 100  # 1 hour with 3s interval
+        poll_interval = 3
+        record_index = 1
+        same_time = 1
         full_response = ""
-
-        if not message_id:
-            print(f"[OpenCode] No message_id provided, cannot poll")
-            return "Error: No message ID provided"
 
         url = self.get_opencode_server_url(project)
         message_url = f"{url}/session/{server_session_id}/message"
@@ -805,80 +740,36 @@ class OpenCodeSessionService:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(message_url)
-
+                    
                     if response.status_code == 200:
-                        data = response.json()
-                        print(f"[OpenCode] Received message data: {json.dumps(data, default=str)}")
-
-                        text_content = ""
-                        is_finished = False
-
-                        if isinstance(data, list):
-                            for message in reversed(data):  # 从最新消息开始找
-                                info = message.get("info", {})
-                                role = info.get("role")
-
-                                if role == "assistant":  # 只看assistant的消息
-                                    print(f"[OpenCode] Found assistant message")
-
-                                    # 检查info中的finish标志
-                                    finish_flag = info.get("finish")
-                                    if finish_flag == "stop":
-                                        is_finished = True
-                                        print(f"[OpenCode] Found finish flag: stop")
-
-                                    parts = message.get("parts", [])
-                                    print(f"[OpenCode] Parts in assistant message: {len(parts)}")
-
-                                    for part in parts:
-                                        part_type = part.get("type")
-
-                                        if part_type == "text":  # <-- 找到type为"text"的部分
-                                            text = part.get("text", "")
-                                            if text:
-                                                text_content = text  # <-- 提取这个text字段的值！
-                                                print(
-                                                    f"[OpenCode] Found text content, length: {len(text_content)}"
-                                                )
-                                                print(
-                                                    f"[OpenCode] Text preview: {text_content[:100]}..."
-                                                )
-
-                                        # 检查step-finish中的reason
-                                        if part_type == "step-finish":
-                                            reason = part.get("reason")
-                                            if reason == "stop":
-                                                is_finished = True
-                                                print(f"[OpenCode] Found step-finish reason: stop")
-
-                        # 更新full_response
-                        if text_content and len(text_content) > len(full_response):
-                            full_response = text_content
-                            print(
-                                f"[OpenCode] Updated full_response, new length: {len(full_response)}"
-                            )
-
-                        # 完成时返回
-                        if is_finished and full_response:
-                            print(
-                                f"[OpenCode] Polling completed, returning full response (length: {len(full_response)})"
-                            )
-                            return full_response
+                        data: list = response.json()
+                        # 当处理完成的次数与总数相同10次时，认为处理ok
+                        if record_index == len(data):
+                            same_time += 1
+                        if same_time == 10:
+                            return full_response, True
+                        
+                        for item in data[record_index:]:
+                            info = item.get("info", {})
+                            if info.get("finish") != None:
+                                for part in item.get("parts", []):
+                                    if (part_type := part.get("type")) == "text":
+                                        text_content = part.get("text", "")
+                                        full_response += text_content
+                                        print("[RESPONSE]", text_content)
+                                    elif part_type == "reasoning":
+                                        print("[THINGKING]", part.get("text", ""))
+                                # 索引往前推
+                                record_index += 1
 
                 await asyncio.sleep(poll_interval)
 
             except Exception as e:
                 print(f"[OpenCode] Poll attempt {poll_count + 1} failed: {e}")
-                print(f"[OpenCode] Poll attempt traceback: {traceback.format_exc()}")
-                log_opencode_interaction(
-                    "error",
-                    f"/session/{server_session_id}/message",
-                    {"error": str(e), "poll_count": poll_count + 1},
-                )
                 await asyncio.sleep(poll_interval)
 
         print(f"[OpenCode] Polling timed out after {max_polls} attempts")
-        return "timeout"
+        return full_response, False
 
     async def _background_poll_result(
         self,
@@ -905,7 +796,7 @@ class OpenCodeSessionService:
                 # 设置当前会话ID，用于交互记录
                 self.set_current_session_id(db_session_id)
 
-                result = await self.poll_opencode_result_with_updates(
+                result, sign = await self.poll_opencode_result_with_updates(
                     project, server_session_id, message_id, db_session_id
                 )
 
@@ -918,11 +809,11 @@ class OpenCodeSessionService:
                     db_session.response_content = result
 
                     # 检查是否超时
-                    if result == "timeout":
-                        db_session.status = OpenCodeSessionStatus.ERROR
-                        db_session.response_content = "OpenCode Server response timeout. Please try again or check the server status."
-                    else:
+                    if sign:
                         db_session.status = OpenCodeSessionStatus.CLOSED
+                    else:
+                        db_session.status = OpenCodeSessionStatus.ERROR
+                        db_session.response_content += "\nOpenCode Server response timeout. Please try again or check the server status."
 
                     db_session.completed_at = datetime.utcnow()
                     await db_session_local.commit()
@@ -930,7 +821,6 @@ class OpenCodeSessionService:
                     print(f"[OpenCode] Background poll completed with status: {db_session.status}")
         except Exception as e:
             print(f"[OpenCode] Background poll failed: {e}")
-            print(f"[OpenCode] Background poll traceback: {traceback.format_exc()}")
 
             try:
                 async with AsyncSessionLocal() as db_session_local:
