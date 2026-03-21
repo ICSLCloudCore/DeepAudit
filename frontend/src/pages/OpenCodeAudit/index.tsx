@@ -15,6 +15,7 @@ import { useOpenCodeAuditState } from "./hooks";
 import { ACTION_VERBS, POLLING_INTERVALS } from "./constants";
 import { createLogItem } from "./utils";
 import type { LogItem } from "./types";
+import type { OpenCodeMessage } from "./messageTypes";
 
 import {
   opencodeApi,
@@ -22,9 +23,6 @@ import {
 } from "@/shared/api/opencode";
 
 import { createOpenCodeSessionStream } from "@/shared/api/opencodeSessionStream";
-
-// 临时：导入模拟数据
-import { mockMessages } from "./mockData";
 
 function OpenCodeAuditPageContent() {
   const { sessionId, projectId } = useParams<{ sessionId?: string; projectId?: string }>();
@@ -218,6 +216,10 @@ function OpenCodeAuditPageContent() {
           }
         }
       },
+      onMessage: (message) => {
+        console.log('[OpenCodeStream] Received message:', message);
+        addMessage(message);
+      },
       onDone: () => {
         console.log('[OpenCodeStream] Stream completed');
         setSseConnected(false);
@@ -333,8 +335,37 @@ function OpenCodeAuditPageContent() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-muted/30">
-            {/* 临时：使用模拟数据测试新组件 */}
-            <MessageList messages={mockMessages} isStreaming={isRunning} />
+            {messages.length > 0 ? (
+              <MessageList messages={messages} isStreaming={isRunning} />
+            ) : logs.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center text-muted-foreground">
+                  {isRunning ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      <span className="text-sm font-mono tracking-wide">
+                        WAITING FOR OPENDCODE ACTIVITY...
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm font-mono tracking-wide">
+                      NO ACTIVITY YET
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {logs.map(item => (
+                  <LogEntry
+                    key={item.id}
+                    item={item}
+                    isExpanded={expandedLogIds.has(item.id)}
+                    onToggle={() => toggleLogExpanded(item.id)}
+                  />
+                ))}
+              </div>
+            )}
             <div ref={logEndRef} />
           </div>
 

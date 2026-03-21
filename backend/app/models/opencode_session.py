@@ -34,6 +34,9 @@ class OpenCodeSession(Base):
 
     response_content = Column(Text, default="", nullable=False)
 
+    # OpenCode Server 的会话 ID
+    opencode_server_session_id = Column(String, nullable=True)
+
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
 

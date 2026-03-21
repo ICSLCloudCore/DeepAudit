@@ -3,7 +3,25 @@
  * 参考 agentStream.ts 的实现模式
  */
 
-import { OpenCodeStreamEvent, OpenCodeStreamEventType, OpenCodeSessionStreamOptions } from "./opencode";
+import type { OpenCodeMessage } from "../../pages/OpenCodeAudit/messageTypes";
+
+export interface OpenCodeSessionStreamOptions {
+  onData?: (newData: string, accumulated: string) => void;
+  onDone?: () => void;
+  onError?: (error: string) => void;
+  onHeartbeat?: () => void;
+  onMessage?: (message: OpenCodeMessage) => void;
+}
+
+export type OpenCodeStreamEventType = 'data' | 'error' | 'done' | 'heartbeat';
+
+export interface OpenCodeStreamEvent {
+  type: OpenCodeStreamEventType;
+  data?: string;
+  error?: string;
+  message?: OpenCodeMessage;
+  timestamp?: string;
+}
 
 export class OpenCodeSessionStreamHandler {
   private sessionId: string;
@@ -158,7 +176,13 @@ export class OpenCodeSessionStreamHandler {
     return { parsed, remaining };
   }
 
-  private handleEvent(event: OpenCodeStreamEvent): void {
+  private handleEvent(event: any): void {
+    // 检查是否是 message 类型的事件
+    if (event.type === 'data' && event.message) {
+      this.options.onMessage?.(event.message);
+      return;
+    }
+
     switch (event.type) {
       case 'data':
         if (event.data) {

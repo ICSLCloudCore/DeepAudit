@@ -767,6 +767,7 @@ class OpenCodeSessionService:
 
         db_session.status = OpenCodeSessionStatus.ACTIVE
         db_session.started_at = datetime.utcnow()
+        db_session.opencode_server_session_id = server_session_id
         await self.db.commit()
         await self.db.refresh(db_session)
 
