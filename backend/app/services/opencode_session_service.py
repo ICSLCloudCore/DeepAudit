@@ -891,11 +891,29 @@ class OpenCodeSessionService:
 
                                     print(f"[OpenCode] Update traceback: {traceback.format_exc()}")
 
-                        # 完成时返回
+                        # 完成时立即更新数据库并返回
                         if is_finished and full_response:
                             print(
                                 f"[OpenCode] Polling completed, returning full response (length: {len(full_response)})"
                             )
+                            # 立即更新数据库，将会话状态改为 closed
+                            try:
+                                async with AsyncSessionLocal() as write_db:
+                                    result_write = await write_db.execute(
+                                        select(OpenCodeSession).where(
+                                            OpenCodeSession.id == db_session_id
+                                        )
+                                    )
+                                    session_to_update = result_write.scalar_one_or_none()
+                                    if session_to_update:
+                                        session_to_update.response_content = full_response
+                                        session_to_update.status = OpenCodeSessionStatus.CLOSED
+                                        session_to_update.completed_at = datetime.utcnow()
+                                        await write_db.commit()
+                                        print(f"[OpenCode] Session marked as closed immediately")
+                            except Exception as write_err:
+                                print(f"[OpenCode] Failed to mark session as closed: {write_err}")
+
                             return full_response
 
                 await asyncio.sleep(poll_interval)

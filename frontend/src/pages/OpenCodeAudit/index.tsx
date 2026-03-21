@@ -97,7 +97,7 @@ function OpenCodeAuditPageContent() {
       }
       
       // 当有响应内容时：显示返回的结果
-      if (data.response_content && data.response_content !== session?.response_content) {
+      if (data.response_content) {
         // 检查是否已经有 response log 了
         const hasResponseLog = logs.some(log => log.type === 'response');
         if (!hasResponseLog) {
@@ -106,6 +106,13 @@ function OpenCodeAuditPageContent() {
             title: 'Response received',
             content: data.response_content
           });
+        } else {
+          // 如果已经有 response log，更新它的内容
+          const responseLogIndex = logs.findIndex(log => log.type === 'response');
+          if (responseLogIndex !== -1) {
+            const lastLog = logs[responseLogIndex];
+            updateLog(lastLog.id, { content: data.response_content });
+          }
         }
       }
       
