@@ -563,7 +563,7 @@ export default function TerminalProgressDialog({
                             </div>
 
                             {/* Bottom Controls */}
-                            <div className="h-14 px-4 border-t border-slate-200 dark:border-[#1a2535] bg-slate-50 dark:cyber-bg-elevated/90 flex items-center justify-between">
+                            <div className="h-14 px-4 border-t border-slate-200 dark:border-[#1a2535] bg-slate-50 dark:cyber-bg-elevated flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-[#6a7587] font-mono tracking-wide">
                                     <Activity className="w-3.5 h-3.5" />
                                     <span>
