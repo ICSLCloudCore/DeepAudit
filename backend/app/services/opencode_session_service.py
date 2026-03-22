@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
 from app.models.opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType
 from app.models.opencode_message_content import OpenCodeMessageContent, OpenCodeMessageContentType
+from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
 from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.models.user import User
@@ -643,6 +644,52 @@ class OpenCodeSessionService:
         print(f"[OpenCode] OpenCode db_session_id created: {session.id}")
         return session
 
+    async def create_opencode_audit_task(
+        self,
+        project_id: str,
+        prompt_template_id: Optional[str],
+        prompt_content: str,
+        current_user: User,
+        db_session_id: Optional[str] = None,
+    ) -> OpenCodeAuditTask:
+        """
+        创建OpenCode审计任务
+        """
+        print(f"[OpenCode] Creating OpenCode audit task for project {project_id}")
+        
+        # 获取提示词模板名称
+        task_name = "OpenCode 审计任务"
+        task_description = "使用 OpenCode 进行代码审计"
+        
+        if prompt_template_id:
+            result = await self.db.execute(
+                select(PromptTemplate).where(PromptTemplate.id == prompt_template_id)
+            )
+            template = result.scalar_one_or_none()
+            if template:
+                task_name = f"OpenCode: {template.name}"
+                task_description = template.description or task_description
+        
+        audit_task = OpenCodeAuditTask(
+            project_id=project_id,
+            created_by=current_user.id,
+            name=task_name,
+            description=task_description,
+            opencode_session_id=db_session_id,
+            opencode_prompt_template_id=prompt_template_id,
+            prompt_content=prompt_content,
+            status=OpenCodeAuditTaskStatus.RUNNING,
+            current_step="Initializing audit",
+            started_at=datetime.utcnow(),
+        )
+
+        self.db.add(audit_task)
+        await self.db.commit()
+        await self.db.refresh(audit_task)
+
+        print(f"[OpenCode] OpenCode audit task created: {audit_task.id}")
+        return audit_task
+
     async def start_audit_with_prompt(
         self,
         project_id: str,
@@ -682,6 +729,15 @@ class OpenCodeSessionService:
             project_id, prompt_template_id, final_prompt_content, current_user
         )
 
+        # 创建审计任务
+        audit_task = await self.create_opencode_audit_task(
+            project_id,
+            prompt_template_id,
+            final_prompt_content,
+            current_user,
+            db_session_id=db_session.id,
+        )
+
         server_session_id = await self.create_opencode_server_session(project)
         message_id = None
 
@@ -695,13 +751,23 @@ class OpenCodeSessionService:
                 await asyncio.sleep(3)
                 asyncio.create_task(
                     self._background_poll_result(
-                        project_id, db_session.id, server_session_id, message_id, current_user.id
+                        project_id, db_session.id, audit_task.id, server_session_id, message_id, current_user.id
                     )
                 )
             else:
                 print(f"[OpenCode] Failed to get message_id, skipping background poll")
+                # 更新任务状态为失败
+                audit_task.status = OpenCodeAuditTaskStatus.FAILED
+                audit_task.error_message = "Failed to send prompt to OpenCode server"
+                audit_task.completed_at = datetime.utcnow()
+                await self.db.commit()
         else:
             print(f"[OpenCode] Failed to get server_session_id, skipping prompt sending")
+            # 更新任务状态为失败
+            audit_task.status = OpenCodeAuditTaskStatus.FAILED
+            audit_task.error_message = "Failed to create OpenCode server session"
+            audit_task.completed_at = datetime.utcnow()
+            await self.db.commit()
 
         db_session.status = OpenCodeSessionStatus.ACTIVE
         db_session.started_at = datetime.utcnow()
@@ -711,7 +777,7 @@ class OpenCodeSessionService:
         project.opencode_current_session_id = db_session.id
         await self.db.commit()
 
-        print(f"[OpenCode] Audit started successfully, session ID: {db_session.id}")
+        print(f"[OpenCode] Audit started successfully, session ID: {db_session.id}, task ID: {audit_task.id}")
         return db_session, server_status
 
     async def poll_opencode_result_with_updates(
@@ -798,6 +864,7 @@ class OpenCodeSessionService:
         self,
         project_id: str,
         db_session_id: str,
+        audit_task_id: str,
         server_session_id: str,
         message_id: Optional[str],
         user_id: str,
@@ -806,6 +873,7 @@ class OpenCodeSessionService:
         后台轮询结果任务 - 使用独立的数据库会话
         """
         print(f"[OpenCode] Starting background poll for session {db_session_id}")
+        print(f"[OpenCode] Background poll - audit_task_id: {audit_task_id}")
         print(f"[OpenCode] Background poll - server_session_id: {server_session_id}")
         print(f"[OpenCode] Background poll - message_id: {message_id}")
 
@@ -828,6 +896,12 @@ class OpenCodeSessionService:
                 )
                 db_session = result_db.scalar_one_or_none()
 
+                # 获取审计任务
+                result_task = await db_session_local.execute(
+                    select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == audit_task_id)
+                )
+                audit_task = result_task.scalar_one_or_none()
+
                 if db_session:
                     if sign:
                         db_session.status = OpenCodeSessionStatus.CLOSED
@@ -837,6 +911,19 @@ class OpenCodeSessionService:
 
                     db_session.completed_at = datetime.utcnow()
                     await db_session_local.commit()
+
+                    # 更新审计任务状态
+                    if audit_task:
+                        if sign:
+                            audit_task.status = OpenCodeAuditTaskStatus.COMPLETED
+                            audit_task.current_step = "Audit completed"
+                        else:
+                            audit_task.status = OpenCodeAuditTaskStatus.FAILED
+                            audit_task.error_message = "LLM Server response timeout"
+                            audit_task.current_step = "Failed"
+
+                        audit_task.completed_at = datetime.utcnow()
+                        await db_session_local.commit()
 
                     print(f"[OpenCode] Background poll completed with status: {db_session.status}")
         except Exception as e:
@@ -851,6 +938,18 @@ class OpenCodeSessionService:
                     if db_session:
                         db_session.status = OpenCodeSessionStatus.ERROR
                         db_session.response_content = f"Error: {str(e)}"
+                        await db_session_local.commit()
+
+                    # 更新审计任务状态为失败
+                    result_task = await db_session_local.execute(
+                        select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == audit_task_id)
+                    )
+                    audit_task = result_task.scalar_one_or_none()
+                    if audit_task:
+                        audit_task.status = OpenCodeAuditTaskStatus.FAILED
+                        audit_task.error_message = str(e)
+                        audit_task.current_step = "Failed"
+                        audit_task.completed_at = datetime.utcnow()
                         await db_session_local.commit()
             except Exception:
                 pass
