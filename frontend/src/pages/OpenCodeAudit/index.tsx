@@ -5,16 +5,14 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Terminal, Loader2, ArrowDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 import { SplashScreen, Header, LogEntry, StatsPanel } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
-import { ACTION_VERBS, POLLING_INTERVALS } from "./constants";
-import { createLogItem } from "./utils";
-import type { LogItem } from "./types";
+import { ACTION_VERBS } from "./constants";
 
 import {
   opencodeApi,
@@ -23,14 +21,13 @@ import {
 
 function OpenCodeAuditPageContent() {
   const { sessionId, projectId } = useParams<{ sessionId?: string; projectId?: string }>();
-  const navigate = useNavigate();
   
   const {
-    session, logs, isLoading, error,
+    session, logs, isLoading,
     isAutoScroll, expandedLogIds, isRunning, isComplete,
-    setSession, setLogs, addLog, updateLog, removeLog,
+    setSession, addLog, updateLog,
     setLoading, setError, setAutoScroll, toggleLogExpanded,
-    reset, dispatch,
+    reset
   } = useOpenCodeAuditState();
 
   const [showSplash, setShowSplash] = useState(!sessionId);
@@ -38,12 +35,38 @@ function OpenCodeAuditPageContent() {
   const [statusDots, setStatusDots] = useState(0);
 
   const logEndRef = useRef<HTMLDivElement>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
+  const streamingLogIdsRef = useRef<Map<string, string>>(new Map());
+  
+  // Use refs to avoid including frequently changing values in useEffect dependencies
+  const addLogRef = useRef(addLog);
+  const updateLogRef = useRef(updateLog);
+  const loadSessionRef = useRef<typeof loadSession | null>(null);
+  const logsRef = useRef(logs);
+  const isCompleteRef = useRef(isComplete);
+
+  // Update refs when values change
+  useEffect(() => {
+    addLogRef.current = addLog;
+  }, [addLog]);
+
+  useEffect(() => {
+    updateLogRef.current = updateLog;
+  }, [updateLog]);
+
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  useEffect(() => {
+    isCompleteRef.current = isComplete;
+  }, [isComplete]);
 
   useEffect(() => {
     if (sessionId !== previousSessionIdRef.current) {
       reset();
+      streamingLogIdsRef.current.clear();
       setShowSplash(!sessionId);
     }
     previousSessionIdRef.current = sessionId;
@@ -76,39 +99,18 @@ function OpenCodeAuditPageContent() {
       };
       setSession(sessionData);
       
-      // 首次加载时：显示发送的prompt
-      if (!logs.length && sessionId && data.prompt_content) {
-        addLog({
-          type: 'prompt',
-          title: 'Prompt sent',
-          content: data.prompt_content
-        });
-      }
-      
-      // 当有响应内容时：显示返回的结果
-      if (data.response_content && data.response_content !== session?.response_content) {
-        addLog({
-          type: 'response',
-          title: 'Response received',
-          content: data.response_content
-        });
-      }
-      
-      // 当session完成时：显示关闭提示
-      if (isComplete && !session?.completed_at) {
-        addLog({
-          type: 'status',
-          title: 'Session completed',
-          content: `Audit session ${data.status === 'closed' ? 'completed successfully' : 'failed'}`
-        });
-      }
     } catch (err) {
       toast.error("Failed to load session");
       setError("Failed to load session");
     } finally {
       setLoading(false);
     }
-  }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content, session?.completed_at, isComplete]);
+  }, [sessionId, setSession, setLoading, setError, addLog, logs.length]);
+
+  // Update loadSession ref after it's defined
+  useEffect(() => {
+    loadSessionRef.current = loadSession;
+  }, [loadSession]);
 
   const loadInteractions = useCallback(async () => {
     if (!sessionId) return;
@@ -149,28 +151,102 @@ function OpenCodeAuditPageContent() {
     }
     setShowSplash(false);
     loadSession();
-    loadInteractions();
-  }, [sessionId, loadSession, loadInteractions]);
+  }, [sessionId, loadSession]);
 
+  // SSE Stream Effect
   useEffect(() => {
-    if (!sessionId || !isRunning) {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-      return;
+    // console.log(sessionId, isRunning);
+
+    // if (!sessionId || !isRunning) {
+    //   if (eventSourceRef.current) {
+    //     eventSourceRef.current.close();
+    //     eventSourceRef.current = null;
+    //   }
+    //   return;
+    // }
+    if (!sessionId) {
+      return ;
+    }
+    try {
+      const eventSource = opencodeApi.streamSession(sessionId);
+      eventSourceRef.current = eventSource;
+
+      eventSource.addEventListener('open', () => {
+        console.log('SSE connection opened');
+      });
+
+      eventSource.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const { content_type, text_content, message_index } = data;
+          
+          const logKey = content_type;
+          let logId = streamingLogIdsRef.current.get(logKey);
+          
+          if (!logId) {
+            // Create new log entry
+            const title = content_type === 'response' ? 'Response' : 
+                         content_type === 'reasoning' ? 'Reasoning' : content_type;
+            logId = addLogRef.current({
+              type: content_type === 'response' ? 'response' : 
+                   content_type === 'reasoning' ? 'progress' : 'info',
+              title,
+              content: text_content,
+              isStreaming: true
+            });
+            streamingLogIdsRef.current.set(logKey, logId);
+          } else {
+            // Update existing log entry
+            const existingLog = logsRef.current.find(log => log.id === logId);
+            if (existingLog) {
+              updateLogRef.current(logId, {
+                content: (existingLog.content || '') + text_content
+              });
+            }
+          }
+        } catch (parseError) {
+          console.error('Failed to parse SSE message:', parseError);
+        }
+      });
+
+      eventSource.addEventListener('done', async () => {
+        // Mark all streaming logs as complete
+        streamingLogIdsRef.current.forEach((logId) => {
+          updateLogRef.current(logId, { isStreaming: false });
+        });
+        streamingLogIdsRef.current.clear();
+        
+        // Refresh session status
+        if (loadSessionRef.current) {
+          await loadSessionRef.current();
+        }
+        
+        // Add completion log
+        if (!isCompleteRef.current) {
+          addLogRef.current({
+            type: 'status',
+            title: 'Session completed',
+            content: 'Audit session has completed'
+          });
+        }
+      });
+
+      eventSource.addEventListener('error', (error) => {
+        console.error('SSE connection error:', error);
+        eventSource.close();
+        eventSourceRef.current = null;
+      });
+    } catch (err) {
+      console.error('Failed to create SSE connection:', err);
     }
 
-    pollIntervalRef.current = setInterval(() => {
-      loadSession();
-    }, POLLING_INTERVALS.SESSION_STATUS);
-
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
     };
-  }, [sessionId, isRunning, loadSession]);
+  }, [sessionId, isRunning]);
 
   useEffect(() => {
     if (isAutoScroll && logEndRef.current) {

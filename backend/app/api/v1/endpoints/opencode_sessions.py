@@ -14,6 +14,7 @@ import asyncio
 from app.db.session import get_db
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
 from app.models.opencode_interaction import OpenCodeInteraction
+from app.models.opencode_message_content import OpenCodeMessageContent
 from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.api.deps import get_current_user
@@ -22,14 +23,11 @@ from app.schemas.opencode_session import (
     OpenCodeSessionResponse,
     OpenCodeSessionListResponse,
     SendPromptRequest,
-    OpenCodeStreamEventType,
-    OpenCodeStreamEvent,
     StartAuditWithPromptRequest,
     StartAuditWithPromptResponse,
     SessionStatusResponse,
     AvailablePromptsResponse,
     AvailablePromptItem,
-    OpenCodeServerStatus,
     OpenCodeInteractionResponse,
     OpenCodeInteractionListResponse,
 )
@@ -304,108 +302,48 @@ async def session_stream(
     if project and project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    from app.db.session import AsyncSessionLocal
-
     async def event_generator():
-        yield {
-            "event": OpenCodeStreamEventType.DATA.value,
-            "data": json.dumps(
-                {
-                    "type": OpenCodeStreamEventType.DATA.value,
-                    "data": "开始处理您的提示词...\n\n",
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-            ),
-        }
-
-        last_sent_length = len("开始处理您的提示词...\n\n")
-        max_polls = 300
-        poll_interval = 0.5
-
-        for poll_count in range(max_polls):
-            try:
-                async with AsyncSessionLocal() as db_session_local:
-                    result_db = await db_session_local.execute(
-                        select(OpenCodeSession).where(OpenCodeSession.id == session_id)
+        last_index = -1
+        while True:
+            # 查询大于last_index的消息
+            query = (
+                select(OpenCodeMessageContent)
+                .where(
+                    and_(
+                        OpenCodeMessageContent.session_id == session_id,
+                        OpenCodeMessageContent.message_index > last_index
                     )
-                    current_session = result_db.scalar_one_or_none()
-
-                    if not current_session:
-                        yield {
-                            "event": OpenCodeStreamEventType.ERROR.value,
-                            "data": json.dumps(
-                                {
-                                    "type": OpenCodeStreamEventType.ERROR.value,
-                                    "error": "Session not found",
-                                    "timestamp": datetime.utcnow().isoformat(),
-                                }
-                            ),
-                        }
-                        return
-
-                    current_content = current_session.response_content or ""
-                    if len(current_content) > last_sent_length:
-                        new_content = current_content[last_sent_length:]
-                        last_sent_length = len(current_content)
-
-                        yield {
-                            "event": OpenCodeStreamEventType.DATA.value,
-                            "data": json.dumps(
-                                {
-                                    "type": OpenCodeStreamEventType.DATA.value,
-                                    "data": new_content,
-                                    "timestamp": datetime.utcnow().isoformat(),
-                                }
-                            ),
-                        }
-
-                    if current_session.status == OpenCodeSessionStatus.CLOSED:
-                        yield {
-                            "event": OpenCodeStreamEventType.DONE.value,
-                            "data": json.dumps(
-                                {
-                                    "type": OpenCodeStreamEventType.DONE.value,
-                                    "timestamp": datetime.utcnow().isoformat(),
-                                }
-                            ),
-                        }
-                        return
-                    elif current_session.status == OpenCodeSessionStatus.ERROR:
-                        yield {
-                            "event": OpenCodeStreamEventType.ERROR.value,
-                            "data": json.dumps(
-                                {
-                                    "type": OpenCodeStreamEventType.ERROR.value,
-                                    "error": current_session.response_content or "Unknown error",
-                                    "timestamp": datetime.utcnow().isoformat(),
-                                }
-                            ),
-                        }
-                        return
-
-            except Exception as e:
-                print(f"[OpenCode] Stream poll error: {e}")
-                import traceback
-
-                print(f"[OpenCode] Stream poll traceback: {traceback.format_exc()}")
-
-            await asyncio.sleep(poll_interval)
-
-        yield {
-            "event": OpenCodeStreamEventType.ERROR.value,
-            "data": json.dumps(
-                {
-                    "type": OpenCodeStreamEventType.ERROR.value,
-                    "error": "响应超时",
-                    "timestamp": datetime.utcnow().isoformat(),
+                )
+                .order_by(OpenCodeMessageContent.message_index)
+            )
+            result = await db.execute(query)
+            messages = result.scalars().all()
+            print("total:", len(messages))
+            for msg in messages:
+                yield {
+                    "event": "message",
+                    "data": json.dumps({
+                        "content_type": msg.content_type,
+                        "text_content": msg.text_content,
+                        "message_index": msg.message_index
+                    })
                 }
-            ),
-        }
+                # print("sent message", msg.content_type, msg.message_index, msg.text_content)
+                last_index = msg.message_index
+                await asyncio.sleep(1)
+
+            # 检查会话是否结束 不考虑另一边存储状态的时间差
+            await db.refresh(session)
+            if session.status in [OpenCodeSessionStatus.CLOSED, OpenCodeSessionStatus.ERROR]:
+                yield {
+                    "event": "done",
+                    "data": json.dumps({"status": session.status})
+                }
+                break
+
+            await asyncio.sleep(1)
 
     return EventSourceResponse(event_generator())
-
-
-from app.db.session import AsyncSessionLocal
 
 
 @router.post(
