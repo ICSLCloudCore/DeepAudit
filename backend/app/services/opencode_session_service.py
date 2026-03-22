@@ -78,7 +78,7 @@ async def log_opencode_interaction_to_db(
 
 def log_opencode_interaction(direction: str, endpoint: str, data: Any = None):
     """记录OpenCode Server交互日志"""
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(datetime.timezone.utc).isoformat()
     log_entry = {"timestamp": timestamp, "direction": direction, "endpoint": endpoint, "data": data}
     print(
         f"[OpenCode] {direction.upper()} {endpoint}: {json.dumps(data, default=str) if data else 'None'}"
@@ -107,7 +107,7 @@ class OpenCodeSessionService:
         """
         包装OpenCode Server请求，自动记录交互到数据库
         """
-        request_time = datetime.utcnow()
+        request_time = datetime.now(datetime.timezone.utc)
 
         try:
             log_opencode_interaction("request", endpoint, json_data)
@@ -120,7 +120,7 @@ class OpenCodeSessionService:
                 else:
                     raise ValueError(f"Unsupported HTTP method: {method}")
 
-            response_time = datetime.utcnow()
+            response_time = datetime.now(datetime.timezone.utc)
             duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
             print(f"[OpenCode] Response status: {response.status_code}")
@@ -192,7 +192,7 @@ class OpenCodeSessionService:
 
             log_opencode_interaction("error", endpoint, {"error": str(e)})
 
-            response_time = datetime.utcnow()
+            response_time = datetime.now(datetime.timezone.utc)
             duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
             if self._current_session_id:
@@ -229,14 +229,14 @@ class OpenCodeSessionService:
     ) -> bool:
         """检查OpenCode Server健康状态"""
         print(f"[OpenCode] Checking OpenCode Server health...")
-        request_time = datetime.utcnow()
+        request_time = datetime.now(datetime.timezone.utc)
         try:
             url = self.get_opencode_server_url(project)
             health_url = f"{url}/global/health"
 
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(health_url)
-                response_time = datetime.utcnow()
+                response_time = datetime.now(datetime.timezone.utc)
                 duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
                 if response.status_code == 200:
@@ -286,7 +286,7 @@ class OpenCodeSessionService:
             print(f"[OpenCode] Health check exception: {e}")
 
             if db_session_id:
-                response_time = datetime.utcnow()
+                response_time = datetime.now(datetime.timezone.utc)
                 duration_ms = int((response_time - request_time).total_seconds() * 1000)
                 await log_opencode_interaction_to_db(
                     self.db,
@@ -500,7 +500,7 @@ class OpenCodeSessionService:
             project.opencode_pid = str(pid)
             project.opencode_port = port
             project.opencode_log_path = log_path
-            project.opencode_started_at = datetime.utcnow()
+            project.opencode_started_at = datetime.now(datetime.timezone.utc)
             await self.db.commit()
 
             print(f"[OpenCode] Successfully started opencode serve: PID={pid}, Port={port}")
@@ -703,7 +703,7 @@ class OpenCodeSessionService:
             print(f"[OpenCode] Failed to get server_session_id, skipping prompt sending")
 
         db_session.status = OpenCodeSessionStatus.ACTIVE
-        db_session.started_at = datetime.utcnow()
+        db_session.started_at = datetime.now(datetime.timezone.utc)
         await self.db.commit()
         await self.db.refresh(db_session)
 
@@ -719,9 +719,9 @@ class OpenCodeSessionService:
         server_session_id: str,
         message_id: Optional[str],
         db_session_id: str,
-    ) -> tuple[str, bool]:
+    ) -> bool:
         """
-        轮询OpenCode服务器获取结果 - 使用新的message API，检查reason=stop
+        轮询OpenCode服务器获取结果
         """
         print(f"[OpenCode] Polling OpenCode Server for result (with updates)...")
         print(f"[OpenCode] Polling for session: {server_session_id}")
@@ -731,7 +731,6 @@ class OpenCodeSessionService:
         poll_interval = 3
         record_index = 1
         same_time = 1
-        full_response = ""
 
         url = self.get_opencode_server_url(project)
         message_url = f"{url}/session/{server_session_id}/message"
@@ -747,7 +746,7 @@ class OpenCodeSessionService:
                         if record_index == len(data):
                             same_time += 1
                         if same_time == 10:
-                            return full_response, True
+                            return True
                         
                         for item in data[record_index:]:
                             info = item.get("info", {})
@@ -755,10 +754,10 @@ class OpenCodeSessionService:
                                 for part in item.get("parts", []):
                                     if (part_type := part.get("type")) == "text":
                                         text_content = part.get("text", "")
-                                        full_response += text_content
                                         print("[RESPONSE]", text_content)
                                     elif part_type == "reasoning":
-                                        print("[THINGKING]", part.get("text", ""))
+                                        text_content = part.get("text", "")
+                                        print("[THINGKING]", text_content)
                                 # 索引往前推
                                 record_index += 1
 
@@ -769,7 +768,7 @@ class OpenCodeSessionService:
                 await asyncio.sleep(poll_interval)
 
         print(f"[OpenCode] Polling timed out after {max_polls} attempts")
-        return full_response, False
+        return False
 
     async def _background_poll_result(
         self,
@@ -796,7 +795,7 @@ class OpenCodeSessionService:
                 # 设置当前会话ID，用于交互记录
                 self.set_current_session_id(db_session_id)
 
-                result, sign = await self.poll_opencode_result_with_updates(
+                sign = await self.poll_opencode_result_with_updates(
                     project, server_session_id, message_id, db_session_id
                 )
 
@@ -806,16 +805,13 @@ class OpenCodeSessionService:
                 db_session = result_db.scalar_one_or_none()
 
                 if db_session:
-                    db_session.response_content = result
-
-                    # 检查是否超时
                     if sign:
                         db_session.status = OpenCodeSessionStatus.CLOSED
                     else:
                         db_session.status = OpenCodeSessionStatus.ERROR
-                        db_session.response_content += "\nOpenCode Server response timeout. Please try again or check the server status."
+                        db_session.response_content += "\nLLM Server response timeout. Please try again or check the server status."
 
-                    db_session.completed_at = datetime.utcnow()
+                    db_session.completed_at = datetime.now(datetime.timezone.utc)
                     await db_session_local.commit()
 
                     print(f"[OpenCode] Background poll completed with status: {db_session.status}")
