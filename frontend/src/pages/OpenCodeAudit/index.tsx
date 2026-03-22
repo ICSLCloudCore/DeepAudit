@@ -15,8 +15,7 @@ import { useOpenCodeAuditState } from "./hooks";
 import { ACTION_VERBS } from "./constants";
 
 import {
-  opencodeApi,
-  type OpenCodeInteraction,
+  opencodeApi
 } from "@/shared/api/opencode";
 
 function OpenCodeAuditPageContent() {
@@ -112,38 +111,6 @@ function OpenCodeAuditPageContent() {
     loadSessionRef.current = loadSession;
   }, [loadSession]);
 
-  const loadInteractions = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      const data = await opencodeApi.getSessionInteractions(sessionId, { limit: 100 });
-      
-      if (data.items && data.items.length > 0) {
-        data.items.reverse().forEach((interaction: OpenCodeInteraction) => {
-          // 过滤掉健康检查和轮询的请求
-          const endpoint = interaction.endpoint || '';
-          const isHealthCheck = endpoint.includes('/health');
-          const isPolling = endpoint.includes('/message') && interaction.http_method === 'GET';
-          
-          if (isHealthCheck || isPolling) {
-            return; // 跳过健康检查和轮询
-          }
-          
-          const logType = interaction.interaction_type === 'request' ? 'prompt' :
-                        interaction.interaction_type === 'response' ? 'response' :
-                        'error';
-          
-          addLog({
-            type: logType,
-            title: `${interaction.http_method} ${interaction.endpoint}`,
-            content: interaction.response_payload || interaction.request_payload || '',
-          });
-        });
-      }
-    } catch (err) {
-      console.error('Failed to load interactions:', err);
-    }
-  }, [sessionId, addLog]);
-
   useEffect(() => {
     if (!sessionId) {
       setShowSplash(true);
@@ -162,33 +129,20 @@ function OpenCodeAuditPageContent() {
       const eventSource = opencodeApi.streamSession(sessionId);
       eventSourceRef.current = eventSource;
 
-      eventSource.addEventListener('open', () => {
-        console.log('SSE connection opened');
-      });
-
       eventSource.addEventListener('message', (event) => {
         try {
           const data = JSON.parse(event.data);
-          const { content_type, text_content, message_index } = data;
-          
-          // 使用 message_index 作为唯一标识符，确保每条消息都创建新卡片
-          // 如果没有 message_index，使用时间戳生成唯一 key
+          const { content_type, text_content } = data;
           const logKey = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          let logId = streamingLogIdsRef.current.get(logKey);
-          
-          if (!logId) {
-            // 为每条消息创建新的日志卡片
-            const title = content_type === 'response' ? 'Response' : 
-                         content_type === 'reasoning' ? 'Reasoning' : content_type;
-            logId = addLogRef.current({
-              type: content_type === 'response' ? 'response' : 
-                   content_type === 'reasoning' ? 'progress' : 'info',
-              title,
-              content: text_content,
-              isStreaming: false // 不再流式更新，每条消息独立
-            });
-            streamingLogIdsRef.current.set(logKey, logId);
-          }
+          // 为每条消息创建新的日志卡片
+          const logId = addLogRef.current({
+            type: content_type === 'response' ? 'response' : 
+                  content_type === 'reasoning' ? 'progress' : 'info',
+            title: "",
+            content: text_content,
+            isStreaming: false // 不再流式更新，每条消息独立
+          });
+          streamingLogIdsRef.current.set(logKey, logId);
         } catch (parseError) {
           console.error('Failed to parse SSE message:', parseError);
         }
