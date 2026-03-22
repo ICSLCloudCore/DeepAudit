@@ -318,7 +318,6 @@ async def session_stream(
             )
             result = await db.execute(query)
             messages = result.scalars().all()
-            print("total:", len(messages))
             for msg in messages:
                 yield {
                     "event": "message",

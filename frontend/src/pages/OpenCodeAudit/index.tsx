@@ -155,15 +155,6 @@ function OpenCodeAuditPageContent() {
 
   // SSE Stream Effect
   useEffect(() => {
-    // console.log(sessionId, isRunning);
-
-    // if (!sessionId || !isRunning) {
-    //   if (eventSourceRef.current) {
-    //     eventSourceRef.current.close();
-    //     eventSourceRef.current = null;
-    //   }
-    //   return;
-    // }
     if (!sessionId) {
       return ;
     }
@@ -180,11 +171,13 @@ function OpenCodeAuditPageContent() {
           const data = JSON.parse(event.data);
           const { content_type, text_content, message_index } = data;
           
-          const logKey = content_type;
+          // 使用 message_index 作为唯一标识符，确保每条消息都创建新卡片
+          // 如果没有 message_index，使用时间戳生成唯一 key
+          const logKey = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           let logId = streamingLogIdsRef.current.get(logKey);
           
           if (!logId) {
-            // Create new log entry
+            // 为每条消息创建新的日志卡片
             const title = content_type === 'response' ? 'Response' : 
                          content_type === 'reasoning' ? 'Reasoning' : content_type;
             logId = addLogRef.current({
@@ -192,17 +185,9 @@ function OpenCodeAuditPageContent() {
                    content_type === 'reasoning' ? 'progress' : 'info',
               title,
               content: text_content,
-              isStreaming: true
+              isStreaming: false // 不再流式更新，每条消息独立
             });
             streamingLogIdsRef.current.set(logKey, logId);
-          } else {
-            // Update existing log entry
-            const existingLog = logsRef.current.find(log => log.id === logId);
-            if (existingLog) {
-              updateLogRef.current(logId, {
-                content: (existingLog.content || '') + text_content
-              });
-            }
           }
         } catch (parseError) {
           console.error('Failed to parse SSE message:', parseError);
