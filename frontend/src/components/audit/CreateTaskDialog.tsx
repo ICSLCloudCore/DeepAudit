@@ -29,6 +29,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Search,
   ChevronRight,
@@ -43,13 +46,20 @@ import {
   Zap,
   Bot,
   Code,
+  BookOpen,
+  Edit3,
+  Terminal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/shared/config/database";
 import { getRuleSets, type AuditRuleSet } from "@/shared/api/rules";
 import { getPromptTemplates, type PromptTemplate } from "@/shared/api/prompts";
 import { createAgentTask } from "@/shared/api/agentTasks";
-import { opencodeApi } from "@/shared/api/opencode";
+import {
+  opencodeApi,
+  type AvailablePromptItem,
+  type StartAuditWithPromptResponse,
+} from "@/shared/api/opencode";
 
 import { useProjects } from "./hooks/useTaskForm";
 import { useZipFile, formatFileSize } from "./hooks/useZipFile";
@@ -108,9 +118,83 @@ export default function CreateTaskDialog({
   const [selectedRuleSetId, setSelectedRuleSetId] = useState<string>("");
   const [selectedPromptTemplateId, setSelectedPromptTemplateId] = useState<string>("");
 
+  // OpenCode 相关状态
+  const [opencodeMode, setOpencodeMode] = useState<"template" | "custom">("template");
+  const [selectedOpencodeTemplateId, setSelectedOpencodeTemplateId] = useState<string>("");
+  const [customOpencodePrompt, setCustomOpencodePrompt] = useState("");
+  const [autoStartServer, setAutoStartServer] = useState(true);
+  const [availableOpencodePrompts, setAvailableOpencodePrompts] = useState<AvailablePromptItem[]>([]);
+  const [loadingOpencodePrompts, setLoadingOpencodePrompts] = useState(false);
+
   const { projects, loading, loadProjects } = useProjects();
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
   const zipState = useZipFile(selectedProject, projects);
+
+  // 加载 OpenCode 可用提示词
+  const loadAvailableOpencodePrompts = async () => {
+    if (!selectedProjectId) return;
+    
+    try {
+      setLoadingOpencodePrompts(true);
+      console.log("[CreateTaskDialog] Loading available prompts for project:", selectedProjectId);
+      
+      try {
+        const response = await opencodeApi.getAvailablePrompts(selectedProjectId);
+        console.log("[CreateTaskDialog] Available prompts response:", response);
+        setAvailableOpencodePrompts(response.items || []);
+        
+        const defaultTemplate = (response.items || []).find((t: AvailablePromptItem) => t.is_default);
+        if (defaultTemplate) {
+          setSelectedOpencodeTemplateId(defaultTemplate.id);
+        }
+      } catch (opencodeError: any) {
+        console.warn("[CreateTaskDialog] Failed to load from opencode API, falling back to prompts API:", opencodeError);
+        
+        try {
+          const fallbackResponse = await getPromptTemplates({ is_active: true, limit: 100 });
+          console.log("[CreateTaskDialog] Fallback prompts response:", fallbackResponse);
+          
+          const mappedPrompts: AvailablePromptItem[] = (fallbackResponse.items || []).map((t: PromptTemplate) => ({
+            id: t.id,
+            name: t.name,
+            description: t.description,
+            template_type: t.template_type,
+            is_default: t.is_default,
+            is_system: t.is_system,
+            is_active: t.is_active,
+          }));
+          
+          setAvailableOpencodePrompts(mappedPrompts);
+          
+          const defaultTemplate = mappedPrompts.find((t: AvailablePromptItem) => t.is_default);
+          if (defaultTemplate) {
+            setSelectedOpencodeTemplateId(defaultTemplate.id);
+          }
+          
+          toast.info("使用备选提示词列表");
+        } catch (fallbackError) {
+          console.error("[CreateTaskDialog] Both APIs failed:", fallbackError);
+          toast.error("加载提示词列表失败，请使用自定义提示词");
+          setAvailableOpencodePrompts([]);
+        }
+      }
+    } finally {
+      setLoadingOpencodePrompts(false);
+    }
+  };
+
+  // 重置 OpenCode 状态
+  const resetOpencodeState = () => {
+    setOpencodeMode("template");
+    setSelectedOpencodeTemplateId("");
+    setCustomOpencodePrompt("");
+    setAutoStartServer(true);
+  };
+
+  const selectedOpencodeTemplate = useMemo(
+    () => availableOpencodePrompts.find((t: AvailablePromptItem) => t.id === selectedOpencodeTemplateId),
+    [availableOpencodePrompts, selectedOpencodeTemplateId]
+  );
 
   useEffect(() => {
     const loadBranches = async () => {
@@ -180,6 +264,20 @@ export default function CreateTaskDialog({
     loadRulesAndPrompts();
   }, []);
 
+  // 当对话框打开或选中项目改变时，加载 OpenCode 提示词
+  useEffect(() => {
+    if (open && selectedProjectId && auditMode === "opencode") {
+      loadAvailableOpencodePrompts();
+    }
+  }, [open, selectedProjectId, auditMode]);
+
+  // 当审计模式切换到 OpenCode 时，重置状态
+  useEffect(() => {
+    if (auditMode === "opencode") {
+      resetOpencodeState();
+    }
+  }, [auditMode]);
+
   useEffect(() => {
     if (open) {
       loadProjects();
@@ -193,6 +291,7 @@ export default function CreateTaskDialog({
       const defaultPrompt = promptTemplates.find(p => p.is_default);
       setSelectedPromptTemplateId(defaultPrompt?.id || promptTemplates[0]?.id || "");
       zipState.reset();
+      resetOpencodeState();
     }
   }, [open, preselectedProjectId, ruleSets, promptTemplates]);
 
@@ -237,18 +336,38 @@ export default function CreateTaskDialog({
       }
 
       if (auditMode === "opencode") {
-        // Start opencode serve
-        const result = await opencodeApi.startProjectServe(selectedProject.id);
+        let prompt_template_id: string | undefined;
+        let prompt_content: string | undefined;
+
+        if (opencodeMode === "template" && selectedOpencodeTemplate) {
+          prompt_template_id = selectedOpencodeTemplate.id;
+        } else if (opencodeMode === "custom" && customOpencodePrompt.trim()) {
+          prompt_content = customOpencodePrompt;
+        }
+
+        if (!prompt_template_id && !prompt_content) {
+          toast.error("请选择提示词模板或输入自定义提示词");
+          return;
+        }
+
+        const response = await opencodeApi.startAuditWithPrompt(selectedProject.id, {
+          prompt_template_id,
+          prompt_content,
+        });
+
+        toast.success(response.message || "审计已启动");
         onOpenChange(false);
         onTaskCreated();
-        if (result.success) {
-          toast.success(result.message || "OpenCode 审计模式已启动");
-        } else {
-          toast.error(result.message || "OpenCode 审计模式启动失败");
-        }
+
         setSelectedProjectId("");
         setSelectedFiles(undefined);
         setExcludePatterns(DEFAULT_EXCLUDES);
+        resetOpencodeState();
+
+        // 跳转到 OpenCode 审计页面
+        if (response.session_id) {
+          navigate(`/opencode-audit/${response.session_id}`);
+        }
         return;
       }
 
@@ -302,8 +421,9 @@ export default function CreateTaskDialog({
       setSelectedProjectId("");
       setSelectedFiles(undefined);
       setExcludePatterns(DEFAULT_EXCLUDES);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "未知错误";
+    } catch (error: any) {
+      console.error("Failed to start audit:", error);
+      const msg = error.response?.data?.detail || (error instanceof Error ? error.message : "未知错误");
       toast.error(`启动失败: ${msg}`);
     } finally {
       setCreating(false);
@@ -318,8 +438,14 @@ export default function CreateTaskDialog({
         !!zipState.zipFile
       );
     }
+    if (auditMode === "opencode") {
+      if (creating || loadingOpencodePrompts) return false;
+      if (opencodeMode === "template") return !!selectedOpencodeTemplate;
+      if (opencodeMode === "custom") return !!customOpencodePrompt.trim();
+      return false;
+    }
     return !!selectedProject.repository_url && !!branch.trim();
-  }, [selectedProject, zipState, branch]);
+  }, [selectedProject, zipState, branch, auditMode, creating, loadingOpencodePrompts, opencodeMode, selectedOpencodeTemplate, customOpencodePrompt]);
 
   return (
     <>
@@ -487,8 +613,118 @@ export default function CreateTaskDialog({
                   />
                 )}
 
+                {/* OpenCode 审计配置 - 仅 OPENCODE 模式显示 */}
+                {auditMode === "opencode" && (
+                  <div className="space-y-4">
+                    <Tabs value={opencodeMode} onValueChange={(v) => setOpencodeMode(v as "template" | "custom")} className="w-full">
+                      <TabsList className="w-full">
+                        <TabsTrigger value="template" className="font-mono text-xs font-bold uppercase">
+                          <BookOpen className="w-4 h-4 mr-2" />
+                          提示词模板
+                        </TabsTrigger>
+                        <TabsTrigger value="custom" className="font-mono text-xs font-bold uppercase">
+                          <Edit3 className="w-4 h-4 mr-2" />
+                          自定义提示词
+                        </TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="template" className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-mono font-bold uppercase text-muted-foreground">
+                            选择提示词模板
+                          </Label>
+                          {loadingOpencodePrompts ? (
+                            <div className="flex items-center gap-2 p-3 border border-border rounded bg-muted/50">
+                              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                              <span className="text-sm font-mono text-muted-foreground">加载中...</span>
+                            </div>
+                          ) : (
+                            <Select
+                              value={selectedOpencodeTemplateId}
+                              onValueChange={setSelectedOpencodeTemplateId}
+                              disabled={loadingOpencodePrompts}
+                            >
+                              <SelectTrigger className="h-10 cyber-input">
+                                <SelectValue placeholder="选择提示词模板" />
+                              </SelectTrigger>
+                              <SelectContent className="cyber-dialog border-border">
+                                {availableOpencodePrompts.map((t: AvailablePromptItem) => (
+                                  <SelectItem key={t.id} value={t.id} className="font-mono">
+                                    <div className="flex items-center gap-2">
+                                      <span>{t.name}</span>
+                                      {t.is_default && (
+                                        <Badge className="ml-1 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-0 text-xs">
+                                          默认
+                                        </Badge>
+                                      )}
+                                      {t.is_system && (
+                                        <Badge className="ml-1 bg-blue-500/20 text-blue-600 dark:text-blue-400 border-0 text-xs">
+                                          系统
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+
+                        {selectedOpencodeTemplate && (
+                          <div className="p-4 border border-border rounded bg-violet-50 dark:bg-violet-950/20 space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Zap className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                              <span className="font-mono text-sm font-bold text-violet-700 dark:text-violet-300 uppercase">
+                                模板详情
+                              </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground font-mono">
+                              {selectedOpencodeTemplate.description || "暂无描述"}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge className="bg-muted text-foreground border-0 font-mono text-xs">
+                                {selectedOpencodeTemplate.template_type}
+                              </Badge>
+                            </div>
+                          </div>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="custom" className="pt-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-mono font-bold uppercase text-muted-foreground">
+                            自定义提示词
+                          </Label>
+                          <Textarea
+                            value={customOpencodePrompt}
+                            onChange={(e) => setCustomOpencodePrompt(e.target.value)}
+                            placeholder="输入自定义提示词..."
+                            rows={8}
+                            className="cyber-input font-mono text-sm resize-none"
+                          />
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+
+                    {/* 选项 */}
+                    <div className="flex items-center space-x-3 p-3 border border-dashed border-border rounded bg-muted/50">
+                      <Checkbox
+                        id="autoStart"
+                        checked={autoStartServer}
+                        onCheckedChange={(checked) =>
+                          setAutoStartServer(checked as boolean)
+                        }
+                        className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                      />
+                      <Label htmlFor="autoStart" className="text-sm font-mono text-muted-foreground cursor-pointer">
+                        自动启动 OpenCode 服务器（如未启动）
+                      </Label>
+                    </div>
+                  </div>
+                )}
+
                 {/* 规则集和提示词选择 - 仅快速扫描模式显示 */}
-                {auditMode !== "agent" && (
+                {auditMode == "fast" && (
                   <div className="p-3 border border-border rounded bg-violet-50 dark:bg-violet-950/20 space-y-3">
                     <div className="flex items-center gap-2 mb-2">
                       <Zap className="w-4 h-4 text-violet-600 dark:text-violet-400" />

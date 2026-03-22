@@ -14,9 +14,7 @@ import { SplashScreen, Header, LogEntry, StatsPanel } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
 import { ACTION_VERBS } from "./constants";
 
-import {
-  opencodeApi
-} from "@/shared/api/opencode";
+import { opencodeApi } from "@/shared/api/opencode";
 
 function OpenCodeAuditPageContent() {
   const { sessionId, projectId } = useParams<{ sessionId?: string; projectId?: string }>();

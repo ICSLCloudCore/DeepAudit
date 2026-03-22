@@ -303,22 +303,21 @@ async def session_stream(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     async def event_generator():
-        last_index = -1
+        total_num = 0
         while True:
             # 查询大于last_index的消息
             query = (
                 select(OpenCodeMessageContent)
                 .where(
                     and_(
-                        OpenCodeMessageContent.session_id == session_id,
-                        OpenCodeMessageContent.message_index > last_index
+                        OpenCodeMessageContent.session_id == session_id
                     )
                 )
                 .order_by(OpenCodeMessageContent.message_index)
             )
             result = await db.execute(query)
             messages = result.scalars().all()
-            for msg in messages:
+            for msg in messages[total_num:]:
                 yield {
                     "event": "message",
                     "data": json.dumps({
@@ -327,10 +326,8 @@ async def session_stream(
                         "message_index": msg.message_index
                     })
                 }
-                # print("sent message", msg.content_type, msg.message_index, msg.text_content)
-                last_index = msg.message_index
                 await asyncio.sleep(1)
-
+            total_num = len(messages)
             # 检查会话是否结束 不考虑另一边存储状态的时间差
             await db.refresh(session)
             if session.status in [OpenCodeSessionStatus.CLOSED, OpenCodeSessionStatus.ERROR]:
