@@ -274,7 +274,7 @@ async def close_session(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     session.status = OpenCodeSessionStatus.CLOSED
-    session.completed_at = datetime.now(datetime.timezone.utc)
+    session.completed_at = datetime.utcnow()
 
     await db.commit()
 
@@ -313,7 +313,7 @@ async def session_stream(
                 {
                     "type": OpenCodeStreamEventType.DATA.value,
                     "data": "开始处理您的提示词...\n\n",
-                    "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
             ),
         }
@@ -337,7 +337,7 @@ async def session_stream(
                                 {
                                     "type": OpenCodeStreamEventType.ERROR.value,
                                     "error": "Session not found",
-                                    "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
+                                    "timestamp": datetime.utcnow().isoformat(),
                                 }
                             ),
                         }
@@ -354,7 +354,7 @@ async def session_stream(
                                 {
                                     "type": OpenCodeStreamEventType.DATA.value,
                                     "data": new_content,
-                                    "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
+                                    "timestamp": datetime.utcnow().isoformat(),
                                 }
                             ),
                         }
@@ -365,7 +365,7 @@ async def session_stream(
                             "data": json.dumps(
                                 {
                                     "type": OpenCodeStreamEventType.DONE.value,
-                                    "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
+                                    "timestamp": datetime.utcnow().isoformat(),
                                 }
                             ),
                         }
@@ -377,7 +377,7 @@ async def session_stream(
                                 {
                                     "type": OpenCodeStreamEventType.ERROR.value,
                                     "error": current_session.response_content or "Unknown error",
-                                    "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
+                                    "timestamp": datetime.utcnow().isoformat(),
                                 }
                             ),
                         }
@@ -397,7 +397,7 @@ async def session_stream(
                 {
                     "type": OpenCodeStreamEventType.ERROR.value,
                     "error": "响应超时",
-                    "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
             ),
         }
