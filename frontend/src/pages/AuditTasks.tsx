@@ -1243,6 +1243,20 @@ export default function AuditTasks() {
                           </Button>
                         </Link>
                       )}
+                      <Link to={`/tasks/${task.id}`}>
+                        <Button size="sm" className="cyber-btn-outline h-9">
+                          <FileText className="w-4 h-4 mr-2" />
+                          查看详情
+                        </Button>
+                      </Link>
+                      {task.project && (
+                        <Link to={`/projects/${task.project.id}`}>
+                          <Button size="sm" className="cyber-btn-primary h-9">
+                            查看项目
+                            <ArrowUpRight className="w-3 h-3 ml-2" />
+                          </Button>
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </div>
