@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { Terminal, Loader2, ArrowDown } from "lucide-react";
+import { Terminal, Loader2, ArrowDown, Sparkle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -97,35 +97,28 @@ function OpenCodeAuditPageContent() {
       eventSourceRef.current = eventSource;
 
       eventSource.addEventListener('message', (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          const { content_type, text_content } = data;
-          // 为每条消息创建新的日志卡片
-          addLog({
-            type: content_type === 'response' ? 'response' : 
-                  content_type === 'reasoning' ? 'progress' : 'info',
-            title: "",
-            content: text_content,
-            isStreaming: false
-          });
-        } catch (parseError) {
-          console.error('Failed to parse SSE message:', parseError);
-        }
+        const data = JSON.parse(event.data);
+        const { content_type, text_content } = data;
+        // 为每条消息创建新的日志卡片
+        addLog({
+          type: content_type === 'response' ? 'response' : 
+                content_type === 'reasoning' ? 'progress' : 'info',
+          title: "",
+          content: text_content,
+          isStreaming: false
+        });
       });
 
-      eventSource.addEventListener('done', async () => {
+      eventSource.addEventListener('done', async (event) => {
         // Refresh session status
         await loadSession();
-        
-        // Add completion log
-        if (!isComplete) {
-          addLog({
-            type: 'status',
-            title: 'Session completed',
-            content: 'Audit session has completed'
-          });
-          setFirstRun(false);
-        }
+        const { content_type } = JSON.parse(event.data);
+        addLog({
+          type: content_type === 'closed' ? 'status' : 'error',
+          title: "",
+          content: "Audit Completed."
+        });
+        setFirstRun(false);
       });
 
       eventSource.addEventListener('error', (error) => {
@@ -220,6 +213,7 @@ function OpenCodeAuditPageContent() {
                   }
                 `}
               >
+                <Sparkle className="w-3.5 h-3.5" />
                 <span>THINKING</span>
               </button>
               

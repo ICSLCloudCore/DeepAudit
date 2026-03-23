@@ -333,7 +333,9 @@ async def session_stream(
             if session.status in [OpenCodeSessionStatus.CLOSED, OpenCodeSessionStatus.ERROR]:
                 yield {
                     "event": "done",
-                    "data": json.dumps({"status": session.status})
+                    "data": json.dumps({
+                        "content_type": session.status
+                    })
                 }
                 break
 
