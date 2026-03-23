@@ -81,7 +81,6 @@ class OpenCodeAuditTask(Base):
 
     # 结果
     result_summary = Column(Text, nullable=True)
-    findings = Column(JSON, nullable=True)
 
     # 时间戳
     created_at = Column(DateTime(timezone=True), server_default=func.now())
