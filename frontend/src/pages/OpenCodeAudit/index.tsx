@@ -30,6 +30,7 @@ function OpenCodeAuditPageContent() {
   const [showSplash, setShowSplash] = useState(!sessionId);
   const [statusVerb, setStatusVerb] = useState(ACTION_VERBS[0]);
   const [statusDots, setStatusDots] = useState(0);
+  const [firstRun, setFirstRun] = useState(true);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -88,7 +89,7 @@ function OpenCodeAuditPageContent() {
 
   // SSE Stream Effect
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId || !firstRun) {
       return;
     }
     try {
@@ -123,6 +124,7 @@ function OpenCodeAuditPageContent() {
             title: 'Session completed',
             content: 'Audit session has completed'
           });
+          setFirstRun(false);
         }
       });
 
