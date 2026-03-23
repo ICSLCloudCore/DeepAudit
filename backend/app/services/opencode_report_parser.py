@@ -20,6 +20,8 @@ class OpenCodeReportParser:
     def __init__(self):
         self.severity_map = {"致命": "critical", "严重": "high", "一般": "medium", "提示": "low"}
         self.confidence_map = {"确认": "confirmed", "高": "high", "中": "medium", "低": "low"}
+        # 全局计数器，用于确保每个文件的漏洞ID唯一
+        self.global_vuln_counter = 0
 
     def parse_report_directory(self, reports_dir: str) -> List[Dict[str, Any]]:
         """
@@ -37,6 +39,9 @@ class OpenCodeReportParser:
         if not reports_path.exists():
             logger.warning(f"报告目录不存在: {reports_dir}")
             return findings
+
+        # 重置全局计数器
+        self.global_vuln_counter = 0
 
         # 查找所有漏洞文件
         vuln_files = list(reports_path.glob("VULN-*.md"))
@@ -65,9 +70,9 @@ class OpenCodeReportParser:
 
         # 从文件名提取信息
         filename = Path(file_path).name
-        vuln_id_range, severity_cn = self.extract_filename_info(filename)
+        count_or_range, severity_cn = self.extract_filename_info(filename)
 
-        if not vuln_id_range or not severity_cn:
+        if not count_or_range or not severity_cn:
             logger.warning(f"无法从文件名提取信息: {filename}")
             return findings
 
@@ -82,7 +87,7 @@ class OpenCodeReportParser:
 
         for i, section in enumerate(vuln_sections):
             try:
-                vuln_id = self._determine_vuln_id(vuln_id_range, i, section)
+                vuln_id = self._determine_vuln_id(count_or_range, i, section)
                 finding_data = self.extract_finding_data(section, vuln_id, severity)
                 findings.append(finding_data)
             except Exception as e:
@@ -92,19 +97,32 @@ class OpenCodeReportParser:
 
     def extract_filename_info(self, filename: str) -> Tuple[Optional[str], Optional[str]]:
         """
-        从文件名提取漏洞编号范围和严重程度
+        从文件名提取漏洞信息
 
-        文件名格式: VULN-{start}-{end}_{severity}.md
+        支持两种格式:
+        - 旧格式: VULN-{start}-{end}_{severity}.md (例如: VULN-001-005_致命.md)
+        - 新格式: VULN-{count}_{severity}.md (例如: VULN-5-low.md)
 
         Args:
             filename: 文件名
 
         Returns:
-            (漏洞编号范围, 严重程度中文)
+            (数量或范围标识, 严重程度中文)
         """
-        pattern = r"VULN-(\d+-\d+)_(.+)\.md"
-        match = re.match(pattern, filename)
+        # 先尝试新格式: VULN-{count}_{severity}.md
+        new_pattern = r"VULN-(\d+)_(.+)\.md"
+        match = re.match(new_pattern, filename)
+        if match:
+            count = match.group(1)
+            severity = match.group(2)
+            # 将英文严重程度转换为中文以保持一致性
+            severity_map = {"critical": "致命", "high": "严重", "medium": "一般", "low": "提示"}
+            severity_cn = severity_map.get(severity.lower(), severity)
+            return count, severity_cn
 
+        # 再尝试旧格式: VULN-{start}-{end}_{severity}.md
+        old_pattern = r"VULN-(\d+-\d+)_(.+)\.md"
+        match = re.match(old_pattern, filename)
         if match:
             vuln_id_range = match.group(1)
             severity_cn = match.group(2)
@@ -132,14 +150,14 @@ class OpenCodeReportParser:
 
         return sections
 
-    def _determine_vuln_id(self, vuln_id_range: str, index: int, section: str) -> str:
+    def _determine_vuln_id(self, count_or_range: str, index: int, section: str) -> str:
         """
         确定漏洞ID
 
-        首先尝试从section内容中提取，如果失败则根据范围和索引生成
+        首先尝试从section内容中提取，如果失败则根据count_or_range和索引生成
 
         Args:
-            vuln_id_range: 漏洞编号范围 (如 "001-005")
+            count_or_range: 漏洞数量或范围 (如 "5" 或 "001-005")
             index: 在文件中的索引
             section: 漏洞内容部分
 
@@ -151,13 +169,18 @@ class OpenCodeReportParser:
         if vuln_id_match:
             return f"VULN-{vuln_id_match.group(1)}"
 
-        # 根据范围生成
-        start, end = map(int, vuln_id_range.split("-"))
-        vuln_num = start + index
-        if vuln_num <= end:
+        # 检查是count还是range
+        if "-" in count_or_range:
+            # 是范围格式
+            start, end = map(int, count_or_range.split("-"))
+            vuln_num = start + index
+            if vuln_num <= end:
+                return f"VULN-{vuln_num:03d}"
             return f"VULN-{vuln_num:03d}"
-
-        return f"VULN-{vuln_num:03d}"
+        else:
+            # 是count格式，使用全局计数器
+            self.global_vuln_counter += 1
+            return f"VULN-{self.global_vuln_counter:03d}"
 
     def extract_finding_data(self, section: str, vuln_id: str, severity: str) -> Dict[str, Any]:
         """
