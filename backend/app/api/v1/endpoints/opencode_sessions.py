@@ -303,113 +303,6 @@ async def session_stream(
     if project and project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-<<<<<<< HEAD
-    from app.db.session import AsyncSessionLocal
-    from app.services.opencode_session_service import OpenCodeSessionService
-
-    async def event_generator():
-        # 检查是否有OpenCode Server会话ID
-        if not session.opencode_server_session_id:
-            yield {
-                "event": OpenCodeStreamEventType.DATA.value,
-                "data": json.dumps(
-                    {
-                        "type": OpenCodeStreamEventType.DATA.value,
-                        "data": "正在初始化会话...",
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                ),
-            }
-            return
-
-        # 获取OpenCode Server URL
-        service = OpenCodeSessionService(db)
-        url = service.get_opencode_server_url(project)
-        message_url = f"{url}/session/{session.opencode_server_session_id}/message"
-        print(f"[OpenCode] SSE polling message URL: {message_url}")
-
-        processed_message_ids = set()
-        max_polls = 300
-        poll_interval = 0.5
-
-        for poll_count in range(max_polls):
-            try:
-                # 直接从OpenCode Server获取原始消息数据
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.get(message_url)
-
-                    if response.status_code != 200:
-                        await asyncio.sleep(poll_interval)
-                        continue
-
-                    raw_data = response.json()
-
-                    if isinstance(raw_data, list):
-                        for message in raw_data:
-                            message_id = message.get("info", {}).get("id")
-
-                            if message_id and message_id not in processed_message_ids:
-                                processed_message_ids.add(message_id)
-
-                                # 发送完整的原始消息数据
-                                yield {
-                                    "event": OpenCodeStreamEventType.DATA.value,
-                                    "data": json.dumps(
-                                        {
-                                            "type": "message",
-                                            "message": message,
-                                            "timestamp": datetime.utcnow().isoformat(),
-                                        }
-                                    ),
-                                }
-
-                # 检查会话状态
-                async with AsyncSessionLocal() as db_session_local:
-                    result_db = await db_session_local.execute(
-                        select(OpenCodeSession).where(OpenCodeSession.id == session_id)
-                    )
-                    current_session = result_db.scalar_one_or_none()
-
-                    if current_session and current_session.status == OpenCodeSessionStatus.CLOSED:
-                        yield {
-                            "event": OpenCodeStreamEventType.DONE.value,
-                            "data": json.dumps(
-                                {
-                                    "type": OpenCodeStreamEventType.DONE.value,
-                                    "timestamp": datetime.utcnow().isoformat(),
-                                }
-                            ),
-                        }
-                        return
-                    elif current_session and current_session.status == OpenCodeSessionStatus.ERROR:
-                        yield {
-                            "event": OpenCodeStreamEventType.ERROR.value,
-                            "data": json.dumps(
-                                {
-                                    "type": OpenCodeStreamEventType.ERROR.value,
-                                    "error": current_session.response_content or "Unknown error",
-                                    "timestamp": datetime.utcnow().isoformat(),
-                                }
-                            ),
-                        }
-                        return
-
-            except Exception as e:
-                print(f"[OpenCode] SSE poll error: {e}")
-                import traceback
-
-                print(f"[OpenCode] SSE poll traceback: {traceback.format_exc()}")
-
-            await asyncio.sleep(poll_interval)
-
-        yield {
-            "event": OpenCodeStreamEventType.ERROR.value,
-            "data": json.dumps(
-                {
-                    "type": OpenCodeStreamEventType.ERROR.value,
-                    "error": "响应超时",
-                    "timestamp": datetime.utcnow().isoformat(),
-=======
     async def event_generator():
         total_num = 0
         while True:
@@ -433,7 +326,6 @@ async def session_stream(
                         "text_content": msg.text_content,
                         "message_index": msg.message_index
                     })
->>>>>>> origin/sse_session
                 }
                 await asyncio.sleep(1)
             total_num = len(messages)
