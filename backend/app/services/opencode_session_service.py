@@ -798,9 +798,8 @@ class OpenCodeSessionService:
 
         max_polls = 3600  # 1 hour with 1s interval
         poll_interval = 1
-        full_response = ""
-        last_written_response = ""  # 跟踪上次写入数据库的内容
-        processed_message_ids = dict()  # 新增：跟踪已处理的消息ID
+        record_index = 1
+        same_time = 1
 
         if not message_id:
             print(f"[OpenCode] No message_id provided, cannot poll")
