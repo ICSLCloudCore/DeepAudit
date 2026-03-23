@@ -39,14 +39,12 @@ export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: L
 
   return (
     <div
-      className={`group relative transition-all duration-300 ease-out ${isCollapsible ? 'cursor-pointer' : ''}`}
-      onClick={isCollapsible ? onToggle : undefined}
+      className={`group relative transition-all duration-300 ease-out`}
     >
       <div className={`
         relative rounded-lg border-l-3 overflow-hidden
         ${config.borderColor}
         ${isExpanded ? 'bg-slate-100 dark:bg-card/80' : 'bg-slate-50 dark:bg-card/40'}
-        ${isCollapsible ? 'hover:bg-slate-100 dark:hover:bg-card/60' : ''}
         border border-slate-200 dark:border-transparent
       `}>
         <div className="relative px-4 py-3">
@@ -84,7 +82,10 @@ export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: L
 
             <div className="flex items-center gap-2.5 flex-shrink-0 ml-auto">
               {isCollapsible && (
-                <div className={`w-6 h-6 flex items-center justify-center rounded-md ${isExpanded ? 'bg-primary/20 border border-primary/30' : 'bg-muted border border-border'}`}>
+                <div 
+                  onClick={onToggle}
+                  className={`w-6 h-6 flex items-center justify-center rounded-md cursor-pointer ${isExpanded ? 'bg-primary/20 border border-primary/30' : 'bg-muted border border-border'}`}
+                >
                   {isExpanded ? (
                     <ChevronUp className="w-4 h-4 text-primary" />
                   ) : (
