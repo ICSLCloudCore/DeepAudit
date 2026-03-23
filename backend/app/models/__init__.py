@@ -23,3 +23,8 @@ from .opencode_session import OpenCodeSession, OpenCodeSessionStatus
 from .opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType
 from .opencode_message_content import OpenCodeMessageContent, OpenCodeMessageContentType
 from .opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+from .opencode_finding import (
+    OpenCodeFinding,
+    OpenCodeFindingStatus,
+    OpenCodeManualConfirmationStatus,
+)
