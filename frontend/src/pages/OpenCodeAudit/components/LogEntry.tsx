@@ -113,7 +113,7 @@ export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: L
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
-                    <span className="font-mono">{copied ? "已复制" : "复制"}</span>
+                    <span className="font-mono">{copied ? "Copied" : "Copy"}</span>
                   </button>
                 </div>
                 <pre className="p-4 text-sm font-mono text-foreground/85 max-h-64 overflow-y-auto custom-scrollbar whitespace-pre-wrap break-words">

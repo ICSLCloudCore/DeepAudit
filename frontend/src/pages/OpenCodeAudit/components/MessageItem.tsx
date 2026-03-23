@@ -54,7 +54,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
             ) : (
               <Copy className="w-3.5 h-3.5" />
             )}
-            <span className="font-mono">{copied ? "已复制" : "复制"}</span>
+            <span className="font-mono">{copied ? "Copied" : "Copy"}</span>
           </button>
         </div>
         {/* 消息内容 */}
