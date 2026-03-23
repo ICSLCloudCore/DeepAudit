@@ -22,7 +22,7 @@ function OpenCodeAuditPageContent() {
   const {
     session, logs, messages, isLoading,
     isAutoScroll, expandedLogIds, isRunning, isComplete, showProgressLogs,
-    setSession, addLog, updateLog,
+    setSession, addLog,
     setLoading, setError, setAutoScroll, toggleLogExpanded, toggleShowProgressLogs,
     reset,
   } = useOpenCodeAuditState();
@@ -30,41 +30,14 @@ function OpenCodeAuditPageContent() {
   const [showSplash, setShowSplash] = useState(!sessionId);
   const [statusVerb, setStatusVerb] = useState(ACTION_VERBS[0]);
   const [statusDots, setStatusDots] = useState(0);
-  const [sseConnected, setSseConnected] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
-  const streamingLogIdsRef = useRef<Map<string, string>>(new Map());
-  
-  // Use refs to avoid including frequently changing values in useEffect dependencies
-  const addLogRef = useRef(addLog);
-  const updateLogRef = useRef(updateLog);
-  const loadSessionRef = useRef<typeof loadSession | null>(null);
-  const logsRef = useRef(logs);
-  const isCompleteRef = useRef(isComplete);
-
-  // Update refs when values change
-  useEffect(() => {
-    addLogRef.current = addLog;
-  }, [addLog]);
-
-  useEffect(() => {
-    updateLogRef.current = updateLog;
-  }, [updateLog]);
-
-  useEffect(() => {
-    logsRef.current = logs;
-  }, [logs]);
-
-  useEffect(() => {
-    isCompleteRef.current = isComplete;
-  }, [isComplete]);
 
   useEffect(() => {
     if (sessionId !== previousSessionIdRef.current) {
       reset();
-      streamingLogIdsRef.current.clear();
       setShowSplash(!sessionId);
     }
     previousSessionIdRef.current = sessionId;
@@ -85,11 +58,6 @@ function OpenCodeAuditPageContent() {
   const loadSession = useCallback(async () => {
     if (!sessionId) return;
     try {
-      // 如果 SSE 已连接，就不再通过轮询更新，避免冲突
-      if (sseConnected && !isComplete) {
-        return;
-      }
-      
       setLoading(true);
       
       const data = await opencodeApi.getSessionStatus(sessionId);
@@ -107,12 +75,7 @@ function OpenCodeAuditPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, setSession, setLoading, setError, addLog, logs.length]);
-
-  // Update loadSession ref after it's defined
-  useEffect(() => {
-    loadSessionRef.current = loadSession;
-  }, [loadSession]);
+  }, [sessionId, setSession, setLoading, setError]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -126,7 +89,7 @@ function OpenCodeAuditPageContent() {
   // SSE Stream Effect
   useEffect(() => {
     if (!sessionId) {
-      return ;
+      return;
     }
     try {
       const eventSource = opencodeApi.streamSession(sessionId);
@@ -136,36 +99,26 @@ function OpenCodeAuditPageContent() {
         try {
           const data = JSON.parse(event.data);
           const { content_type, text_content } = data;
-          const logKey = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           // 为每条消息创建新的日志卡片
-          const logId = addLogRef.current({
+          addLog({
             type: content_type === 'response' ? 'response' : 
                   content_type === 'reasoning' ? 'progress' : 'info',
             title: "",
             content: text_content,
-            isStreaming: false // 不再流式更新，每条消息独立
+            isStreaming: false
           });
-          streamingLogIdsRef.current.set(logKey, logId);
         } catch (parseError) {
           console.error('Failed to parse SSE message:', parseError);
         }
       });
 
       eventSource.addEventListener('done', async () => {
-        // Mark all streaming logs as complete
-        streamingLogIdsRef.current.forEach((logId) => {
-          updateLogRef.current(logId, { isStreaming: false });
-        });
-        streamingLogIdsRef.current.clear();
-        
         // Refresh session status
-        if (loadSessionRef.current) {
-          await loadSessionRef.current();
-        }
+        await loadSession();
         
         // Add completion log
-        if (!isCompleteRef.current) {
-          addLogRef.current({
+        if (!isComplete) {
+          addLog({
             type: 'status',
             title: 'Session completed',
             content: 'Audit session has completed'
@@ -187,9 +140,8 @@ function OpenCodeAuditPageContent() {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      setSseConnected(false);
     };
-  }, [sessionId, isRunning]);
+  }, [sessionId, isRunning, addLog, loadSession, isComplete]);
 
   useEffect(() => {
     if (isAutoScroll && logEndRef.current) {
@@ -266,7 +218,7 @@ function OpenCodeAuditPageContent() {
                   }
                 `}
               >
-                <span>THINGKING</span>
+                <span>THINKING</span>
               </button>
               
               <button
