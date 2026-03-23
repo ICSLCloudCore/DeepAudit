@@ -103,7 +103,7 @@ class OpenCodeFinding(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # 关联关系
-    task = relationship("OpenCodeAuditTask", back_populates="findings")
+    task = relationship("OpenCodeAuditTask", back_populates="finding_items")
     confirmer = relationship("User")
 
     def __repr__(self):

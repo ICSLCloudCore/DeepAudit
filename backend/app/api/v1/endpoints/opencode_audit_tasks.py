@@ -150,7 +150,6 @@ class OpenCodeAuditTaskResponse(BaseModel):
 
     # 关联数据
     project: Optional[ProjectSchema] = None
-    findings: Optional[List[OpenCodeFindingResponse]] = None
 
     class Config:
         from_attributes = True

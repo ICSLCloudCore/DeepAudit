@@ -92,7 +92,9 @@ class OpenCodeAuditTask(Base):
     # 关联关系
     project = relationship("Project", back_populates="opencode_audit_tasks")
     creator = relationship("User")
-    findings = relationship("OpenCodeFinding", back_populates="task", cascade="all, delete-orphan")
+    finding_items = relationship(
+        "OpenCodeFinding", back_populates="task", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<OpenCodeAuditTask {self.id} - {self.status}>"
