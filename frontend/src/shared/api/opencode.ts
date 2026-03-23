@@ -397,6 +397,138 @@ export const opencodeApi = {
     const response = await apiClient.get(`/opencode/sessions/${sessionId}/interactions`, { params });
     return response.data;
   },
+
+  // SSE Stream
+  streamSession: (sessionId: string) => {
+    // Get base URL from apiClient defaults
+    const baseURL = apiClient.defaults.baseURL || '';
+    const url = `${baseURL}/opencode/sessions/${sessionId}/stream`;
+    
+    // Get token from storage
+    const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+    
+    // Create a custom EventSource-like object using fetch
+    const eventTarget = new EventTarget();
+    let controller: AbortController | null = null;
+    let isClosed = false;
+
+    // Simple SSE parser
+    const parseSSE = (buffer: string): { events: Array<{ event?: string; data: string }>; remaining: string } => {
+      const events: Array<{ event?: string; data: string }> = [];
+      const lines = buffer.split('\n');
+      let remaining = '';
+      let currentEvent: { event?: string; data: string } = { data: '' };
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (line === '') {
+          // Empty line signifies end of event
+          if (currentEvent.data) {
+            events.push({ ...currentEvent });
+            currentEvent = { data: '' };
+          }
+          continue;
+        }
+
+        if (i === lines.length - 1 && !buffer.endsWith('\n')) {
+          // Incomplete line, keep for next chunk
+          remaining = line;
+          break;
+        }
+
+        if (line.startsWith('event:')) {
+          currentEvent.event = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          currentEvent.data = line.slice(5).trim();
+        }
+        // Ignore other fields
+      }
+
+      return { events, remaining };
+    };
+
+    const connect = async () => {
+      if (isClosed) return;
+      
+      controller = new AbortController();
+      let buffer = '';
+      
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'text/event-stream',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`SSE connection failed: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('No response body');
+        }
+
+        const decoder = new TextDecoder();
+        eventTarget.dispatchEvent(new Event('open'));
+
+        while (!isClosed) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const { events, remaining } = parseSSE(buffer);
+          buffer = remaining;
+
+          for (const event of events) {
+            const customEvent = new MessageEvent(event.event || 'message', { data: event.data });
+            eventTarget.dispatchEvent(customEvent);
+          }
+        }
+      } catch (error) {
+        if (!isClosed && error instanceof Error && error.name !== 'AbortError') {
+          eventTarget.dispatchEvent(new ErrorEvent('error', { error }));
+        }
+      }
+    };
+
+    // Start connection
+    connect();
+
+    // Return EventSource-like interface
+    const eventSourceLike = {
+      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
+        eventTarget.addEventListener(type, listener);
+      },
+      removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
+        eventTarget.removeEventListener(type, listener);
+      },
+      close: () => {
+        isClosed = true;
+        if (controller) {
+          controller.abort();
+        }
+      },
+      // Add dummy properties to satisfy TypeScript
+      onerror: null,
+      onmessage: null,
+      onopen: null,
+      readyState: 1, // 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
+      url: url,
+      withCredentials: false,
+      // Add other EventSource properties as needed
+      CLOSED: 2,
+      CONNECTING: 0,
+      OPEN: 1,
+      dispatchEvent: (event: Event) => eventTarget.dispatchEvent(event)
+    };
+
+    return eventSourceLike as unknown as EventSource;
+  },
 };
 
 // Project Config API

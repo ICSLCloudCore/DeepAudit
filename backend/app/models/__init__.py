@@ -21,4 +21,5 @@ from .opencode_skill_mcp import OpenCodeSkill, SkillCategory, OpenCodeMCP, MCPTy
 from .opencode_project_task import ProjectConfig, TaskExecution, OpenCodeStatus
 from .opencode_session import OpenCodeSession, OpenCodeSessionStatus
 from .opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType
+from .opencode_message_content import OpenCodeMessageContent, OpenCodeMessageContentType
 from .opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus

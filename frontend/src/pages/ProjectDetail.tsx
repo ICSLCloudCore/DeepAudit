@@ -32,6 +32,7 @@ import { api } from "@/shared/config/database";
 import type { Project, AuditTask, CreateProjectForm, AuditIssue } from "@/shared/types";
 import type { AgentFinding, AgentTask } from "@/shared/api/agentTasks";
 import { getAgentTasks, updateAgentFinding } from "@/shared/api/agentTasks";
+import { getOpenCodeAuditTasks, type OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";
 import { apiClient } from "@/shared/api/serverClient";
 import { isRepositoryProject, getSourceTypeLabel, getRepositoryPlatformLabel } from "@/shared/utils/projectUtils";
 import { toast } from "sonner";
@@ -56,6 +57,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [auditTasks, setAuditTasks] = useState<AuditTask[]>([]);
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
+  const [openCodeTasks, setOpenCodeTasks] = useState<OpenCodeAuditTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
   const [showTerminalDialog, setShowTerminalDialog] = useState(false);
@@ -398,10 +400,11 @@ export default function ProjectDetail() {
 
     try {
       setLoading(true);
-      const [projectRes, auditTasksRes, agentTasksRes] = await Promise.allSettled([
+      const [projectRes, auditTasksRes, agentTasksRes, openCodeTasksRes] = await Promise.allSettled([
         api.getProjectById(id),
         api.getAuditTasks(id),
-        getAgentTasks({ project_id: id })
+        getAgentTasks({ project_id: id }),
+        getOpenCodeAuditTasks({ project_id: id })
       ]);
 
       if (projectRes.status === 'fulfilled') {
@@ -426,6 +429,13 @@ export default function ProjectDetail() {
         setAgentTasks([]);
       }
 
+      if (openCodeTasksRes.status === 'fulfilled') {
+        setOpenCodeTasks(Array.isArray(openCodeTasksRes.value) ? openCodeTasksRes.value : []);
+      } else {
+        console.warn('Failed to load opencode tasks:', openCodeTasksRes.reason);
+        setOpenCodeTasks([]);
+      }
+
     } catch (error) {
       console.error('Failed to load project data:', error);
       toast.error("加载项目数据失败");
@@ -438,27 +448,31 @@ export default function ProjectDetail() {
     const merged: UnifiedTask[] = [
       ...auditTasks.map((t) => ({ kind: 'audit' as const, task: t })),
       ...agentTasks.map((t) => ({ kind: 'agent' as const, task: t })),
+      ...openCodeTasks.map((t) => ({ kind: 'opencode' as const, task: t })),
     ];
     merged.sort((a, b) => new Date((b.task as any).created_at).getTime() - new Date((a.task as any).created_at).getTime());
     return merged;
-  }, [auditTasks, agentTasks]);
+  }, [auditTasks, agentTasks, openCodeTasks]);
 
   const combinedStats: ProjectCombinedStats = useMemo(() => {
-    const totalTasks = auditTasks.length + agentTasks.length;
+    const totalTasks = auditTasks.length + agentTasks.length + openCodeTasks.length;
     const completedTasks =
       auditTasks.filter((t) => t.status === 'completed').length +
-      agentTasks.filter((t) => t.status === 'completed').length;
+      agentTasks.filter((t) => t.status === 'completed').length +
+      openCodeTasks.filter((t) => t.status === 'completed').length;
     const totalIssues =
       auditTasks.reduce((sum, t) => sum + (t.issues_count || 0), 0) +
-      agentTasks.reduce((sum, t) => sum + (t.findings_count || 0), 0);
+      agentTasks.reduce((sum, t) => sum + (t.findings_count || 0), 0) +
+      openCodeTasks.reduce((sum, t) => sum + (t.findings_count || 0), 0);
     const avgQualityScore = totalTasks > 0
       ? (
         (auditTasks.reduce((sum, t) => sum + (t.quality_score || 0), 0) +
-          agentTasks.reduce((sum, t) => sum + (t.quality_score || 0), 0)) / totalTasks
+          agentTasks.reduce((sum, t) => sum + (t.quality_score || 0), 0) +
+          openCodeTasks.reduce((sum, t) => sum + (t.security_score || 0), 0)) / totalTasks
       )
       : 0;
     return { totalTasks, completedTasks, totalIssues, avgQualityScore };
-  }, [auditTasks, agentTasks]);
+  }, [auditTasks, agentTasks, openCodeTasks]);
 
   const handleRunAudit = () => {
     setShowCreateTaskDialog(true);
@@ -604,12 +618,12 @@ export default function ProjectDetail() {
         </div>
 
         <div className="flex items-center space-x-3">
-          <div className="relative group">
+          {/* <div className="relative group">
             <Button onClick={handleRunAudit} className="cyber-btn-primary">
               <Shield className="w-4 h-4 mr-2" />
               启动审计
             </Button>
-          </div>
+          </div> */}
           <Button onClick={handleOpenCodeAudit} variant="outline" className="cyber-btn-outline">
             <Terminal className="w-4 h-4 mr-2" />
             OpenCode 审计
@@ -791,10 +805,39 @@ export default function ProjectDetail() {
               <div>
                 {unifiedTasks.length > 0 ? (
                   <div className="space-y-2">
-                    {unifiedTasks.slice(0, 5).map((t) => (
+                    {unifiedTasks.slice(0, 5).map((t) => {
+                    // 确定跳转链接
+                    let linkTo = "";
+                    if (t.kind === 'opencode' && (t.task as any).opencode_session_id) {
+                      linkTo = `/opencode-audit/${(t.task as any).opencode_session_id}`;
+                    } else if (t.kind === 'agent') {
+                      linkTo = `/agent-audit/${t.task.id}`;
+                    } else {
+                      linkTo = `/tasks/${t.task.id}`;
+                    }
+
+                    // 确定任务类型标签
+                    let taskLabel = "";
+                    let badgeLabel = "";
+                    let badgeClass = "";
+                    if (t.kind === 'opencode') {
+                      taskLabel = (t.task as any).name || "OpenCode 审计";
+                      badgeLabel = "OPENCODE";
+                      badgeClass = "cyber-badge-warning";
+                    } else if (t.kind === 'agent') {
+                      taskLabel = "Agent 审计";
+                      badgeLabel = "AGENT";
+                      badgeClass = "cyber-badge-info";
+                    } else {
+                      taskLabel = (t.task as AuditTask).task_type === 'repository' ? '审计任务' : '即时分析';
+                      badgeLabel = "AUDIT";
+                      badgeClass = "cyber-badge-muted";
+                    }
+
+                    return (
                       <Link
                         key={`${t.kind}:${t.task.id}`}
-                        to={t.kind === 'audit' ? `/tasks/${t.task.id}` : `/agent-audit/${t.task.id}`}
+                        to={linkTo}
                         className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-all group"
                       >
                         <div className="flex items-center space-x-3">
@@ -807,9 +850,7 @@ export default function ProjectDetail() {
                           </div>
                           <div>
                             <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors uppercase">
-                              {t.kind === 'audit'
-                                ? ((t.task as AuditTask).task_type === 'repository' ? '审计任务' : '即时分析')
-                                : 'Agent 审计'}
+                              {taskLabel}
                             </p>
                             <p className="text-xs text-muted-foreground font-mono">
                               {formatDate(t.task.created_at)}
@@ -817,13 +858,14 @@ export default function ProjectDetail() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge className={t.kind === 'agent' ? 'cyber-badge-info' : 'cyber-badge-muted'}>
-                            {t.kind === 'agent' ? 'AGENT' : 'AUDIT'}
+                          <Badge className={badgeClass}>
+                            {badgeLabel}
                           </Badge>
                           {getStatusBadge(t.task.status)}
                         </div>
                       </Link>
-                    ))}
+                    );
+                  })}
                   </div>
                 ) : (
                   <div className="empty-state">

@@ -47,7 +47,14 @@ function openCodeAuditReducer(
       const newLog = providedId
         ? { ...createLogItem(logData), id: providedId }
         : createLogItem(logData);
-      return { ...state, logs: [...state.logs, newLog] };
+      // 默认将新卡片展开
+      const newExpandedLogIds = new Set(state.expandedLogIds);
+      newExpandedLogIds.add(newLog.id);
+      return { 
+        ...state, 
+        logs: [...state.logs, newLog],
+        expandedLogIds: newExpandedLogIds
+      };
     }
 
     case 'UPDATE_LOG': {

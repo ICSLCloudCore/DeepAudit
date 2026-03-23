@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { getRuleSets } from "@/shared/api/rules";
 import { getPromptTemplates } from "@/shared/api/prompts";
 import { getAgentTasks, type AgentTask } from "@/shared/api/agentTasks";
+import { getOpenCodeAuditTasks, type OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";
 
 export default function Dashboard() {
   const [stats, setStats] = useState<ProjectStats | null>(null);
@@ -46,7 +47,8 @@ export default function Dashboard() {
         api.getProjectStats(),
         api.getProjects(),
         api.getAuditTasks(),
-        getAgentTasks({ limit: 10 })
+        getAgentTasks({ limit: 10 }),
+        getOpenCodeAuditTasks()
       ]);
 
       if (results[0].status === 'fulfilled') {
@@ -79,19 +81,27 @@ export default function Dashboard() {
         agentTasksList = Array.isArray(results[3].value) ? results[3].value : [];
       }
 
-      // 合并两种任务并按创建时间排序
+      let openCodeTasksList: OpenCodeAuditTask[] = [];
+      if (results[4].status === 'fulfilled') {
+        openCodeTasksList = Array.isArray(results[4].value) ? results[4].value : [];
+      }
+
+      // 合并三种任务并按创建时间排序
       const unified: UnifiedTask[] = [
         ...tasks.map((t) => ({ kind: "audit" as const, task: t })),
         ...agentTasksList.map((t) => ({ kind: "agent" as const, task: t })),
+        ...openCodeTasksList.map((t) => ({ kind: "opencode" as const, task: t })),
       ];
       unified.sort((a, b) => new Date(b.task.created_at).getTime() - new Date(a.task.created_at).getTime());
       setRecentTasks(unified.slice(0, 10));
 
-      // 质量趋势：合并两种任务
+      // 质量趋势：合并三种任务
       const allCompletedTasks = [
         ...tasks.filter(t => t.completed_at && t.quality_score > 0)
           .map(t => ({ date: t.completed_at!, score: t.quality_score })),
         ...agentTasksList.filter(t => t.completed_at && t.quality_score > 0)
+          .map(t => ({ date: t.completed_at!, score: t.quality_score })),
+        ...openCodeTasksList.filter(t => t.completed_at && t.quality_score > 0)
           .map(t => ({ date: t.completed_at!, score: t.quality_score })),
       ];
       if (allCompletedTasks.length > 0) {
@@ -454,13 +464,26 @@ export default function Dashboard() {
               {recentTasks.length > 0 ? (
                 recentTasks.slice(0, 6).map((unified) => {
                   const isAgent = unified.kind === 'agent';
+                  const isOpenCode = unified.kind === 'opencode';
                   const task = unified.task;
-                  const taskLink = isAgent ? `/agent-audit/${task.id}` : `/tasks/${task.id}`;
-                  const taskName = isAgent
-                    ? ((task as AgentTask).name || '未知项目')
-                    : ((task as AuditTask).project?.name || '未知项目');
+                  let taskLink: string;
+                  if (isAgent) {
+                    taskLink = `/agent-audit/${task.id}`;
+                  } else if (isOpenCode) {
+                    taskLink = `/opencode-audit/${task.id}`;
+                  } else {
+                    taskLink = `/tasks/${task.id}`;
+                  }
+                  let taskName: string;
+                  if (isAgent) {
+                    taskName = (task as AgentTask).name || '未知项目';
+                  } else if (isOpenCode) {
+                    taskName = (task as OpenCodeAuditTask).name || (task as OpenCodeAuditTask).project?.name || '未知项目';
+                  } else {
+                    taskName = (task as AuditTask).project?.name || '未知项目';
+                  }
                   const score = task.quality_score?.toFixed(1) || '0.0';
-                  const isRunning = isAgent
+                  const isRunning = isAgent || isOpenCode
                     ? ['running', 'initializing', 'planning', 'indexing', 'analyzing', 'verifying', 'reporting'].includes(task.status)
                     : task.status === 'running';
                   const isCompleted = task.status === 'completed';
@@ -487,6 +510,7 @@ export default function Dashboard() {
                           'bg-rose-500/20 text-rose-400'
                         }`}>
                           {isAgent ? <Bot className="w-4 h-4" /> :
+                           isOpenCode ? <Terminal className="w-4 h-4" /> :
                            isCompleted ? <Activity className="w-4 h-4" /> :
                            isRunning ? <Clock className="w-4 h-4" /> :
                            <AlertTriangle className="w-4 h-4" />}
@@ -495,6 +519,7 @@ export default function Dashboard() {
                           <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors">
                             {taskName}
                             {isAgent && <span className="ml-2 text-xs text-violet-400 font-mono">Agent</span>}
+                            {isOpenCode && <span className="ml-2 text-xs text-cyan-400 font-mono">OPENCODE</span>}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             质量分: <span className="text-foreground">{score}</span>
@@ -619,9 +644,17 @@ export default function Dashboard() {
               {recentTasks.length > 0 ? (
                 recentTasks.slice(0, 3).map((unified) => {
                   const isAgent = unified.kind === 'agent';
+                  const isOpenCode = unified.kind === 'opencode';
                   const task = unified.task;
-                  const taskLink = isAgent ? `/agent-audit/${task.id}` : `/tasks/${task.id}`;
-                  const isRunning = isAgent
+                  let taskLink: string;
+                  if (isAgent) {
+                    taskLink = `/agent-audit/${task.id}`;
+                  } else if (isOpenCode) {
+                    taskLink = `/opencode-audit/${task.id}`;
+                  } else {
+                    taskLink = `/tasks/${task.id}`;
+                  }
+                  const isRunning = isAgent || isOpenCode
                     ? ['running', 'initializing', 'planning', 'indexing', 'analyzing', 'verifying', 'reporting'].includes(task.status)
                     : task.status === 'running';
                   const isCompleted = task.status === 'completed';
@@ -640,20 +673,38 @@ export default function Dashboard() {
                     return `${diffDays}天前`;
                   })();
 
-                  const statusText = isAgent
-                    ? (isCompleted ? 'Agent任务完成' :
-                       isRunning ? 'Agent任务运行中' :
-                       isFailed ? 'Agent任务失败' : 'Agent任务待处理')
-                    : (isCompleted ? '任务完成' :
-                       isRunning ? '任务运行中' :
-                       isFailed ? '任务失败' : '任务待处理');
+                  let statusText: string;
+                  if (isAgent) {
+                    statusText = isCompleted ? 'Agent任务完成' :
+                                 isRunning ? 'Agent任务运行中' :
+                                 isFailed ? 'Agent任务失败' : 'Agent任务待处理';
+                  } else if (isOpenCode) {
+                    statusText = isCompleted ? 'OPENCODE任务完成' :
+                                 isRunning ? 'OPENCODE任务运行中' :
+                                 isFailed ? 'OPENCODE任务失败' : 'OPENCODE任务待处理';
+                  } else {
+                    statusText = isCompleted ? '任务完成' :
+                                 isRunning ? '任务运行中' :
+                                 isFailed ? '任务失败' : '任务待处理';
+                  }
 
-                  const taskName = isAgent
-                    ? ((task as AgentTask).name || '未知项目')
-                    : ((task as AuditTask).project?.name || '未知项目');
-                  const issuesCount = isAgent
-                    ? (task as AgentTask).findings_count
-                    : (task as AuditTask).issues_count;
+                  let taskName: string;
+                  if (isAgent) {
+                    taskName = (task as AgentTask).name || '未知项目';
+                  } else if (isOpenCode) {
+                    taskName = (task as OpenCodeAuditTask).name || (task as OpenCodeAuditTask).project?.name || '未知项目';
+                  } else {
+                    taskName = (task as AuditTask).project?.name || '未知项目';
+                  }
+
+                  let issuesCount: number | undefined;
+                  if (isAgent) {
+                    issuesCount = (task as AgentTask).findings_count;
+                  } else if (isOpenCode) {
+                    issuesCount = (task as OpenCodeAuditTask).findings_count;
+                  } else {
+                    issuesCount = (task as AuditTask).issues_count;
+                  }
 
                   return (
                     <Link
@@ -669,7 +720,7 @@ export default function Dashboard() {
                       <p className="text-base font-medium text-foreground">{statusText}</p>
                       <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
                         项目 "{taskName}"
-                        {isCompleted && issuesCount > 0 &&
+                        {isCompleted && issuesCount && issuesCount > 0 &&
                           ` - 发现 ${issuesCount} 个问题`
                         }
                       </p>

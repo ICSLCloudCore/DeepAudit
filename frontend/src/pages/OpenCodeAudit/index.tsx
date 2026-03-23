@@ -5,36 +5,26 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Terminal, Loader2, ArrowDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 import { SplashScreen, Header, LogEntry, StatsPanel, MessageList } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
-import { ACTION_VERBS, POLLING_INTERVALS } from "./constants";
-import { createLogItem } from "./utils";
-import type { LogItem } from "./types";
-import type { OpenCodeMessage } from "./messageTypes";
+import { ACTION_VERBS } from "./constants";
 
-import {
-  opencodeApi,
-  type OpenCodeInteraction,
-} from "@/shared/api/opencode";
-
-import { createOpenCodeSessionStream } from "@/shared/api/opencodeSessionStream";
+import { opencodeApi } from "@/shared/api/opencode";
 
 function OpenCodeAuditPageContent() {
   const { sessionId, projectId } = useParams<{ sessionId?: string; projectId?: string }>();
-  const navigate = useNavigate();
   
   const {
-    session, logs, messages, isLoading, error,
+    session, logs, messages, isLoading,
     isAutoScroll, expandedLogIds, isRunning, isComplete,
-    setSession, setLogs, addLog, updateLog, removeLog,
+    setSession, addLog, updateLog,
     setLoading, setError, setAutoScroll, toggleLogExpanded,
-    setMessages, // 新增
-    reset, dispatch,
+    reset,
   } = useOpenCodeAuditState();
 
   const [showSplash, setShowSplash] = useState(!sessionId);
@@ -43,14 +33,38 @@ function OpenCodeAuditPageContent() {
   const [sseConnected, setSseConnected] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
-  const streamHandlerRef = useRef<any>(null);
-  const lastContentRef = useRef<string>('');
+  const streamingLogIdsRef = useRef<Map<string, string>>(new Map());
+  
+  // Use refs to avoid including frequently changing values in useEffect dependencies
+  const addLogRef = useRef(addLog);
+  const updateLogRef = useRef(updateLog);
+  const loadSessionRef = useRef<typeof loadSession | null>(null);
+  const logsRef = useRef(logs);
+  const isCompleteRef = useRef(isComplete);
+
+  // Update refs when values change
+  useEffect(() => {
+    addLogRef.current = addLog;
+  }, [addLog]);
+
+  useEffect(() => {
+    updateLogRef.current = updateLog;
+  }, [updateLog]);
+
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  useEffect(() => {
+    isCompleteRef.current = isComplete;
+  }, [isComplete]);
 
   useEffect(() => {
     if (sessionId !== previousSessionIdRef.current) {
       reset();
+      streamingLogIdsRef.current.clear();
       setShowSplash(!sessionId);
     }
     previousSessionIdRef.current = sessionId;
@@ -87,83 +101,18 @@ function OpenCodeAuditPageContent() {
         session_id: data.session_id || data.id
       };
       setSession(sessionData);
-      
-      // 首次加载时：显示发送的prompt
-      if (!logs.length && sessionId && data.prompt_content) {
-        addLog({
-          type: 'prompt',
-          title: 'Prompt sent',
-          content: data.prompt_content
-        });
-      }
-      
-      // 当有响应内容时：显示返回的结果
-      if (data.response_content) {
-        // 检查是否已经有 response log 了
-        const hasResponseLog = logs.some(log => log.type === 'response');
-        if (!hasResponseLog) {
-          addLog({
-            type: 'response',
-            title: 'Response received',
-            content: data.response_content
-          });
-        } else {
-          // 如果已经有 response log，更新它的内容
-          const responseLogIndex = logs.findIndex(log => log.type === 'response');
-          if (responseLogIndex !== -1) {
-            const lastLog = logs[responseLogIndex];
-            updateLog(lastLog.id, { content: data.response_content });
-          }
-        }
-      }
-      
-      // 当session完成时：显示关闭提示
-      if (isComplete && !session?.completed_at) {
-        addLog({
-          type: 'status',
-          title: 'Session completed',
-          content: `Audit session ${data.status === 'closed' ? 'completed successfully' : 'failed'}`
-        });
-      }
     } catch (err) {
       toast.error("Failed to load session");
       setError("Failed to load session");
     } finally {
       setLoading(false);
     }
-  }, [sessionId, setSession, setLoading, setError, addLog, logs.length, session?.response_content, session?.completed_at, isComplete, sseConnected]);
+  }, [sessionId, setSession, setLoading, setError, addLog, logs.length]);
 
-  const loadInteractions = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      const data = await opencodeApi.getSessionInteractions(sessionId, { limit: 100 });
-      
-      if (data.items && data.items.length > 0) {
-        data.items.reverse().forEach((interaction: OpenCodeInteraction) => {
-          // 过滤掉健康检查和轮询的请求
-          const endpoint = interaction.endpoint || '';
-          const isHealthCheck = endpoint.includes('/health');
-          const isPolling = endpoint.includes('/message') && interaction.http_method === 'GET';
-          
-          if (isHealthCheck || isPolling) {
-            return; // 跳过健康检查和轮询
-          }
-          
-          const logType = interaction.interaction_type === 'request' ? 'prompt' :
-                        interaction.interaction_type === 'response' ? 'response' :
-                        'error';
-          
-          addLog({
-            type: logType,
-            title: `${interaction.http_method} ${interaction.endpoint}`,
-            content: interaction.response_payload || interaction.request_payload || '',
-          });
-        });
-      }
-    } catch (err) {
-      console.error('Failed to load interactions:', err);
-    }
-  }, [sessionId, addLog]);
+  // Update loadSession ref after it's defined
+  useEffect(() => {
+    loadSessionRef.current = loadSession;
+  }, [loadSession]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -172,88 +121,75 @@ function OpenCodeAuditPageContent() {
     }
     setShowSplash(false);
     loadSession();
-    loadInteractions();
-  }, [sessionId, loadSession, loadInteractions]);
+  }, [sessionId, loadSession]);
 
+  // SSE Stream Effect
   useEffect(() => {
-    if (!sessionId || !isRunning) {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-      if (streamHandlerRef.current) {
-        streamHandlerRef.current.disconnect();
-        streamHandlerRef.current = null;
-      }
-      setSseConnected(false);
-      return;
+    if (!sessionId) {
+      return ;
+    }
+    try {
+      const eventSource = opencodeApi.streamSession(sessionId);
+      eventSourceRef.current = eventSource;
+
+      eventSource.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const { content_type, text_content } = data;
+          const logKey = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          // 为每条消息创建新的日志卡片
+          const logId = addLogRef.current({
+            type: content_type === 'response' ? 'response' : 
+                  content_type === 'reasoning' ? 'progress' : 'info',
+            title: "",
+            content: text_content,
+            isStreaming: false // 不再流式更新，每条消息独立
+          });
+          streamingLogIdsRef.current.set(logKey, logId);
+        } catch (parseError) {
+          console.error('Failed to parse SSE message:', parseError);
+        }
+      });
+
+      eventSource.addEventListener('done', async () => {
+        // Mark all streaming logs as complete
+        streamingLogIdsRef.current.forEach((logId) => {
+          updateLogRef.current(logId, { isStreaming: false });
+        });
+        streamingLogIdsRef.current.clear();
+        
+        // Refresh session status
+        if (loadSessionRef.current) {
+          await loadSessionRef.current();
+        }
+        
+        // Add completion log
+        if (!isCompleteRef.current) {
+          addLogRef.current({
+            type: 'status',
+            title: 'Session completed',
+            content: 'Audit session has completed'
+          });
+        }
+      });
+
+      eventSource.addEventListener('error', (error) => {
+        console.error('SSE connection error:', error);
+        eventSource.close();
+        eventSourceRef.current = null;
+      });
+    } catch (err) {
+      console.error('Failed to create SSE connection:', err);
     }
 
-    // 重置 lastContent
-    lastContentRef.current = '';
-
-    // 启动 SSE 流式连接
-    const handler = createOpenCodeSessionStream(sessionId, {
-      onData: (newData, accumulated) => {
-        // 只在内容真正变化时更新，避免闪烁
-        if (accumulated !== lastContentRef.current) {
-          lastContentRef.current = accumulated;
-          // 实时更新 session 的响应内容，但保留 status 等其他字段，避免状态闪烁
-          setSession(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              response_content: accumulated,
-              // 确保 status 保持不变，避免闪烁
-              status: prev.status
-            };
-          });
-          
-          // 更新最后一条 response log（如果存在）
-          if (logs.length > 0 && logs[logs.length - 1].type === 'response') {
-            const lastLog = logs[logs.length - 1];
-            updateLog(lastLog.id, { content: accumulated });
-          }
-        }
-      },
-      onMessage: (message) => {
-        console.log('[OpenCodeStream] Received message:', message);
-        addMessage(message);
-      },
-      onDone: () => {
-        console.log('[OpenCodeStream] Stream completed');
-        setSseConnected(false);
-        // 会话完成时，重新加载会话以获取最新状态
-        loadSession();
-      },
-      onError: (error) => {
-        console.error('[OpenCodeStream] Stream error:', error);
-        setSseConnected(false);
-        // 出错时也尝试重新加载会话
-        loadSession();
-      }
-    });
-    
-    streamHandlerRef.current = handler;
-    handler.connect();
-    setSseConnected(true);
-
-    // 只有在 SSE 连接失败时才使用轮询作为备用
-    // 暂时注释掉轮询，避免与 SSE 冲突造成闪烁
-    // pollIntervalRef.current = setInterval(() => {
-    //   loadSession();
-    // }, POLLING_INTERVALS.SESSION_STATUS);
-
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-      if (streamHandlerRef.current) {
-        streamHandlerRef.current.disconnect();
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
       setSseConnected(false);
     };
-  }, [sessionId, isRunning, setSession, addLog, updateLog, logs]);
+  }, [sessionId, isRunning]);
 
   useEffect(() => {
     if (isAutoScroll && logEndRef.current) {

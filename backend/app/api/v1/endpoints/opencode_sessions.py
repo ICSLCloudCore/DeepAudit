@@ -15,6 +15,7 @@ import httpx
 from app.db.session import get_db
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
 from app.models.opencode_interaction import OpenCodeInteraction
+from app.models.opencode_message_content import OpenCodeMessageContent
 from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.api.deps import get_current_user
@@ -23,14 +24,11 @@ from app.schemas.opencode_session import (
     OpenCodeSessionResponse,
     OpenCodeSessionListResponse,
     SendPromptRequest,
-    OpenCodeStreamEventType,
-    OpenCodeStreamEvent,
     StartAuditWithPromptRequest,
     StartAuditWithPromptResponse,
     SessionStatusResponse,
     AvailablePromptsResponse,
     AvailablePromptItem,
-    OpenCodeServerStatus,
     OpenCodeInteractionResponse,
     OpenCodeInteractionListResponse,
 )
@@ -305,6 +303,7 @@ async def session_stream(
     if project and project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+<<<<<<< HEAD
     from app.db.session import AsyncSessionLocal
     from app.services.opencode_session_service import OpenCodeSessionService
 
@@ -410,14 +409,46 @@ async def session_stream(
                     "type": OpenCodeStreamEventType.ERROR.value,
                     "error": "响应超时",
                     "timestamp": datetime.utcnow().isoformat(),
+=======
+    async def event_generator():
+        total_num = 0
+        while True:
+            # 查询大于last_index的消息
+            query = (
+                select(OpenCodeMessageContent)
+                .where(
+                    and_(
+                        OpenCodeMessageContent.session_id == session_id
+                    )
+                )
+                .order_by(OpenCodeMessageContent.message_index)
+            )
+            result = await db.execute(query)
+            messages = result.scalars().all()
+            for msg in messages[total_num:]:
+                yield {
+                    "event": "message",
+                    "data": json.dumps({
+                        "content_type": msg.content_type,
+                        "text_content": msg.text_content,
+                        "message_index": msg.message_index
+                    })
+>>>>>>> origin/sse_session
                 }
-            ),
-        }
+                await asyncio.sleep(1)
+            total_num = len(messages)
+            # 检查会话是否结束 不考虑另一边存储状态的时间差
+            await db.refresh(session)
+            if session.status in [OpenCodeSessionStatus.CLOSED, OpenCodeSessionStatus.ERROR]:
+                yield {
+                    "event": "done",
+                    "data": json.dumps({"status": session.status})
+                }
+                break
+
+            await asyncio.sleep(1)
 
     return EventSourceResponse(event_generator())
-
-
-from app.db.session import AsyncSessionLocal
 
 
 @router.post(

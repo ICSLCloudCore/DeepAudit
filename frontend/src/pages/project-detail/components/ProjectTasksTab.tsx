@@ -33,12 +33,50 @@ export function ProjectTasksTab(props: {
         <div className="space-y-4">
           {unifiedTasks.map((wrappedTask) => {
             const isAuditTask = wrappedTask.kind === "audit";
+            const isAgentTask = wrappedTask.kind === "agent";
+            const isOpenCodeTask = wrappedTask.kind === "opencode";
             const task: any = wrappedTask.task as any;
 
-            const issueCount = isAuditTask ? (task.issues_count ?? 0) : (task.findings_count ?? 0);
+            const issueCount = isAuditTask 
+              ? (task.issues_count ?? 0) 
+              : (task.findings_count ?? 0);
             const totalFiles = task.total_files ?? 0;
             const totalLines = task.total_lines ?? "-";
-            const qualityScore = typeof task.quality_score === "number" ? task.quality_score : 0;
+            const score = isOpenCodeTask 
+              ? (typeof task.security_score === "number" ? task.security_score : 0)
+              : (typeof task.quality_score === "number" ? task.quality_score : 0);
+
+            // 确定详情跳转链接
+            let detailLink = "";
+            if (isOpenCodeTask && task.opencode_session_id) {
+              detailLink = `/opencode-audit/${task.opencode_session_id}`;
+            } else if (isAgentTask) {
+              detailLink = `/agent-audit/${task.id}`;
+            } else {
+              detailLink = `/tasks/${task.id}`;
+            }
+
+            // 确定任务类型标签
+            let taskTypeLabel = "";
+            let taskBadgeLabel = "";
+            if (isOpenCodeTask) {
+              taskTypeLabel = task.name || "OpenCode 审计任务";
+              taskBadgeLabel = "OPENCODE";
+            } else if (isAgentTask) {
+              taskTypeLabel = "Agent 审计任务";
+              taskBadgeLabel = "AGENT";
+            } else {
+              taskTypeLabel = (task as AuditTask).task_type === "repository" ? "审计任务" : "即时分析任务";
+              taskBadgeLabel = "AUDIT";
+            }
+
+            // 确定 Badge 类名
+            let badgeClassName = "cyber-badge-muted";
+            if (isOpenCodeTask) {
+              badgeClassName = "cyber-badge-warning";
+            } else if (isAgentTask) {
+              badgeClassName = "cyber-badge-info";
+            }
 
             return (
               <div key={`${wrappedTask.kind}:${task.id}`} className="cyber-card p-6">
@@ -58,16 +96,14 @@ export function ProjectTasksTab(props: {
                     </div>
                     <div>
                       <h4 className="font-bold text-foreground uppercase">
-                        {isAuditTask
-                          ? ((task as AuditTask).task_type === "repository" ? "审计任务" : "即时分析任务")
-                          : "Agent 审计任务"}
+                        {taskTypeLabel}
                       </h4>
                       <p className="text-sm text-muted-foreground font-mono">创建于 {formatDate(task.created_at)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge className={wrappedTask.kind === "agent" ? "cyber-badge-info" : "cyber-badge-muted"}>
-                      {wrappedTask.kind === "agent" ? "AGENT" : "AUDIT"}
+                    <Badge className={badgeClassName}>
+                      {taskBadgeLabel}
                     </Badge>
                     {renderStatusBadge(task.status)}
                   </div>
@@ -84,26 +120,32 @@ export function ProjectTasksTab(props: {
                   </div>
                   <div className="text-center p-3 bg-muted rounded-lg border border-border">
                     <p className="text-2xl font-bold text-amber-400">{issueCount}</p>
-                    <p className="text-xs text-muted-foreground uppercase">{isAuditTask ? "发现问题" : "发现漏洞"}</p>
+                    <p className="text-xs text-muted-foreground uppercase">
+                      {isOpenCodeTask ? "发现问题" : isAuditTask ? "发现问题" : "发现漏洞"}
+                    </p>
                   </div>
                   <div className="text-center p-3 bg-muted rounded-lg border border-border">
-                    <p className="text-2xl font-bold text-primary">{qualityScore.toFixed(1)}</p>
-                    <p className="text-xs text-muted-foreground uppercase">质量评分</p>
+                    <p className="text-2xl font-bold text-primary">{score.toFixed(1)}</p>
+                    <p className="text-xs text-muted-foreground uppercase">
+                      {isOpenCodeTask ? "安全评分" : "质量评分"}
+                    </p>
                   </div>
                 </div>
 
-                {task.status === "completed" && typeof qualityScore === "number" && (
+                {task.status === "completed" && typeof score === "number" && (
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center justify-between text-sm font-mono">
-                      <span className="text-muted-foreground">质量评分</span>
-                      <span className="text-foreground font-bold">{qualityScore.toFixed(1)}/100</span>
+                      <span className="text-muted-foreground">
+                        {isOpenCodeTask ? "安全评分" : "质量评分"}
+                      </span>
+                      <span className="text-foreground font-bold">{score.toFixed(1)}/100</span>
                     </div>
-                    <Progress value={qualityScore} className="h-2 bg-muted [&>div]:bg-primary" />
+                    <Progress value={score} className="h-2 bg-muted [&>div]:bg-primary" />
                   </div>
                 )}
 
                 <div className="flex justify-end space-x-2 pt-4 border-t border-border">
-                  <Link to={isAuditTask ? `/tasks/${task.id}` : `/agent-audit/${task.id}`}>
+                  <Link to={detailLink}>
                     <Button variant="outline" size="sm" className="cyber-btn-outline">
                       <FileText className="w-4 h-4 mr-2" />
                       查看详情
