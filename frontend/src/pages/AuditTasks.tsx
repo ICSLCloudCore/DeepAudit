@@ -1239,7 +1239,7 @@ export default function AuditTasks() {
                         <Link to={`/opencode-audit/${task.opencode_session_id}`}>
                           <Button size="sm" className="cyber-btn-outline h-9">
                             <FileText className="w-4 h-4 mr-2" />
-                            查看详情
+                            查看实时流
                           </Button>
                         </Link>
                       )}
