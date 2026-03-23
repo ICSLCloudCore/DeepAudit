@@ -27,6 +27,7 @@ const initialState: OpenCodeAuditState = {
   isAutoScroll: true,
   expandedLogIds: new Set(),
   expandedParts: new Set(), // 新增：空的展开 part 集合
+  showProgressLogs: false, // 新增：是否显示思考过程
 };
 
 // ============ Reducer ============
@@ -134,6 +135,9 @@ function openCodeAuditReducer(
       return { ...state, expandedParts: newExpanded };
     }
 
+    case 'TOGGLE_SHOW_PROGRESS_LOGS':
+      return { ...state, showProgressLogs: !state.showProgressLogs };
+
     case 'RESET':
       return { ...initialState };
 
@@ -212,6 +216,10 @@ export function useOpenCodeAuditState() {
     dispatch({ type: 'TOGGLE_PART_EXPANDED', payload: id });
   }, []);
 
+  const toggleShowProgressLogs = useCallback(() => {
+    dispatch({ type: 'TOGGLE_SHOW_PROGRESS_LOGS' });
+  }, []);
+
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' });
   }, []);
@@ -249,6 +257,7 @@ export function useOpenCodeAuditState() {
     updateMessage,
     addPart,
     togglePartExpanded,
+    toggleShowProgressLogs,
     reset,
 
     // Direct dispatch for complex operations

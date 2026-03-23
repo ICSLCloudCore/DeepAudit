@@ -306,7 +306,6 @@ async def session_stream(
     async def event_generator():
         total_num = 0
         while True:
-            # 查询大于last_index的消息
             query = (
                 select(OpenCodeMessageContent)
                 .where(
@@ -327,7 +326,7 @@ async def session_stream(
                         "message_index": msg.message_index
                     })
                 }
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
             total_num = len(messages)
             # 检查会话是否结束 不考虑另一边存储状态的时间差
             await db.refresh(session)
