@@ -2,8 +2,9 @@
  * OpenCode Audit Log Entry Component
  */
 
-import { memo } from "react";
-import { ChevronDown, ChevronUp, Zap } from "lucide-react";
+import { memo, useState } from "react";
+import { ChevronDown, ChevronUp, Zap, Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 import { LOG_TYPE_CONFIG } from "../constants";
 import type { LogEntryProps } from "../types";
 
@@ -20,6 +21,21 @@ export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: L
   const config = LOG_TYPE_CONFIG[item.type] || LOG_TYPE_CONFIG.info;
   const isCollapsible = item.content && item.type !== 'prompt';
   const showContent = isExpanded || item.type === 'prompt';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!item.content) return;
+    try {
+      await navigator.clipboard.writeText(item.content);
+      setCopied(true);
+      toast.success("已复制到剪贴板");
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      toast.error("复制失败");
+    }
+  };
 
   return (
     <div
@@ -87,6 +103,17 @@ export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: L
                     <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
                     <span className="text-xs text-muted-foreground font-mono uppercase">Details</span>
                   </div>
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {copied ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    <span className="font-mono">{copied ? "已复制" : "复制"}</span>
+                  </button>
                 </div>
                 <pre className="p-4 text-sm font-mono text-foreground/85 max-h-64 overflow-y-auto custom-scrollbar whitespace-pre-wrap break-words">
                   {item.content}
