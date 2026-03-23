@@ -21,9 +21,9 @@ function OpenCodeAuditPageContent() {
   
   const {
     session, logs, messages, isLoading,
-    isAutoScroll, expandedLogIds, isRunning, isComplete,
+    isAutoScroll, expandedLogIds, isRunning, isComplete, showProgressLogs,
     setSession, addLog, updateLog,
-    setLoading, setError, setAutoScroll, toggleLogExpanded,
+    setLoading, setError, setAutoScroll, toggleLogExpanded, toggleShowProgressLogs,
     reset,
   } = useOpenCodeAuditState();
 
@@ -255,19 +255,34 @@ function OpenCodeAuditPageContent() {
               </Badge>
             </div>
 
-            <button
-              onClick={() => setAutoScroll(!isAutoScroll)}
-              className={`
-                flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider
-                ${isAutoScroll
-                  ? 'bg-primary/15 text-primary border border-primary/50'
-                  : 'text-muted-foreground hover:text-foreground border border-border hover:bg-muted'
-                }
-              `}
-            >
-              <ArrowDown className="w-3.5 h-3.5" />
-              <span>Auto-scroll</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => toggleShowProgressLogs()}
+                className={`
+                  flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider
+                  ${showProgressLogs
+                    ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50'
+                    : 'text-muted-foreground hover:text-foreground border border-border hover:bg-muted'
+                  }
+                `}
+              >
+                <span>THINGKING</span>
+              </button>
+              
+              <button
+                onClick={() => setAutoScroll(!isAutoScroll)}
+                className={`
+                  flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider
+                  ${isAutoScroll
+                    ? 'bg-primary/15 text-primary border border-primary/50'
+                    : 'text-muted-foreground hover:text-foreground border border-border hover:bg-muted'
+                  }
+                `}
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+                <span>Auto-scroll</span>
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-muted/30">
@@ -280,7 +295,7 @@ function OpenCodeAuditPageContent() {
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                       <span className="text-sm font-mono tracking-wide">
-                        WAITING FOR OPENDCODE ACTIVITY...
+                        WAITING FOR ANALYSE RESPONSE...
                       </span>
                     </div>
                   ) : (
@@ -292,7 +307,7 @@ function OpenCodeAuditPageContent() {
               </div>
             ) : (
               <div className="space-y-3">
-                {logs.map(item => (
+                {logs.filter(item => showProgressLogs || item.type !== 'progress').map(item => (
                   <LogEntry
                     key={item.id}
                     item={item}

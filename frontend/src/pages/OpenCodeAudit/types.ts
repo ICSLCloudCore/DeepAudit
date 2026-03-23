@@ -53,6 +53,7 @@ export interface OpenCodeAuditState {
   isAutoScroll: boolean;
   expandedLogIds: Set<string>;
   expandedParts: Set<string>; // 新增：展开的 Part ID 集合
+  showProgressLogs: boolean; // 新增：是否显示进度日志
 }
 
 // ============ Action Types ============
@@ -74,6 +75,7 @@ export type OpenCodeAuditAction =
   | { type: 'UPDATE_MESSAGE'; payload: { id: string; updates: Partial<OpenCodeMessage> } }
   | { type: 'ADD_PART'; payload: { messageId: string; part: Part } }
   | { type: 'TOGGLE_PART_EXPANDED'; payload: string }
+  | { type: 'TOGGLE_SHOW_PROGRESS_LOGS' }
   | { type: 'RESET' };
 
 // ============ Component Props ============
