@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -130,21 +130,32 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="!w-[min(90vw,560px)] !max-w-none flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
-        {/* Header */}
-        <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
-          <DialogTitle className="flex items-center gap-3 font-mono text-foreground">
-            <div className="p-2 bg-primary/20 rounded border border-primary/30">
+      <DialogContent className="!w-[min(90vw,560px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
+        {/* Header — custom close button so it stays visible over bg-muted */}
+        <div className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/20 rounded border border-primary/30 flex-shrink-0">
               <Settings2 className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <span className="text-base font-bold uppercase tracking-wider">洞察配置</span>
+              {/* DialogTitle must stay in DOM for a11y — hide the default one via sr-only */}
+              <DialogTitle className="sr-only">洞察配置</DialogTitle>
+              <span className="text-base font-bold uppercase tracking-wider font-mono text-foreground">洞察配置</span>
               <p className="text-xs text-muted-foreground font-normal mt-0.5">
                 Vulnerability Insight Settings
               </p>
             </div>
-          </DialogTitle>
-        </DialogHeader>
+          </div>
+          {/* Explicit close button — visible against muted background */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-shrink-0 rounded-md w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            aria-label="关闭"
+          >
+            <span className="text-lg leading-none">✕</span>
+          </button>
+        </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
