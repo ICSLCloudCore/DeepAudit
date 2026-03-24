@@ -107,6 +107,9 @@ class AttackPatternEntryBase(BaseModel):
     go_packages: List[str] = Field(default_factory=list)
     source_url: Optional[str] = Field(None, max_length=500)
     is_active: bool = True
+    # 版本管理字段
+    version: str = Field(default="1.0.0", max_length=50)
+    version_notes: Optional[str] = Field(None, max_length=2000)
 
     @field_validator("slug")
     @classmethod
@@ -147,6 +150,7 @@ class AttackPatternEntryUpdate(BaseModel):
     go_packages: Optional[List[str]] = None
     source_url: Optional[str] = Field(None, max_length=500)
     is_active: Optional[bool] = None
+    version_notes: Optional[str] = Field(None, max_length=2000)
 
     @field_validator("severity")
     @classmethod
@@ -165,7 +169,10 @@ class AttackPatternEntryUpdate(BaseModel):
 
 class AttackPatternEntryResponse(AttackPatternEntryBase):
     id: str
+    pattern_id: str
+    is_latest: bool
     is_system: bool
+    parent_id: Optional[str] = None
     created_by: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -179,6 +186,32 @@ class AttackPatternEntryListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+# ─── 版本管理 Schema ─────────────────────────────────────────────────────────
+
+
+class AttackPatternVersionCreate(BaseModel):
+    """基于现有版本创建新版本"""
+    version: str = Field(..., min_length=1, max_length=50, description="新版本号，如 2.0.0")
+    version_notes: Optional[str] = Field(None, max_length=2000, description="版本变更说明")
+    # 可覆盖的内容字段（不提供则完全继承父版本内容）
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    summary: Optional[str] = Field(None, max_length=1000)
+    content: Optional[str] = Field(None, min_length=1)
+    mitigations: Optional[str] = None
+    severity: Optional[str] = None
+    likelihood: Optional[str] = None
+    tags: Optional[List[str]] = None
+    go_packages: Optional[List[str]] = None
+    source_url: Optional[str] = Field(None, max_length=500)
+    is_active: Optional[bool] = None
+
+
+class AttackPatternVersionListResponse(BaseModel):
+    """某一攻击模式的全部版本列表"""
+    pattern_id: str
+    versions: List[AttackPatternEntryResponse]
 
 
 # ─── 导入结果 Schema ────────────────────────────────────────────────────────

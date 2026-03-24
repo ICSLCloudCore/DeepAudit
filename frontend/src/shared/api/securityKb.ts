@@ -52,6 +52,11 @@ export type VulnerabilityEntryUpdate = Partial<Omit<VulnerabilityEntryCreate, 's
 
 export interface AttackPatternEntry {
   id: string;
+  pattern_id: string;
+  version: string;
+  version_notes?: string;
+  is_latest: boolean;
+  parent_id?: string;
   title: string;
   slug: string;
   capec_id?: string;
@@ -85,9 +90,35 @@ export interface AttackPatternEntryCreate {
   go_packages?: string[];
   source_url?: string;
   is_active?: boolean;
+  version?: string;
+  version_notes?: string;
 }
 
-export type AttackPatternEntryUpdate = Partial<Omit<AttackPatternEntryCreate, 'slug'>>;
+export type AttackPatternEntryUpdate = Partial<Omit<AttackPatternEntryCreate, 'slug'>> & {
+  version_notes?: string;
+};
+
+// ─── 版本管理类型 ─────────────────────────────────────────────────────────────
+
+export interface AttackPatternVersionCreate {
+  version: string;
+  version_notes?: string;
+  title?: string;
+  summary?: string;
+  content?: string;
+  mitigations?: string;
+  severity?: Severity;
+  likelihood?: Likelihood;
+  tags?: string[];
+  go_packages?: string[];
+  source_url?: string;
+  is_active?: boolean;
+}
+
+export interface AttackPatternVersionListResponse {
+  pattern_id: string;
+  versions: AttackPatternEntry[];
+}
 
 // ─── 公共类型 ───────────────────────────────────────────────────────────────
 
@@ -287,6 +318,26 @@ export async function importAttackPatternZip(
   const response = await apiClient.post(`${ATTACK_BASE}/import-zip`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return response.data;
+}
+
+export async function listAttackPatternVersions(
+  entryId: string,
+): Promise<AttackPatternVersionListResponse> {
+  const response = await apiClient.get(`${ATTACK_BASE}/${entryId}/versions`);
+  return response.data;
+}
+
+export async function createAttackPatternVersion(
+  entryId: string,
+  data: AttackPatternVersionCreate,
+): Promise<AttackPatternEntry> {
+  const response = await apiClient.post(`${ATTACK_BASE}/${entryId}/versions`, data);
+  return response.data;
+}
+
+export async function setAttackPatternLatestVersion(entryId: string): Promise<AttackPatternEntry> {
+  const response = await apiClient.put(`${ATTACK_BASE}/${entryId}/set-latest`);
   return response.data;
 }
 

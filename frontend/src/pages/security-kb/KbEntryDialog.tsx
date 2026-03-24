@@ -55,6 +55,7 @@ function initAttackForm() {
     title: '', slug: '', capec_id: '', attack_type: 'other', severity: 'medium',
     likelihood: 'none', tags: '', summary: '', content: '', mitigations: '',
     go_packages: '', source_url: '', is_active: true,
+    version: '1.0.0', version_notes: '',
   };
 }
 
@@ -81,6 +82,7 @@ function entryToAttackForm(e: AttackPatternEntry) {
     mitigations: e.mitigations ?? '',
     go_packages: (e.go_packages ?? []).join(', '),
     source_url: e.source_url ?? '', is_active: e.is_active,
+    version: e.version ?? '1.0.0', version_notes: e.version_notes ?? '',
   };
 }
 
@@ -184,6 +186,8 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
           go_packages: parseTags(f.go_packages),
           source_url: f.source_url.trim() || undefined,
           is_active: f.is_active,
+          version: f.version.trim() || '1.0.0',
+          version_notes: f.version_notes.trim() || undefined,
         };
         if (isEditing && editingEntry) await updateAttackPattern(editingEntry.id, payload);
         else await createAttackPattern(payload);
@@ -372,6 +376,35 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
             <div className="space-y-2">
               <Label className="text-xs font-bold text-muted-foreground uppercase">来源 URL</Label>
               <Input value={vulnForm.source_url} onChange={e => setV('source_url', e.target.value)} placeholder="https://nvd.nist.gov/..." className="cyber-input font-mono" />
+            </div>
+          )}
+
+          {/* 版本信息（仅攻击模式，且仅新建时显示版本号） */}
+          {!isVuln && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">
+                  版本号
+                  {isEditing && <span className="ml-1 text-[10px] font-normal normal-case text-muted-foreground/60">（如需更新版本请使用"版本管理"）</span>}
+                </Label>
+                <Input
+                  value={attackForm.version}
+                  onChange={e => setA('version', e.target.value)}
+                  placeholder="1.0.0"
+                  className="cyber-input font-mono"
+                  readOnly={isEditing}
+                  style={isEditing ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">版本说明</Label>
+                <Input
+                  value={attackForm.version_notes}
+                  onChange={e => setA('version_notes', e.target.value)}
+                  placeholder="初始版本"
+                  className="cyber-input"
+                />
+              </div>
             </div>
           )}
 

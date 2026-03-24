@@ -17,13 +17,14 @@ import {
 import { toast } from 'sonner';
 import {
   Plus, Search, ChevronLeft, ChevronRight, Upload, Download,
-  Eye, Edit, Trash2, FileText, Archive, Lock, Calendar, Loader2, Swords,
+  Eye, Edit, Trash2, FileText, Archive, Lock, Calendar, Loader2, Swords, GitBranch,
 } from 'lucide-react';
 
 import { SEVERITY_OPTIONS, ATTACK_TYPE_OPTIONS, getSeverityMeta } from './types';
 import KbEntryDialog from './KbEntryDialog';
 import KbViewDialog from './KbViewDialog';
 import KbImportDialog from './KbImportDialog';
+import AttackPatternVersionDialog from './AttackPatternVersionDialog';
 import type { AttackPatternEntry } from '@/shared/api/securityKb';
 import {
   listAttackPatterns, deleteAttackPattern,
@@ -51,6 +52,7 @@ export default function AttackPatternList() {
   const [editingEntry, setEditingEntry] = useState<AttackPatternEntry | null>(null);
   const [viewingEntry, setViewingEntry] = useState<AttackPatternEntry | null>(null);
   const [deletingEntry, setDeletingEntry] = useState<AttackPatternEntry | null>(null);
+  const [versionEntry, setVersionEntry] = useState<AttackPatternEntry | null>(null);
   const [importMode, setImportMode] = useState<'single' | 'zip' | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -206,6 +208,7 @@ export default function AttackPatternList() {
               onEdit={() => setEditingEntry(entry)}
               onExport={() => handleExportMd(entry)}
               onDelete={() => setDeletingEntry(entry)}
+              onVersions={() => setVersionEntry(entry)}
             />
           ))}
         </div>
@@ -248,6 +251,14 @@ export default function AttackPatternList() {
         onImported={load}
       />
 
+      {/* Version Management Dialog */}
+      <AttackPatternVersionDialog
+        open={!!versionEntry}
+        onClose={() => setVersionEntry(null)}
+        entry={versionEntry}
+        onVersionChanged={load}
+      />
+
       <AlertDialog open={!!deletingEntry} onOpenChange={v => { if (!v) setDeletingEntry(null); }}>
         <AlertDialogContent className="cyber-dialog border border-border">
           <AlertDialogHeader>
@@ -276,9 +287,10 @@ interface CardProps {
   onEdit: () => void;
   onExport: () => void;
   onDelete: () => void;
+  onVersions: () => void;
 }
 
-function AttackCard({ entry, onView, onEdit, onExport, onDelete }: CardProps) {
+function AttackCard({ entry, onView, onEdit, onExport, onDelete, onVersions }: CardProps) {
   const sev = getSeverityMeta(entry.severity);
 
   return (
@@ -305,9 +317,21 @@ function AttackCard({ entry, onView, onEdit, onExport, onDelete }: CardProps) {
               </Badge>
             )}
           </div>
-          {!entry.is_active && (
-            <Badge variant="outline" className="text-xs font-mono shrink-0 opacity-50">禁用</Badge>
-          )}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Clickable version badge */}
+            <button
+              type="button"
+              className="flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              onClick={e => { e.stopPropagation(); onVersions(); }}
+              title="查看版本历史"
+            >
+              <GitBranch className="w-2.5 h-2.5" />
+              v{entry.version ?? '1.0.0'}
+            </button>
+            {!entry.is_active && (
+              <Badge variant="outline" className="text-xs font-mono opacity-50">禁用</Badge>
+            )}
+          </div>
         </div>
 
         <h3 className="text-sm font-mono font-bold line-clamp-2 leading-snug text-foreground mb-1">
@@ -359,6 +383,13 @@ function AttackCard({ entry, onView, onEdit, onExport, onDelete }: CardProps) {
             onClick={e => { e.stopPropagation(); onEdit(); }}
           >
             <Edit className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            size="sm" variant="ghost" className="cyber-btn-ghost h-7 w-7 p-0"
+            title="版本管理"
+            onClick={e => { e.stopPropagation(); onVersions(); }}
+          >
+            <GitBranch className="w-3.5 h-3.5" />
           </Button>
           <Button
             size="sm" variant="ghost" className="cyber-btn-ghost h-7 w-7 p-0" title="导出 .md"

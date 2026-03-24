@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from typing import Any, List, Optional
@@ -36,6 +37,8 @@ from app.schemas.security_kb import (
     AttackPatternEntryListResponse,
     AttackPatternEntryResponse,
     AttackPatternEntryUpdate,
+    AttackPatternVersionCreate,
+    AttackPatternVersionListResponse,
     ExportZipRequest,
     ImportResultItem,
     ImportZipResponse,
@@ -567,6 +570,7 @@ async def list_attack_patterns(
     attack_type: Optional[str] = Query(None),
     is_system: Optional[bool] = Query(None),
     is_active: Optional[bool] = Query(None),
+    all_versions: bool = Query(False, description="为 True 时返回所有版本，默认只返回最新版本"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
@@ -575,6 +579,10 @@ async def list_attack_patterns(
         GoAttackPatternEntry.created_by == current_user.id,
     )
     query = select(GoAttackPatternEntry).where(base_filter)
+
+    # By default only show latest version of each pattern
+    if not all_versions:
+        query = query.where(GoAttackPatternEntry.is_latest == True)
 
     if q:
         like = f"%{q}%"
@@ -631,8 +639,16 @@ async def create_attack_pattern(
     if existing:
         raise HTTPException(status_code=400, detail=f"slug '{data.slug}' 已存在")
 
+    new_id = str(uuid.uuid4())
     entry = GoAttackPatternEntry(
-        **{k: v for k, v in data.model_dump().items() if k not in ("tags", "go_packages")},
+        id=new_id,
+        pattern_id=new_id,       # 首版：pattern_id == id
+        version=data.version or "1.0.0",
+        version_notes=data.version_notes,
+        is_latest=True,
+        parent_id=None,
+        **{k: v for k, v in data.model_dump().items()
+           if k not in ("tags", "go_packages", "version", "version_notes")},
         tags=json.dumps(data.tags, ensure_ascii=False),
         go_packages=json.dumps(data.go_packages, ensure_ascii=False),
         is_system=False,
@@ -818,6 +834,12 @@ def _attack_response(entry: GoAttackPatternEntry) -> AttackPatternEntryResponse:
     d = {c.name: getattr(entry, c.name) for c in entry.__table__.columns}
     d["tags"] = _json_loads_safe(entry.tags)
     d["go_packages"] = _json_loads_safe(entry.go_packages)
+    # Ensure new version fields are always present even for older rows
+    d.setdefault("pattern_id", entry.id)
+    d.setdefault("version", "1.0.0")
+    d.setdefault("version_notes", None)
+    d.setdefault("is_latest", True)
+    d.setdefault("parent_id", None)
     return AttackPatternEntryResponse.model_validate(d)
 
 
@@ -845,15 +867,24 @@ async def _upsert_attack(
         for k, v in parsed.items():
             if k in ("tags", "go_packages"):
                 setattr(existing, k, json.dumps(v, ensure_ascii=False))
-            else:
+            elif k not in ("pattern_id", "is_latest", "parent_id"):
                 setattr(existing, k, v)
         existing.updated_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(existing)
         return existing
 
+    new_id = str(uuid.uuid4())
     entry = GoAttackPatternEntry(
-        **{k: v for k, v in parsed.items() if k not in ("tags", "go_packages")},
+        id=new_id,
+        pattern_id=parsed.get("pattern_id") or new_id,
+        version=parsed.get("version") or "1.0.0",
+        version_notes=parsed.get("version_notes"),
+        is_latest=True,
+        parent_id=parsed.get("parent_id"),
+        **{k: v for k, v in parsed.items()
+           if k not in ("tags", "go_packages", "pattern_id", "version",
+                        "version_notes", "is_latest", "parent_id")},
         tags=json.dumps(parsed.get("tags", []), ensure_ascii=False),
         go_packages=json.dumps(parsed.get("go_packages", []), ensure_ascii=False),
         is_system=False,
@@ -863,6 +894,139 @@ async def _upsert_attack(
     await db.commit()
     await db.refresh(entry)
     return entry
+
+
+# ─── 版本管理路由 ─────────────────────────────────────────────────────────────
+
+@attack_router.get("/{entry_id}/versions", response_model=AttackPatternVersionListResponse)
+async def list_attack_pattern_versions(
+    entry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """获取某一攻击模式的所有版本（通过任意版本的 id 均可查询）"""
+    # Resolve pattern_id from the given entry
+    entry = await _get_attack_or_404(entry_id, db)
+    _check_read_access(entry, current_user)
+    pattern_id = entry.pattern_id or entry.id
+
+    result = await db.execute(
+        select(GoAttackPatternEntry)
+        .where(GoAttackPatternEntry.pattern_id == pattern_id)
+        .order_by(GoAttackPatternEntry.created_at.asc())
+    )
+    versions = result.scalars().all()
+    return AttackPatternVersionListResponse(
+        pattern_id=pattern_id,
+        versions=[_attack_response(v) for v in versions],
+    )
+
+
+@attack_router.post("/{entry_id}/versions", response_model=AttackPatternEntryResponse, status_code=201)
+async def create_attack_pattern_version(
+    entry_id: str,
+    data: AttackPatternVersionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """基于现有版本创建新版本（继承所有字段，仅覆盖提供的字段）"""
+    parent = await _get_attack_or_404(entry_id, db)
+    _check_read_access(parent, current_user)
+
+    pattern_id = parent.pattern_id or parent.id
+
+    # Check version number uniqueness within this pattern
+    dup = (await db.execute(
+        select(GoAttackPatternEntry).where(
+            GoAttackPatternEntry.pattern_id == pattern_id,
+            GoAttackPatternEntry.version == data.version,
+        )
+    )).scalar_one_or_none()
+    if dup:
+        raise HTTPException(status_code=400, detail=f"版本 {data.version} 已存在于该攻击模式中")
+
+    # Build slug for new version: base-slug + -v{version_no_dots}
+    version_suffix = data.version.replace(".", "")
+    parent_base_slug = parent.slug.split("-v")[0]  # strip previous version suffix if present
+    new_slug = f"{parent_base_slug}-v{version_suffix}"
+
+    # Ensure slug uniqueness globally
+    slug_candidate = new_slug
+    counter = 1
+    while (await db.execute(
+        select(GoAttackPatternEntry).where(GoAttackPatternEntry.slug == slug_candidate)
+    )).scalar_one_or_none():
+        slug_candidate = f"{new_slug}-{counter}"
+        counter += 1
+
+    # Mark old is_latest False
+    old_latest = (await db.execute(
+        select(GoAttackPatternEntry).where(
+            GoAttackPatternEntry.pattern_id == pattern_id,
+            GoAttackPatternEntry.is_latest == True,
+        )
+    )).scalar_one_or_none()
+    if old_latest:
+        old_latest.is_latest = False
+
+    # Inherit fields from parent, override with provided data
+    new_id = str(uuid.uuid4())
+    parent_tags = _json_loads_safe(parent.tags)
+    parent_pkgs = _json_loads_safe(parent.go_packages)
+
+    new_entry = GoAttackPatternEntry(
+        id=new_id,
+        pattern_id=pattern_id,
+        version=data.version,
+        version_notes=data.version_notes,
+        is_latest=True,
+        parent_id=parent.id,
+        slug=slug_candidate,
+        title=data.title or parent.title,
+        capec_id=parent.capec_id,
+        attack_type=parent.attack_type,
+        severity=data.severity or parent.severity,
+        likelihood=data.likelihood or parent.likelihood,
+        tags=json.dumps(data.tags if data.tags is not None else parent_tags, ensure_ascii=False),
+        summary=data.summary if data.summary is not None else parent.summary,
+        content=data.content or parent.content,
+        mitigations=data.mitigations if data.mitigations is not None else parent.mitigations,
+        go_packages=json.dumps(data.go_packages if data.go_packages is not None else parent_pkgs, ensure_ascii=False),
+        source_url=data.source_url if data.source_url is not None else parent.source_url,
+        is_system=False,
+        is_active=data.is_active if data.is_active is not None else parent.is_active,
+        created_by=current_user.id,
+    )
+    db.add(new_entry)
+    await db.commit()
+    await db.refresh(new_entry)
+    return _attack_response(new_entry)
+
+
+@attack_router.put("/{entry_id}/set-latest", response_model=AttackPatternEntryResponse)
+async def set_attack_pattern_latest_version(
+    entry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """将指定版本设置为该攻击模式的最新版本（is_latest=True）"""
+    entry = await _get_attack_or_404(entry_id, db)
+    _check_read_access(entry, current_user)
+    if entry.is_system:
+        raise HTTPException(status_code=403, detail="系统内置条目不允许修改")
+
+    pattern_id = entry.pattern_id or entry.id
+
+    # Clear all is_latest for this pattern
+    all_versions = (await db.execute(
+        select(GoAttackPatternEntry).where(GoAttackPatternEntry.pattern_id == pattern_id)
+    )).scalars().all()
+    for v in all_versions:
+        v.is_latest = False
+    entry.is_latest = True
+    await db.commit()
+    await db.refresh(entry)
+    return _attack_response(entry)
 
 
 # ─── 洞察配置路由 ────────────────────────────────────────────────────────────
