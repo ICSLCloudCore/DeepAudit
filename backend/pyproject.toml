@@ -49,6 +49,8 @@ dependencies = [
     # ============ Utilities ============
     "json-repair>=0.30.0",
     "aiofiles>=23.2.1",
+    "python-frontmatter>=1.1.0",
+    "python-slugify>=8.0.0",
 
     # ============ LangChain & LangGraph ============
     "langchain>=0.1.0",

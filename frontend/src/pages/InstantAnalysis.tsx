@@ -193,58 +193,67 @@ export default function InstantAnalysis() {
 
   // Example codes
   const exampleCodes = {
-    javascript: `// 示例JavaScript代码 - 包含多种问题
-var userName = "admin";
-var password = "123456"; // 硬编码密码
+    go: `// 示例Go代码 - 包含多种安全问题
+package main
 
-function validateUser(input) {
-    if (input == userName) { // 使用 == 比较
-        console.log("User validated"); // 生产代码中的console.log
-        return true;
-    }
-    return false;
+import (
+	"database/sql"
+	"fmt"
+	"net/http"
+	"os/exec"
+)
+
+const adminPassword = "admin123" // 硬编码密码
+
+// SQL注入风险：直接拼接用户输入
+func getUser(db *sql.DB, username string) {
+	query := "SELECT * FROM users WHERE name = '" + username + "'"
+	rows, _ := db.Query(query) // 忽略错误
+	defer rows.Close()
+	fmt.Println(rows)
 }
 
-// 性能问题：循环中重复计算长度
-function processItems(items) {
-    for (var i = 0; i < items.length; i++) {
-        for (var j = 0; j < items.length; j++) {
-            console.log(items[i] + items[j]);
-        }
-    }
+// 命令注入风险
+func runCommand(userInput string) {
+	cmd := exec.Command("bash", "-c", userInput)
+	cmd.Run() // 未检查返回值
 }
 
-// 安全问题：使用eval
-function executeCode(userInput) {
-    eval(userInput); // 危险的eval使用
+// 不安全的HTTP处理：未校验输入
+func handler(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	fmt.Fprintf(w, "<h1>Hello "+name+"</h1>") // XSS风险
 }`,
-    python: `# 示例Python代码 - 包含多种问题
-import *  # 通配符导入
+    cpp: `// 示例C/C++代码 - 包含多种安全问题
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
-password = "secret123"  # 硬编码密码
+const char* PASSWORD = "secret123"; // 硬编码密码
 
-def process_data(data):
-    try:
-        result = []
-        for item in data:
-            print(item)  # 使用print而非logging
-            result.append(item * 2)
-        return result
-    except:  # 裸露的except语句
-        pass`,
-    java: `// 示例Java代码 - 包含多种问题
-public class Example {
-    private String password = "admin123"; // 硬编码密码
+// 缓冲区溢出风险
+void copyInput(char* dest, const char* src) {
+    strcpy(dest, src); // 未检查长度
+}
 
-    public void processData() {
-        System.out.println("Processing..."); // 使用System.out.print
+// 格式化字符串漏洞
+void printMessage(char* userInput) {
+    printf(userInput); // 直接使用用户输入作为格式字符串
+}
 
-        try {
-            String data = getData();
-        } catch (Exception e) {
-            // 空的异常处理
-        }
+// 内存泄漏
+void processData(int size) {
+    int* buffer = (int*)malloc(size * sizeof(int));
+    if (size > 100) {
+        return; // 未释放内存
     }
+    free(buffer);
+}
+
+int main() {
+    char buf[16];
+    copyInput(buf, "this string is longer than buffer"); // 溢出
+    return 0;
 }`
   };
 
@@ -661,16 +670,16 @@ public class Example {
           {/* Quick Examples */}
           <div className="flex flex-wrap gap-2 items-center p-3 bg-muted border border-border rounded">
             <span className="text-xs font-bold uppercase text-muted-foreground mr-2">示例：</span>
-            {['javascript', 'python', 'java'].map((lang) => (
+            {[{ key: 'go', label: 'Go' }, { key: 'cpp', label: 'C/C++' }].map(({ key, label }) => (
               <Button
-                key={lang}
+                key={key}
                 variant="outline"
                 size="sm"
-                onClick={() => loadExampleCode(lang)}
+                onClick={() => loadExampleCode(key)}
                 disabled={analyzing}
                 className="h-7 px-2 text-xs cyber-btn-ghost"
               >
-                {lang.charAt(0).toUpperCase() + lang.slice(1)}
+                {label}
               </Button>
             ))}
           </div>
