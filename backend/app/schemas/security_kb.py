@@ -13,20 +13,15 @@ SEVERITY_VALUES = {"critical", "high", "medium", "low"}
 LIKELIHOOD_VALUES = {"high", "medium", "low"}
 
 
-# ─── 漏洞库 Schema ──────────────────────────────────────────────────────────
+# ─── 漏洞洞察报告 Schema ─────────────────────────────────────────────────────
 
 
 class VulnerabilityEntryBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     slug: str = Field(..., min_length=1, max_length=200)
-    cve_id: Optional[str] = Field(None, max_length=50)
-    cwe_id: Optional[str] = Field(None, max_length=50)
-    severity: str = Field(..., description="critical|high|medium|low")
-    category: str = Field(..., min_length=1, max_length=100)
     tags: List[str] = Field(default_factory=list)
     summary: Optional[str] = Field(None, max_length=1000)
     content: str = Field(..., min_length=1)
-    affected_versions: Optional[str] = Field(None, max_length=500)
     go_packages: List[str] = Field(default_factory=list)
     source_url: Optional[str] = Field(None, max_length=500)
     is_active: bool = True
@@ -38,13 +33,6 @@ class VulnerabilityEntryBase(BaseModel):
             raise ValueError("slug 只能包含小写字母、数字和连字符，且不能以连字符开头或结尾")
         return v
 
-    @field_validator("severity")
-    @classmethod
-    def validate_severity(cls, v: str) -> str:
-        if v not in SEVERITY_VALUES:
-            raise ValueError(f"severity 必须是 {sorted(SEVERITY_VALUES)} 之一")
-        return v
-
 
 class VulnerabilityEntryCreate(VulnerabilityEntryBase):
     pass
@@ -52,24 +40,12 @@ class VulnerabilityEntryCreate(VulnerabilityEntryBase):
 
 class VulnerabilityEntryUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
-    cve_id: Optional[str] = Field(None, max_length=50)
-    cwe_id: Optional[str] = Field(None, max_length=50)
-    severity: Optional[str] = None
-    category: Optional[str] = Field(None, min_length=1, max_length=100)
     tags: Optional[List[str]] = None
     summary: Optional[str] = Field(None, max_length=1000)
     content: Optional[str] = Field(None, min_length=1)
-    affected_versions: Optional[str] = Field(None, max_length=500)
     go_packages: Optional[List[str]] = None
     source_url: Optional[str] = Field(None, max_length=500)
     is_active: Optional[bool] = None
-
-    @field_validator("severity")
-    @classmethod
-    def validate_severity(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in SEVERITY_VALUES:
-            raise ValueError(f"severity 必须是 {sorted(SEVERITY_VALUES)} 之一")
-        return v
 
 
 class VulnerabilityEntryResponse(VulnerabilityEntryBase):

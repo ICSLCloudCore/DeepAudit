@@ -35,7 +35,7 @@ export default function SecurityKnowledgeBase() {
               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 px-4 text-muted-foreground transition-all rounded-sm text-xs flex items-center gap-2"
             >
               <Bug className="w-4 h-4" />
-              洞察漏洞库
+              漏洞洞察报告
             </TabsTrigger>
             <TabsTrigger
               value="attack-patterns"

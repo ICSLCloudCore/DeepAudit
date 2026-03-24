@@ -12,20 +12,15 @@ from app.db.base import Base
 
 
 class GoVulnerabilityEntry(Base):
-    """洞察漏洞库条目表"""
+    """漏洞洞察报告表"""
     __tablename__ = "go_vulnerability_entries"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(200), nullable=False)
     slug = Column(String(200), nullable=False, unique=True)
-    cve_id = Column(String(50), nullable=True)
-    cwe_id = Column(String(50), nullable=True)
-    severity = Column(String(20), nullable=False, default="medium")
-    category = Column(String(100), nullable=False)
     tags = Column(Text, default="[]")
     summary = Column(Text, nullable=True)
     content = Column(Text, nullable=False)
-    affected_versions = Column(String(500), nullable=True)
     go_packages = Column(Text, default="[]")
     source_url = Column(String(500), nullable=True)
     is_system = Column(Boolean, default=False)
@@ -37,8 +32,6 @@ class GoVulnerabilityEntry(Base):
     creator = relationship("User", foreign_keys=[created_by])
 
     __table_args__ = (
-        Index("ix_go_vuln_severity", "severity"),
-        Index("ix_go_vuln_category", "category"),
         Index("ix_go_vuln_is_system", "is_system"),
         Index("ix_go_vuln_created_by", "created_by"),
     )

@@ -18,20 +18,7 @@ export const LIKELIHOOD_OPTIONS = [
   { value: 'low',    label: '低' },
 ] as const;
 
-export const VULN_CATEGORY_OPTIONS = [
-  { value: 'injection',       label: '注入' },
-  { value: 'authentication',  label: '认证' },
-  { value: 'authorization',   label: '授权' },
-  { value: 'crypto',          label: '加密' },
-  { value: 'deserialization', label: '反序列化' },
-  { value: 'xxe',             label: 'XXE' },
-  { value: 'ssrf',            label: 'SSRF' },
-  { value: 'traversal',       label: '路径遍历' },
-  { value: 'race-condition',  label: '竞争条件' },
-  { value: 'memory',          label: '内存安全' },
-  { value: 'supply-chain',    label: '供应链' },
-  { value: 'uncategorized',   label: '未分类' },
-];
+// Note: VULN_CATEGORY_OPTIONS removed — vulnerability insights no longer use category classification
 
 export const ATTACK_TYPE_OPTIONS = [
   { value: 'injection',       label: '注入攻击' },

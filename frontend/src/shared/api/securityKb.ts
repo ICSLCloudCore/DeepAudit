@@ -13,14 +13,9 @@ export interface VulnerabilityEntry {
   id: string;
   title: string;
   slug: string;
-  cve_id?: string;
-  cwe_id?: string;
-  severity: Severity;
-  category: string;
   tags: string[];
   summary?: string;
   content: string;
-  affected_versions?: string;
   go_packages: string[];
   source_url?: string;
   is_system: boolean;
@@ -33,14 +28,9 @@ export interface VulnerabilityEntry {
 export interface VulnerabilityEntryCreate {
   title: string;
   slug: string;
-  cve_id?: string;
-  cwe_id?: string;
-  severity: Severity;
-  category: string;
   tags?: string[];
   summary?: string;
   content: string;
-  affected_versions?: string;
   go_packages?: string[];
   source_url?: string;
   is_active?: boolean;
@@ -133,8 +123,7 @@ export interface KbListParams {
   skip?: number;
   limit?: number;
   q?: string;
-  severity?: string;
-  category?: string;
+  // attack pattern filters (not used for vulnerability insights)
   attack_type?: string;
   is_system?: boolean;
   is_active?: boolean;

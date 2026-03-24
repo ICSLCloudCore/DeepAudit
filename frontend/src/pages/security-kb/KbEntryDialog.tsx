@@ -20,7 +20,6 @@ import { Loader2, Eye, Edit3, Bug, Swords } from 'lucide-react';
 import {
   SEVERITY_OPTIONS,
   LIKELIHOOD_OPTIONS,
-  VULN_CATEGORY_OPTIONS,
   ATTACK_TYPE_OPTIONS,
   titleToSlug,
 } from './types';
@@ -44,9 +43,8 @@ interface Props {
 
 function initVulnForm() {
   return {
-    title: '', slug: '', cve_id: '', cwe_id: '', severity: 'medium',
-    category: 'uncategorized', tags: '', summary: '', content: '',
-    affected_versions: '', go_packages: '', source_url: '', is_active: true,
+    title: '', slug: '', tags: '', summary: '', content: '',
+    go_packages: '', source_url: '', is_active: true,
   };
 }
 
@@ -62,11 +60,8 @@ function initAttackForm() {
 function entryToVulnForm(e: VulnerabilityEntry) {
   return {
     title: e.title, slug: e.slug,
-    cve_id: e.cve_id ?? '', cwe_id: e.cwe_id ?? '',
-    severity: e.severity, category: e.category,
     tags: (e.tags ?? []).join(', '),
     summary: e.summary ?? '', content: e.content,
-    affected_versions: e.affected_versions ?? '',
     go_packages: (e.go_packages ?? []).join(', '),
     source_url: e.source_url ?? '', is_active: e.is_active,
   };
@@ -157,14 +152,9 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
         const f = vulnForm;
         const payload = {
           title, slug,
-          cve_id: f.cve_id.trim() || undefined,
-          cwe_id: f.cwe_id.trim() || undefined,
-          severity: f.severity as 'critical' | 'high' | 'medium' | 'low',
-          category: f.category,
           tags: parseTags(f.tags),
           summary: f.summary.trim() || undefined,
           content,
-          affected_versions: f.affected_versions.trim() || undefined,
           go_packages: parseTags(f.go_packages),
           source_url: f.source_url.trim() || undefined,
           is_active: f.is_active,
@@ -204,8 +194,8 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
   };
 
   const dialogTitle = isEditing
-    ? (isVuln ? '编辑漏洞条目' : '编辑攻击模式')
-    : (isVuln ? '新建漏洞条目' : '新建攻击模式');
+    ? (isVuln ? '编辑漏洞洞察报告' : '编辑攻击模式')
+    : (isVuln ? '新建漏洞洞察报告' : '新建攻击模式');
 
   const form = isVuln ? vulnForm : attackForm;
   const tags = parseTags(form.tags);
@@ -225,7 +215,7 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
             <div>
               <span className="text-base font-bold uppercase tracking-wider">{dialogTitle}</span>
               <p className="text-xs text-muted-foreground font-normal mt-0.5">
-                {isVuln ? 'Golang Vulnerability Entry' : 'Attack Pattern Entry'}
+                {isVuln ? 'Vulnerability Insight Report' : 'Attack Pattern Entry'}
               </p>
             </div>
           </DialogTitle>
@@ -264,107 +254,71 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
             </div>
           </div>
 
-          {/* Row 2: 严重等级 + 分类/攻击类型 + 附加字段 */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase">
-                严重等级 <span className="text-red-400">*</span>
-              </Label>
-              <Select value={form.severity} onValueChange={v => isVuln ? setV('severity', v) : setA('severity', v)}>
-                <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
-                <SelectContent className="cyber-dialog border-border">
-                  {SEVERITY_OPTIONS.map(s => (
-                    <SelectItem key={s.value} value={s.value}>
-                      <span className={s.color}>{s.label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Row 2: 攻击模式专属字段（漏洞洞察报告无需分类/等级） */}
+          {!isVuln && (
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">
+                  严重等级 <span className="text-red-400">*</span>
+                </Label>
+                <Select value={attackForm.severity} onValueChange={v => setA('severity', v)}>
+                  <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
+                  <SelectContent className="cyber-dialog border-border">
+                    {SEVERITY_OPTIONS.map(s => (
+                      <SelectItem key={s.value} value={s.value}>
+                        <span className={s.color}>{s.label}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">
+                  攻击类型 <span className="text-red-400">*</span>
+                </Label>
+                <Select value={attackForm.attack_type} onValueChange={v => setA('attack_type', v)}>
+                  <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
+                  <SelectContent className="cyber-dialog border-border">
+                    {ATTACK_TYPE_OPTIONS.map(c => (
+                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">利用可能性</Label>
+                <Select value={attackForm.likelihood} onValueChange={v => setA('likelihood', v)}>
+                  <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
+                  <SelectContent className="cyber-dialog border-border">
+                    <SelectItem value="none">不指定</SelectItem>
+                    {LIKELIHOOD_OPTIONS.map(l => (
+                      <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+          )}
 
-            {isVuln ? (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">
-                    漏洞分类 <span className="text-red-400">*</span>
-                  </Label>
-                  <Select value={vulnForm.category} onValueChange={v => setV('category', v)}>
-                    <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
-                    <SelectContent className="cyber-dialog border-border">
-                      {VULN_CATEGORY_OPTIONS.map(c => (
-                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">CVE 编号</Label>
-                  <Input value={vulnForm.cve_id} onChange={e => setV('cve_id', e.target.value)} placeholder="CVE-2024-XXXX" className="cyber-input font-mono" />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">
-                    攻击类型 <span className="text-red-400">*</span>
-                  </Label>
-                  <Select value={attackForm.attack_type} onValueChange={v => setA('attack_type', v)}>
-                    <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
-                    <SelectContent className="cyber-dialog border-border">
-                      {ATTACK_TYPE_OPTIONS.map(c => (
-                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">利用可能性</Label>
-                  <Select value={attackForm.likelihood} onValueChange={v => setA('likelihood', v)}>
-                    <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
-                    <SelectContent className="cyber-dialog border-border">
-                      <SelectItem value="none">不指定</SelectItem>
-                      {LIKELIHOOD_OPTIONS.map(l => (
-                        <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Row 3: 攻击模式 CAPEC + 来源 URL */}
+          {!isVuln && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">CAPEC 编号</Label>
+                <Input value={attackForm.capec_id} onChange={e => setA('capec_id', e.target.value)} placeholder="CAPEC-126" className="cyber-input font-mono" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">来源 URL</Label>
+                <Input value={attackForm.source_url} onChange={e => setA('source_url', e.target.value)} placeholder="https://..." className="cyber-input font-mono" />
+              </div>
+            </div>
+          )}
 
-          {/* Row 3: 附加元数据 */}
-          <div className="grid grid-cols-2 gap-4">
-            {isVuln ? (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">CWE 编号</Label>
-                  <Input value={vulnForm.cwe_id} onChange={e => setV('cwe_id', e.target.value)} placeholder="CWE-89" className="cyber-input font-mono" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">受影响版本</Label>
-                  <Input value={vulnForm.affected_versions} onChange={e => setV('affected_versions', e.target.value)} placeholder=">= go1.0.0" className="cyber-input font-mono" />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">CAPEC 编号</Label>
-                  <Input value={attackForm.capec_id} onChange={e => setA('capec_id', e.target.value)} placeholder="CAPEC-126" className="cyber-input font-mono" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">来源 URL</Label>
-                  <Input value={attackForm.source_url} onChange={e => setA('source_url', e.target.value)} placeholder="https://..." className="cyber-input font-mono" />
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Row 4: 标签 + Go 包 + 来源 URL (vuln) */}
+          {/* Row 4: 标签 + Go 包 */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs font-bold text-muted-foreground uppercase">标签（逗号分隔）</Label>
-              <Input value={form.tags} onChange={e => isVuln ? setV('tags', e.target.value) : setA('tags', e.target.value)} placeholder="sql-injection, database/sql" className="cyber-input font-mono" />
+              <Input value={form.tags} onChange={e => isVuln ? setV('tags', e.target.value) : setA('tags', e.target.value)} placeholder="golang, security" className="cyber-input font-mono" />
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-bold text-muted-foreground uppercase">相关 Go 包（逗号分隔）</Label>
@@ -372,10 +326,11 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
             </div>
           </div>
 
+          {/* 来源 URL（漏洞洞察报告） */}
           {isVuln && (
             <div className="space-y-2">
               <Label className="text-xs font-bold text-muted-foreground uppercase">来源 URL</Label>
-              <Input value={vulnForm.source_url} onChange={e => setV('source_url', e.target.value)} placeholder="https://nvd.nist.gov/..." className="cyber-input font-mono" />
+              <Input value={vulnForm.source_url} onChange={e => setV('source_url', e.target.value)} placeholder="https://..." className="cyber-input font-mono" />
             </div>
           )}
 

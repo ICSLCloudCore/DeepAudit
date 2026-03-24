@@ -28,9 +28,8 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
   if (!entry) return null;
 
   const isVuln = mode === 'vulnerability';
-  const sev = getSeverityMeta(entry.severity);
-  const vuln = isVuln ? (entry as VulnerabilityEntry) : null;
   const attack = !isVuln ? (entry as AttackPatternEntry) : null;
+  const sev = !isVuln && attack ? getSeverityMeta(attack.severity) : null;
 
   const handleExport = async () => {
     try {
@@ -50,14 +49,23 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <Badge className={`text-xs font-mono ${sev.bg} ${sev.color} border ${sev.border}`}>
-                  {sev.label}
-                </Badge>
-                {isVuln && vuln?.category && (
-                  <Badge variant="outline" className="text-xs font-mono">{vuln.category}</Badge>
+                {/* Severity badge only for attack patterns */}
+                {sev && (
+                  <Badge className={`text-xs font-mono ${sev.bg} ${sev.color} border ${sev.border}`}>
+                    {sev.label}
+                  </Badge>
+                )}
+                {/* Vuln: insight report badge */}
+                {isVuln && (
+                  <Badge variant="outline" className="text-xs font-mono">洞察报告</Badge>
                 )}
                 {!isVuln && attack?.attack_type && (
                   <Badge variant="outline" className="text-xs font-mono">{attack.attack_type}</Badge>
+                )}
+                {!isVuln && attack?.version && (
+                  <Badge className="text-xs font-mono bg-primary/10 text-primary border border-primary/30">
+                    v{attack.version}
+                  </Badge>
                 )}
                 {entry.is_system && (
                   <Badge className="cyber-badge-info text-xs font-mono">系统内置</Badge>
@@ -83,36 +91,47 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
           </div>
         </DialogHeader>
 
-        {/* Meta bar */}
-        <div className="px-6 py-2 border-b border-border flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-mono text-muted-foreground bg-muted/50 flex-shrink-0">
-          {isVuln && vuln?.cve_id && (
-            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CVE: <span className="text-orange-400">{vuln.cve_id}</span></span>
-          )}
-          {isVuln && vuln?.cwe_id && (
-            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CWE: <span className="text-sky-400">{vuln.cwe_id}</span></span>
-          )}
-          {!isVuln && attack?.capec_id && (
-            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CAPEC: <span className="text-orange-400">{attack.capec_id}</span></span>
-          )}
-          {!isVuln && attack?.likelihood && (
-            <span>利用可能性: <span className="text-yellow-400">{attack.likelihood}</span></span>
-          )}
-          {isVuln && vuln?.affected_versions && (
-            <span>受影响版本: <span className="text-foreground/80">{vuln.affected_versions}</span></span>
-          )}
-          {entry.created_at && (
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              {new Date(entry.created_at).toLocaleDateString('zh-CN')}
-            </span>
-          )}
-          {entry.source_url && (
-            <a href={entry.source_url} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 hover:text-primary transition-colors">
-              <ExternalLink className="w-3 h-3" />来源
-            </a>
-          )}
-        </div>
+        {/* Meta bar — attack pattern specific fields only */}
+        {!isVuln && (
+          <div className="px-6 py-2 border-b border-border flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-mono text-muted-foreground bg-muted/50 flex-shrink-0">
+            {attack?.capec_id && (
+              <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CAPEC: <span className="text-orange-400">{attack.capec_id}</span></span>
+            )}
+            {attack?.likelihood && (
+              <span>利用可能性: <span className="text-yellow-400">{attack.likelihood}</span></span>
+            )}
+            {entry.created_at && (
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {new Date(entry.created_at).toLocaleDateString('zh-CN')}
+              </span>
+            )}
+            {entry.source_url && (
+              <a href={entry.source_url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 hover:text-primary transition-colors">
+                <ExternalLink className="w-3 h-3" />来源
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Vuln meta bar — simplified (date + source only) */}
+        {isVuln && (
+          <div className="px-6 py-2 border-b border-border flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-mono text-muted-foreground bg-muted/50 flex-shrink-0">
+            {entry.created_at && (
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {new Date(entry.created_at).toLocaleDateString('zh-CN')}
+              </span>
+            )}
+            {entry.source_url && (
+              <a href={entry.source_url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 hover:text-primary transition-colors">
+                <ExternalLink className="w-3 h-3" />来源
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Tags & packages */}
         {((entry.tags?.length ?? 0) > 0 || (entry.go_packages?.length ?? 0) > 0) && (

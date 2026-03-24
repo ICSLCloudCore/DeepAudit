@@ -88,19 +88,11 @@ def _vuln_to_markdown(entry: GoVulnerabilityEntry) -> str:
     lines = ["---"]
     lines.append(f'title: "{entry.title}"')
     lines.append(f"slug: {entry.slug}")
-    lines.append("entry_type: vulnerability")
-    if entry.cve_id:
-        lines.append(f"cve_id: {entry.cve_id}")
-    if entry.cwe_id:
-        lines.append(f"cwe_id: {entry.cwe_id}")
-    lines.append(f"severity: {entry.severity}")
-    lines.append(f"category: {entry.category}")
+    lines.append("entry_type: vulnerability_insight")
     if tags_yaml:
         lines.append(f"tags:\n{tags_yaml}")
     else:
         lines.append("tags: []")
-    if entry.affected_versions:
-        lines.append(f'affected_versions: "{entry.affected_versions}"')
     if pkgs_yaml:
         lines.append(f"go_packages:\n{pkgs_yaml}")
     else:
@@ -172,9 +164,6 @@ def _parse_md_to_vuln_dict(raw_bytes: bytes, filename: str = "") -> dict:
 
     title = meta.get("title") or (filename.replace(".md", "").replace("-", " ").title()) or "Untitled"
     slug_val = meta.get("slug") or _generate_slug(str(title))
-    severity = meta.get("severity", "medium")
-    if severity not in {"critical", "high", "medium", "low"}:
-        severity = "medium"
 
     tags_raw = meta.get("tags", [])
     tags = list(tags_raw) if isinstance(tags_raw, (list, tuple)) else []
@@ -185,14 +174,9 @@ def _parse_md_to_vuln_dict(raw_bytes: bytes, filename: str = "") -> dict:
     return {
         "title": str(title)[:200],
         "slug": str(slug_val)[:200],
-        "cve_id": str(meta["cve_id"])[:50] if meta.get("cve_id") else None,
-        "cwe_id": str(meta["cwe_id"])[:50] if meta.get("cwe_id") else None,
-        "severity": severity,
-        "category": str(meta.get("category", "uncategorized"))[:100],
         "tags": tags,
         "summary": str(meta["summary"])[:1000] if meta.get("summary") else None,
         "content": body or "（内容待补充）",
-        "affected_versions": str(meta["affected_versions"])[:500] if meta.get("affected_versions") else None,
         "go_packages": go_packages,
         "source_url": str(meta["source_url"])[:500] if meta.get("source_url") else None,
         "is_active": bool(meta.get("is_active", True)),
@@ -248,8 +232,6 @@ async def list_vulnerabilities(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     q: Optional[str] = Query(None, description="关键词搜索"),
-    severity: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
     is_system: Optional[bool] = Query(None),
     is_active: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -267,14 +249,8 @@ async def list_vulnerabilities(
             or_(
                 GoVulnerabilityEntry.title.ilike(like),
                 GoVulnerabilityEntry.summary.ilike(like),
-                GoVulnerabilityEntry.cve_id.ilike(like),
-                GoVulnerabilityEntry.cwe_id.ilike(like),
             )
         )
-    if severity:
-        query = query.where(GoVulnerabilityEntry.severity == severity)
-    if category:
-        query = query.where(GoVulnerabilityEntry.category == category)
     if is_system is not None:
         query = query.where(GoVulnerabilityEntry.is_system == is_system)
     if is_active is not None:
