@@ -49,7 +49,7 @@ function parseAIExplanation(aiExplanation: string) {
   }
 }
 
-function VulnerabilitiesList({ vulnerabilities }: { vulnerabilities: AuditVulnerability[] }) {
+function VulnerabilitiesList({ vulnerabilities, taskId }: { vulnerabilities: AuditVulnerability[], taskId: string }) {
   const getSeverityClasses = (severity: string) => {
     const lowerSeverity = severity.toLowerCase();
     switch (lowerSeverity) {
@@ -127,6 +127,11 @@ function VulnerabilitiesList({ vulnerabilities }: { vulnerabilities: AuditVulner
               {vuln.cwe}
             </Badge>
           )}
+          <Link to={`/tasks/opencode/${taskId}/vulnerabilities/${vuln.id}`}>
+            <Button variant="outline" size="sm" className="cyber-btn-ghost h-8 px-3 text-xs font-mono">
+              查看详情
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -597,7 +602,7 @@ export default function OpenCodeAuditVulnerabilities() {
       </div>
 
       {/* Vulnerabilities List */}
-      {vulnerabilities.length > 0 && (
+      {vulnerabilities.length > 0 && taskId && (
         <div className="cyber-card p-0 relative z-10">
           <div className="cyber-card-header">
             <Bug className="w-5 h-5 text-amber-400" />
@@ -606,7 +611,7 @@ export default function OpenCodeAuditVulnerabilities() {
             </h3>
           </div>
           <div className="p-6">
-            <VulnerabilitiesList vulnerabilities={vulnerabilities} />
+            <VulnerabilitiesList vulnerabilities={vulnerabilities} taskId={taskId} />
           </div>
         </div>
       )}

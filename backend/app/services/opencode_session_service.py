@@ -471,15 +471,15 @@ class OpenCodeSessionService:
                     cwd=project_path,
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
-                    preexec_fn=os.setpgrp  # Create new process group
+                    preexec_fn=os.setpgrp,  # Create new process group
                 )
                 pid = str(proc.pid)
             except Exception as e:
                 print(f"[OpenCode] Failed to start opencode serve: {e}")
                 import traceback
+
                 traceback.print_exc()
                 return
-
 
             print(f"[OpenCode] Started opencode serve with PID: {pid}")
 
@@ -1207,12 +1207,29 @@ class OpenCodeSessionService:
                             imported_count = 0
                             for vuln_data in vulnerabilities:
                                 try:
+                                    current_vuln_id = vuln_data.get(
+                                        "vuln_id", str(uuid.uuid4())
+                                    )
+
+                                    # 检查是否已存在
+                                    result = await db.execute(
+                                        select(AuditVulnerability).where(
+                                            (AuditVulnerability.task_id == audit_task_id)
+                                            & (AuditVulnerability.vuln_id == current_vuln_id)
+                                        )
+                                    )
+                                    existing_vuln = result.scalar_one_or_none()
+
+                                    if existing_vuln:
+                                        print(
+                                            f"[OpenCode] Vulnerability {current_vuln_id} already exists, skipping"
+                                        )
+                                        continue
+
                                     vuln = AuditVulnerability(
                                         id=str(uuid.uuid4()),
                                         task_id=audit_task_id,
-                                        vuln_id=vuln_data.get(
-                                            "vuln_id", f"VULN-{imported_count + 1:03d}"
-                                        ),
+                                        vuln_id=current_vuln_id,
                                         severity=vuln_data.get("severity", "medium"),
                                         cvss_score=vuln_data.get("cvss_score", "no data"),
                                         cvss_vector=vuln_data.get("cvss_vector", "nno data"),
@@ -1237,12 +1254,18 @@ class OpenCodeSessionService:
                                         impact_confidentiality=vuln_data.get(
                                             "impact_confidentiality", "no data"
                                         ),
-                                        impact_integrity=vuln_data.get("impact_integrity", "no data"),
-                                        impact_availability=vuln_data.get("impact_availability", "no data"),
+                                        impact_integrity=vuln_data.get(
+                                            "impact_integrity", "no data"
+                                        ),
+                                        impact_availability=vuln_data.get(
+                                            "impact_availability", "no data"
+                                        ),
                                         fix_description=vuln_data.get("fix_description", "no data"),
                                         fix_code_before=vuln_data.get("fix_code_before", "no data"),
                                         fix_code_after=vuln_data.get("fix_code_after", "no data"),
-                                        manual_confirmation=vuln_data.get("manual_confirmation", "no data"),
+                                        manual_confirmation=vuln_data.get(
+                                            "manual_confirmation", "no data"
+                                        ),
                                         manual_confirmation_status=vuln_data.get(
                                             "manual_confirmation_status", "待确认"
                                         ),
