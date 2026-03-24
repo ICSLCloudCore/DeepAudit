@@ -104,23 +104,32 @@ export function ProjectIssuesTab(props: {
                           : ""}
                       </span>
                       <span>{issue.category || "-"}</span>
-                      {issue.task_created_at && (
-                        <span className="bg-muted px-2 py-0.5 rounded border border-border">
-                          {issue.kind === "agent" ? "Agent" : "Audit"} {issue.task_id?.slice(0, 8)} ·{" "}
-                          {formatDate(issue.task_created_at)}
-                        </span>
-                      )}
+                       {issue.task_created_at && (
+                         <span className="bg-muted px-2 py-0.5 rounded border border-border">
+                           {issue.kind === "agent" ? "Agent" : issue.kind === "opencode" ? "OpenCode" : "Audit"} {issue.task_id?.slice(0, 8)} ·{" "}
+                           {formatDate(issue.task_created_at)}
+                         </span>
+                       )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Link to={issue.kind === "agent" ? `/agent-audit/${issue.task_id}` : `/tasks/${issue.task_id}`}>
-                    <Button variant="outline" size="sm" className="cyber-btn-outline">
-                      <FileText className="w-4 h-4 mr-2" />
-                      查看任务
-                    </Button>
-                  </Link>
-                  {onStatusChange && (
+                  {issue.kind === "opencode" ? (
+                    <Link to={`/tasks/opencode/${issue.task_id}/vulnerabilities/${issue.id}`}>
+                      <Button variant="outline" size="sm" className="cyber-btn-outline">
+                        <FileText className="w-4 h-4 mr-2" />
+                        查看详情
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link to={issue.kind === "agent" ? `/agent-audit/${issue.task_id}` : `/tasks/${issue.task_id}`}>
+                      <Button variant="outline" size="sm" className="cyber-btn-outline">
+                        <FileText className="w-4 h-4 mr-2" />
+                        查看任务
+                      </Button>
+                    </Link>
+                  )}
+                  {onStatusChange && issue.kind !== "opencode" && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className={`text-xs font-mono border ${getStatusBadgeClass(issue.status)}`}>
@@ -145,6 +154,11 @@ export function ProjectIssuesTab(props: {
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                  )}
+                  {issue.kind === "opencode" && (
+                    <Badge className={`text-xs font-mono border ${getStatusBadgeClass(issue.status)}`}>
+                      {getStatusLabel(issue.status)}
+                    </Badge>
                   )}
                   <Badge
                     className={`
