@@ -20,7 +20,7 @@ import {
   Eye, Edit, Trash2, FileText, Archive, Lock, Calendar, Loader2, Swords, GitBranch,
 } from 'lucide-react';
 
-import { SEVERITY_OPTIONS, PATTERN_TYPE_OPTIONS, getSeverityMeta, getPatternTypeMeta } from './types';
+import { SEVERITY_OPTIONS, PATTERN_TYPE_OPTIONS, getRiskLevelMeta, getPatternTypeMeta } from './types';
 import KbEntryDialog from './KbEntryDialog';
 import KbViewDialog from './KbViewDialog';
 import KbImportDialog from './KbImportDialog';
@@ -41,7 +41,7 @@ export default function AttackPatternList() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
-  const [severity, setSeverity] = useState('');
+  const [riskLevel, setRiskLevel] = useState('');
   const [patternType, setPatternType] = useState('');
 
   const [showCreate, setShowCreate] = useState(false);
@@ -61,7 +61,7 @@ export default function AttackPatternList() {
         skip: (page - 1) * PAGE_SIZE,
         limit: PAGE_SIZE,
         q: q || undefined,
-        severity: severity || undefined,
+        risk_level: riskLevel || undefined,
         pattern_type: patternType || undefined,
       });
       setItems(res.items);
@@ -71,10 +71,10 @@ export default function AttackPatternList() {
     } finally {
       setLoading(false);
     }
-  }, [page, q, severity, patternType]);
+  }, [page, q, riskLevel, patternType]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [q, severity, patternType]);
+  useEffect(() => { setPage(1); }, [q, riskLevel, patternType]);
 
   const handleDelete = async () => {
     if (!deletingEntry) return;
@@ -98,7 +98,7 @@ export default function AttackPatternList() {
   const handleBatchExport = async () => {
     setExporting(true);
     try {
-      await exportAttackPatternsZip({ severity: severity || undefined, pattern_type: patternType || undefined });
+      await exportAttackPatternsZip({ severity: riskLevel || undefined, pattern_type: patternType || undefined });
       toast.success('ZIP 已导出');
     } catch { toast.error('导出失败'); }
     finally { setExporting(false); }
@@ -119,9 +119,9 @@ export default function AttackPatternList() {
             />
           </div>
 
-          <Select value={severity || 'all'} onValueChange={v => setSeverity(v === 'all' ? '' : v)}>
+          <Select value={riskLevel || 'all'} onValueChange={v => setRiskLevel(v === 'all' ? '' : v)}>
             <SelectTrigger className="cyber-input w-32 h-9 text-sm">
-              <SelectValue placeholder="严重等级" />
+              <SelectValue placeholder="风险等级" />
             </SelectTrigger>
             <SelectContent className="cyber-dialog border-border">
               <SelectItem value="all">全部等级</SelectItem>
@@ -289,7 +289,7 @@ interface CardProps {
 }
 
 function AttackCard({ entry, onView, onEdit, onExport, onDelete, onVersions }: CardProps) {
-  const sev = getSeverityMeta(entry.severity);
+  const sev = getRiskLevelMeta(entry.risk_level);
 
   return (
     <div className={`cyber-card p-0 flex flex-col ${!entry.is_active ? 'opacity-60' : ''}`}>

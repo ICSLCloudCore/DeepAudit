@@ -7,10 +7,10 @@ import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Download, Edit, Calendar, Tag } from 'lucide-react';
+import { Download, Edit, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { getSeverityMeta, getPatternTypeMeta } from './types';
+import { getRiskLevelMeta, getPatternTypeMeta } from './types';
 import type { VulnerabilityEntry, AttackPatternEntry } from '@/shared/api/securityKb';
 import { exportVulnerabilityMd, exportAttackPatternMd } from '@/shared/api/securityKb';
 
@@ -29,7 +29,7 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
 
   const isVuln = mode === 'vulnerability';
   const attack = !isVuln ? (entry as AttackPatternEntry) : null;
-  const sev = !isVuln && attack ? getSeverityMeta(attack.severity) : null;
+  const sev = !isVuln && attack ? getRiskLevelMeta(attack.risk_level) : null;
 
   const handleExport = async () => {
     try {
@@ -92,18 +92,13 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
           </div>
         </DialogHeader>
 
-        {/* Meta bar — attack pattern specific fields only */}
-        {!isVuln && (
+        {/* Meta bar — attack pattern: date only */}
+        {!isVuln && entry.created_at && (
           <div className="px-6 py-2 border-b border-border flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-mono text-muted-foreground bg-muted/50 flex-shrink-0">
-            {attack?.capec_id && (
-              <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CAPEC: <span className="text-orange-400">{attack.capec_id}</span></span>
-            )}
-            {entry.created_at && (
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {new Date(entry.created_at).toLocaleDateString('zh-CN')}
-              </span>
-            )}
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {new Date(entry.created_at).toLocaleDateString('zh-CN')}
+            </span>
           </div>
         )}
 
@@ -152,15 +147,6 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
             </ReactMarkdown>
           </div>
 
-          {/* Mitigations for attack patterns */}
-          {!isVuln && attack?.mitigations && (
-            <div className="mt-8 pt-6 border-t border-border">
-              <h3 className="text-sm font-mono font-bold mb-3 text-primary uppercase tracking-wider">防御措施</h3>
-              <div className="prose prose-invert prose-sm max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{attack.mitigations}</ReactMarkdown>
-              </div>
-            </div>
-          )}
         </div>
       </DialogContent>
     </Dialog>

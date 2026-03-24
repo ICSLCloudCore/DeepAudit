@@ -20,7 +20,7 @@ import {
   Calendar, User, ChevronRight, CheckCircle2,
   ArrowUpCircle, Eye,
 } from 'lucide-react';
-import { getSeverityMeta, getPatternTypeMeta } from './types';
+import { getRiskLevelMeta, getPatternTypeMeta } from './types';
 import type { AttackPatternEntry, AttackPatternVersionCreate } from '@/shared/api/securityKb';
 import {
   listAttackPatternVersions,
@@ -193,7 +193,7 @@ export default function AttackPatternVersionDialog({ open, onClose, entry, onVer
                   </div>
                 ) : (
                   versions.map((v, idx) => {
-                              const sev = getSeverityMeta(v.severity);
+                              const sev = getRiskLevelMeta(v.risk_level);
                               const pt = getPatternTypeMeta(v.pattern_type);
                     const isFirst = idx === 0;
                     return (

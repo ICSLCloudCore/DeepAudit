@@ -24,6 +24,11 @@ export function getSeverityMeta(severity: string) {
   return SEVERITY_OPTIONS.find(s => s.value === severity) ?? SEVERITY_OPTIONS[3];
 }
 
+/** Alias for attack pattern risk_level display (same color scale as severity) */
+export function getRiskLevelMeta(riskLevel: string) {
+  return SEVERITY_OPTIONS.find(s => s.value === riskLevel) ?? SEVERITY_OPTIONS[3];
+}
+
 export function getPatternTypeMeta(patternType: string) {
   return PATTERN_TYPE_OPTIONS.find(p => p.value === patternType)
     ?? { value: patternType, label: patternType, color: 'text-muted-foreground', bg: 'bg-muted/20', border: 'border-border' };

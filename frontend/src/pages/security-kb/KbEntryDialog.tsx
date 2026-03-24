@@ -49,8 +49,8 @@ function initVulnForm() {
 
 function initAttackForm() {
   return {
-    title: '', slug: '', capec_id: '', pattern_type: 'general', severity: 'medium',
-    tags: '', summary: '', content: '', mitigations: '',
+    title: '', slug: '', pattern_type: 'general', risk_level: 'medium',
+    tags: '', summary: '', content: '',
     is_active: true, version: '1.0.0', version_notes: '',
   };
 }
@@ -68,11 +68,10 @@ function entryToVulnForm(e: VulnerabilityEntry) {
 function entryToAttackForm(e: AttackPatternEntry) {
   return {
     title: e.title, slug: e.slug,
-    capec_id: e.capec_id ?? '', pattern_type: e.pattern_type ?? 'general',
-    severity: e.severity,
+    pattern_type: e.pattern_type ?? 'general',
+    risk_level: e.risk_level ?? 'medium',
     tags: (e.tags ?? []).join(', '),
     summary: e.summary ?? '', content: e.content,
-    mitigations: e.mitigations ?? '',
     is_active: e.is_active,
     version: e.version ?? '1.0.0', version_notes: e.version_notes ?? '',
   };
@@ -94,13 +93,11 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
   const [slugManual, setSlugManual] = useState(false);
   const [saving, setSaving] = useState(false);
   const [contentPreview, setContentPreview] = useState(false);
-  const [mitigationPreview, setMitigationPreview] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setSlugManual(false);
     setContentPreview(false);
-    setMitigationPreview(false);
     if (editingEntry) {
       if (isVuln) setVulnForm(entryToVulnForm(editingEntry as VulnerabilityEntry));
       else setAttackForm(entryToAttackForm(editingEntry as AttackPatternEntry));
@@ -162,13 +159,11 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
         const f = attackForm;
         const payload = {
           title, slug,
-          capec_id: f.capec_id.trim() || undefined,
           pattern_type: f.pattern_type as 'general' | 'go-specific' | 'cloud-business' | 'expert-experience',
-          severity: f.severity as 'critical' | 'high' | 'medium' | 'low',
+          risk_level: f.risk_level as 'critical' | 'high' | 'medium' | 'low',
           tags: parseTags(f.tags),
           summary: f.summary.trim() || undefined,
           content,
-          mitigations: f.mitigations.trim() || undefined,
           is_active: f.is_active,
           version: f.version.trim() || '1.0.0',
           version_notes: f.version_notes.trim() || undefined,
@@ -268,9 +263,9 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-muted-foreground uppercase">
-                  严重等级 <span className="text-red-400">*</span>
+                  风险等级 <span className="text-red-400">*</span>
                 </Label>
-                <Select value={attackForm.severity} onValueChange={v => setA('severity', v)}>
+                <Select value={attackForm.risk_level} onValueChange={v => setA('risk_level', v)}>
                   <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
                   <SelectContent className="cyber-dialog border-border">
                     {SEVERITY_OPTIONS.map(s => (
@@ -281,14 +276,6 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-          )}
-
-          {/* Row 3: 攻击模式 CAPEC 编号 */}
-          {!isVuln && (
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase">CAPEC 编号</Label>
-              <Input value={attackForm.capec_id} onChange={e => setA('capec_id', e.target.value)} placeholder="CAPEC-126" className="cyber-input font-mono w-56" />
             </div>
           )}
 
@@ -428,52 +415,6 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
               </div>
             )}
           </div>
-
-          {/* 防御措施（仅攻击模式） */}
-          {!isVuln && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">防御措施（Markdown，可选）</Label>
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={!mitigationPreview ? 'default' : 'outline'}
-                    className="h-7 px-3 text-xs cyber-btn-ghost"
-                    onClick={() => setMitigationPreview(false)}
-                  >
-                    <Edit3 className="w-3 h-3 mr-1" />编辑
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={mitigationPreview ? 'default' : 'outline'}
-                    className="h-7 px-3 text-xs cyber-btn-ghost"
-                    onClick={() => setMitigationPreview(true)}
-                  >
-                    <Eye className="w-3 h-3 mr-1" />预览
-                  </Button>
-                </div>
-              </div>
-              {!mitigationPreview ? (
-                <Textarea
-                  value={attackForm.mitigations}
-                  onChange={e => setA('mitigations', e.target.value)}
-                  placeholder={'## 防御措施\n\n- 使用 filepath.Clean 清洗路径\n- 验证路径前缀...'}
-                  rows={6}
-                  className="cyber-input font-mono text-sm text-emerald-400 resize-y"
-                  style={{ minHeight: '120px' }}
-                />
-              ) : (
-                <div className="cyber-input min-h-[120px] overflow-auto p-4 prose prose-invert prose-sm max-w-none">
-                  {attackForm.mitigations.trim()
-                    ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{attackForm.mitigations}</ReactMarkdown>
-                    : <p className="text-muted-foreground italic text-sm">暂无防御措施...</p>
-                  }
-                </div>
-              )}
-            </div>
-          )}
 
           {/* 启用开关 */}
           <div className="flex items-center gap-3 pt-1">

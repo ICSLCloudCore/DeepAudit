@@ -51,13 +51,11 @@ export interface AttackPatternEntry {
   parent_id?: string;
   title: string;
   slug: string;
-  capec_id?: string;
   pattern_type: PatternType;
-  severity: Severity;
+  risk_level: Severity;
   tags: string[];
   summary?: string;
   content: string;
-  mitigations?: string;
   is_system: boolean;
   is_active: boolean;
   created_by?: string;
@@ -68,13 +66,11 @@ export interface AttackPatternEntry {
 export interface AttackPatternEntryCreate {
   title: string;
   slug: string;
-  capec_id?: string;
   pattern_type?: PatternType;
-  severity: Severity;
+  risk_level: Severity;
   tags?: string[];
   summary?: string;
   content: string;
-  mitigations?: string;
   is_active?: boolean;
   version?: string;
   version_notes?: string;
@@ -92,8 +88,7 @@ export interface AttackPatternVersionCreate {
   title?: string;
   summary?: string;
   content?: string;
-  mitigations?: string;
-  severity?: Severity;
+  risk_level?: Severity;
   pattern_type?: PatternType;
   tags?: string[];
   is_active?: boolean;
@@ -117,7 +112,7 @@ export interface KbListParams {
   skip?: number;
   limit?: number;
   q?: string;
-  severity?: string;
+  risk_level?: string;
   // attack pattern filters (not used for vulnerability insights)
   pattern_type?: string;
   is_system?: boolean;

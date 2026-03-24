@@ -72,13 +72,11 @@ class VulnerabilityEntryListResponse(BaseModel):
 class AttackPatternEntryBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     slug: str = Field(..., min_length=1, max_length=200)
-    capec_id: Optional[str] = Field(None, max_length=50)
     pattern_type: str = Field(default="general", description="general|go-specific|cloud-business|expert-experience")
-    severity: str = Field(..., description="critical|high|medium|low")
+    risk_level: str = Field(..., description="critical|high|medium|low")
     tags: List[str] = Field(default_factory=list)
     summary: Optional[str] = Field(None, max_length=1000)
     content: str = Field(..., min_length=1)
-    mitigations: Optional[str] = None
     is_active: bool = True
     # 版本管理字段
     version: str = Field(default="1.0.0", max_length=50)
@@ -91,11 +89,11 @@ class AttackPatternEntryBase(BaseModel):
             raise ValueError("slug 只能包含小写字母、数字和连字符，且不能以连字符开头或结尾")
         return v
 
-    @field_validator("severity")
+    @field_validator("risk_level")
     @classmethod
-    def validate_severity(cls, v: str) -> str:
+    def validate_risk_level(cls, v: str) -> str:
         if v not in SEVERITY_VALUES:
-            raise ValueError(f"severity 必须是 {sorted(SEVERITY_VALUES)} 之一")
+            raise ValueError(f"risk_level 必须是 {sorted(SEVERITY_VALUES)} 之一")
         return v
 
     @field_validator("pattern_type")
@@ -112,21 +110,19 @@ class AttackPatternEntryCreate(AttackPatternEntryBase):
 
 class AttackPatternEntryUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
-    capec_id: Optional[str] = Field(None, max_length=50)
     pattern_type: Optional[str] = None
-    severity: Optional[str] = None
+    risk_level: Optional[str] = None
     tags: Optional[List[str]] = None
     summary: Optional[str] = Field(None, max_length=1000)
     content: Optional[str] = Field(None, min_length=1)
-    mitigations: Optional[str] = None
     is_active: Optional[bool] = None
     version_notes: Optional[str] = Field(None, max_length=2000)
 
-    @field_validator("severity")
+    @field_validator("risk_level")
     @classmethod
-    def validate_severity(cls, v: Optional[str]) -> Optional[str]:
+    def validate_risk_level(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v not in SEVERITY_VALUES:
-            raise ValueError(f"severity 必须是 {sorted(SEVERITY_VALUES)} 之一")
+            raise ValueError(f"risk_level 必须是 {sorted(SEVERITY_VALUES)} 之一")
         return v
 
     @field_validator("pattern_type")
@@ -169,8 +165,7 @@ class AttackPatternVersionCreate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     summary: Optional[str] = Field(None, max_length=1000)
     content: Optional[str] = Field(None, min_length=1)
-    mitigations: Optional[str] = None
-    severity: Optional[str] = None
+    risk_level: Optional[str] = None
     pattern_type: Optional[str] = None
     tags: Optional[List[str]] = None
     is_active: Optional[bool] = None

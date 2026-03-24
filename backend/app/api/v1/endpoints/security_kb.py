@@ -120,20 +120,14 @@ def _attack_to_markdown(entry: GoAttackPatternEntry) -> str:
     lines.append(f'title: "{entry.title}"')
     lines.append(f"slug: {entry.slug}")
     lines.append("entry_type: attack_pattern")
-    if entry.capec_id:
-        lines.append(f"capec_id: {entry.capec_id}")
     lines.append(f"pattern_type: {entry.pattern_type}")
-    lines.append(f"severity: {entry.severity}")
+    lines.append(f"risk_level: {entry.risk_level}")
     if tags_yaml:
         lines.append(f"tags:\n{tags_yaml}")
     else:
         lines.append("tags: []")
     if entry.summary:
         lines.append(f'summary: "{entry.summary}"')
-    if entry.mitigations:
-        lines.append(f'mitigations: |')
-        for mline in entry.mitigations.splitlines():
-            lines.append(f"  {mline}")
     lines.append(f"is_active: {str(entry.is_active).lower()}")
     if entry.created_at:
         lines.append(f'created_at: "{entry.created_at.isoformat()}"')
@@ -183,9 +177,10 @@ def _parse_md_to_attack_dict(raw_bytes: bytes, filename: str = "") -> dict:
     _valid_pattern_types = {"general", "go-specific", "cloud-business", "expert-experience"}
     title = meta.get("title") or (filename.replace(".md", "").replace("-", " ").title()) or "Untitled"
     slug_val = meta.get("slug") or _generate_slug(str(title))
-    severity = meta.get("severity", "medium")
-    if severity not in {"critical", "high", "medium", "low"}:
-        severity = "medium"
+    # Support both old 'severity' key and new 'risk_level' key for backward compat
+    risk_level = meta.get("risk_level") or meta.get("severity", "medium")
+    if risk_level not in {"critical", "high", "medium", "low"}:
+        risk_level = "medium"
     pattern_type = str(meta.get("pattern_type", "general"))
     if pattern_type not in _valid_pattern_types:
         pattern_type = "general"
@@ -196,13 +191,11 @@ def _parse_md_to_attack_dict(raw_bytes: bytes, filename: str = "") -> dict:
     return {
         "title": str(title)[:200],
         "slug": str(slug_val)[:200],
-        "capec_id": str(meta["capec_id"])[:50] if meta.get("capec_id") else None,
         "pattern_type": pattern_type,
-        "severity": severity,
+        "risk_level": risk_level,
         "tags": tags,
         "summary": str(meta["summary"])[:1000] if meta.get("summary") else None,
         "content": body or "（内容待补充）",
-        "mitigations": str(meta["mitigations"]) if meta.get("mitigations") else None,
         "is_active": bool(meta.get("is_active", True)),
     }
 
@@ -527,7 +520,7 @@ async def list_attack_patterns(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     q: Optional[str] = Query(None),
-    severity: Optional[str] = Query(None),
+    risk_level: Optional[str] = Query(None),
     pattern_type: Optional[str] = Query(None),
     is_system: Optional[bool] = Query(None),
     is_active: Optional[bool] = Query(None),
@@ -551,11 +544,10 @@ async def list_attack_patterns(
             or_(
                 GoAttackPatternEntry.title.ilike(like),
                 GoAttackPatternEntry.summary.ilike(like),
-                GoAttackPatternEntry.capec_id.ilike(like),
             )
         )
-    if severity:
-        query = query.where(GoAttackPatternEntry.severity == severity)
+    if risk_level:
+        query = query.where(GoAttackPatternEntry.risk_level == risk_level)
     if pattern_type:
         query = query.where(GoAttackPatternEntry.pattern_type == pattern_type)
     if is_system is not None:
@@ -756,7 +748,7 @@ async def export_attack_pattern_zip(
     if body.ids:
         query = query.where(GoAttackPatternEntry.id.in_(body.ids))
     if body.severity:
-        query = query.where(GoAttackPatternEntry.severity == body.severity)
+        query = query.where(GoAttackPatternEntry.risk_level == body.severity)
     if body.attack_type:
         query = query.where(GoAttackPatternEntry.pattern_type == body.attack_type)
 
@@ -792,13 +784,14 @@ async def _get_attack_or_404(entry_id: str, db: AsyncSession) -> GoAttackPattern
 def _attack_response(entry: GoAttackPatternEntry) -> AttackPatternEntryResponse:
     d = {c.name: getattr(entry, c.name) for c in entry.__table__.columns}
     d["tags"] = _json_loads_safe(entry.tags)
-    # Ensure version fields always present for older rows
+    # Ensure version/type fields always present for older rows
     d.setdefault("pattern_id", entry.id)
     d.setdefault("version", "1.0.0")
     d.setdefault("version_notes", None)
     d.setdefault("is_latest", True)
     d.setdefault("parent_id", None)
     d.setdefault("pattern_type", "general")
+    d.setdefault("risk_level", "medium")
     return AttackPatternEntryResponse.model_validate(d)
 
 
@@ -940,13 +933,11 @@ async def create_attack_pattern_version(
         parent_id=parent.id,
         slug=slug_candidate,
         title=data.title or parent.title,
-        capec_id=parent.capec_id,
         pattern_type=data.pattern_type or parent.pattern_type,
-        severity=data.severity or parent.severity,
+        risk_level=data.risk_level or parent.risk_level,
         tags=json.dumps(data.tags if data.tags is not None else parent_tags, ensure_ascii=False),
         summary=data.summary if data.summary is not None else parent.summary,
         content=data.content or parent.content,
-        mitigations=data.mitigations if data.mitigations is not None else parent.mitigations,
         is_system=False,
         is_active=data.is_active if data.is_active is not None else parent.is_active,
         created_by=current_user.id,
