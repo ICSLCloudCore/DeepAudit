@@ -52,7 +52,7 @@ import {
 const CATEGORIES = [
   { value: 'security', label: '安全', icon: Shield, color: 'text-rose-400', bg: 'bg-rose-500/20' },
   { value: 'bug', label: 'Bug', icon: Bug, color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  { value: 'performance', label: '性能', icon: Zap, color: 'text-amber-400', bg: 'bg-amber-500/20' },
+  { value: 'compliance', label: '合规基线', icon: Zap, color: 'text-amber-400', bg: 'bg-amber-500/20' },
   { value: 'style', label: '代码风格', icon: Code, color: 'text-sky-400', bg: 'bg-sky-500/20' },
   { value: 'maintainability', label: '可维护性', icon: Settings, color: 'text-violet-400', bg: 'bg-violet-500/20' },
 ];
@@ -76,7 +76,7 @@ const LANGUAGES = [
 const RULE_TYPES = [
   { value: 'security', label: '安全规则' },
   { value: 'quality', label: '质量规则' },
-  { value: 'performance', label: '性能规则' },
+  { value: 'compliance', label: '合规基线规则' },
   { value: 'custom', label: '自定义规则' },
 ];
 

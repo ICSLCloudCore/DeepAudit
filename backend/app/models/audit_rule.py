@@ -20,7 +20,7 @@ class AuditRuleSet(Base):
     # 适用语言: all, python, javascript, java, go, etc.
     language = Column(String(50), default="all")
     
-    # 规则集类型: security(安全), quality(质量), performance(性能), custom(自定义)
+    # 规则集类型: security(安全), quality(质量), compliance(合规基线), custom(自定义)
     rule_type = Column(String(50), default="custom")
     
     # 严重程度权重配置（JSON格式）
@@ -62,7 +62,7 @@ class AuditRule(Base):
     # 规则描述
     description = Column(Text, nullable=True)
     
-    # 规则类别: security, bug, performance, style, maintainability
+    # 规则类别: security, bug, compliance, style, maintainability
     category = Column(String(50), nullable=False)
     
     # 默认严重程度: critical, high, medium, low
