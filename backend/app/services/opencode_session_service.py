@@ -1086,6 +1086,11 @@ class OpenCodeSessionService:
             # 构建可能的报告路径
             possible_paths = []
 
+            # 打印调试信息
+            print(f"[OpenCode] Project ID: {project.id}")
+            print(f"[OpenCode] Project source_type: {project.source_type}")
+            print(f"[OpenCode] Task ID: {audit_task_id}")
+
             # 1. 尝试项目目录下的reports目录
             if project.source_type == "zip":
                 from app.core.config import settings
@@ -1096,6 +1101,7 @@ class OpenCodeSessionService:
                         [
                             Path(f"/tmp/opencode_project_{project.id}") / "reports",
                             Path(f"C:/temp/opencode_project_{project.id}") / "reports",
+                            Path(f"C:/temp/opencode_project_{project.id[:8]}") / "reports",
                         ]
                     )
             elif project.source_type == "repository":
@@ -1103,19 +1109,32 @@ class OpenCodeSessionService:
                     [
                         Path(f"/tmp/{project.id}") / "reports",
                         Path(f"C:/temp/{project.id}") / "reports",
+                        Path(f"C:/temp/{project.id[:8]}") / "reports",
                     ]
                 )
 
-            # 2. 尝试用户主目录下的DeepAudit reports目录
+            # 2. 尝试 task_id 相关的路径（OpenCode 工作目录可能使用 task_id）
+            possible_paths.extend(
+                [
+                    Path(f"/tmp/{audit_task_id}") / "reports",
+                    Path(f"C:/temp/{audit_task_id}") / "reports",
+                    Path(f"C:/temp/{audit_task_id[:8]}") / "reports",
+                    Path(f"/tmp/opencode_{audit_task_id}") / "reports",
+                    Path(f"C:/temp/opencode_{audit_task_id}") / "reports",
+                ]
+            )
+
+            # 3. 尝试用户主目录下的DeepAudit reports目录
             home_dir = Path.home()
             possible_paths.extend(
                 [
                     home_dir / "DeepAudit" / "reports",
                     home_dir / "Documents" / "DeepAudit" / "reports",
+                    home_dir / "opencode" / "reports",
                 ]
             )
 
-            # 3. 尝试当前工作目录下的reports目录
+            # 4. 尝试当前工作目录下的reports目录
             current_dir = Path.cwd()
             possible_paths.extend(
                 [
@@ -1124,13 +1143,35 @@ class OpenCodeSessionService:
                 ]
             )
 
+            # 5. 尝试常见的 OpenCode 工作目录
+            possible_paths.extend(
+                [
+                    Path("C:/temp/opencode_project") / "reports",
+                    Path("C:/temp/opencode_workspace") / "reports",
+                    Path("/tmp/opencode_project") / "reports",
+                    Path("/tmp/opencode_workspace") / "reports",
+                ]
+            )
+
+            # 打印所有检查的路径
+            print(f"[OpenCode] Checking {len(possible_paths)} possible paths")
+
             # 查找所有可能的JSON报告文件
             report_files = []
+            checked_dirs = []
             for reports_dir in possible_paths:
                 if reports_dir.exists() and reports_dir.is_dir():
+                    checked_dirs.append(str(reports_dir))
                     print(f"[OpenCode] Checking reports directory: {reports_dir}")
                     for json_file in reports_dir.rglob("*.json"):
                         report_files.append(json_file)
+
+            if checked_dirs:
+                print(f"[OpenCode] Existing report dirs: {checked_dirs}")
+            else:
+                print(
+                    f"[OpenCode] No existing report directories found in any of the {len(possible_paths)} checked paths"
+                )
 
             # 如果找到报告文件，尝试导入
             if report_files:
