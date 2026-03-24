@@ -343,6 +343,9 @@ export interface InsightConfig {
   sources: string[];
   last_run_at: string | null;
   next_run_at: string | null;
+  insight_project_path: string;
+  insight_prompt: string;
+  attack_pattern_prompt: string;
 }
 
 export interface InsightConfigResponse {
@@ -354,6 +357,18 @@ export interface InsightConfigUpdate {
   enabled?: boolean;
   interval_hours?: number;
   sources?: string[];
+  insight_project_path?: string;
+  insight_prompt?: string;
+  attack_pattern_prompt?: string;
+}
+
+export interface InsightRunStatus {
+  running: boolean;
+  status: 'idle' | 'running' | 'success' | 'error';
+  pid: number | null;
+  port: string | null;
+  last_error: string;
+  last_report: string;
 }
 
 const INSIGHT_BASE = '/security-kb/insight-config';
@@ -365,5 +380,15 @@ export async function getInsightConfig(): Promise<InsightConfigResponse> {
 
 export async function updateInsightConfig(data: InsightConfigUpdate): Promise<InsightConfigResponse> {
   const response = await apiClient.put(INSIGHT_BASE, data);
+  return response.data;
+}
+
+export async function runInsightNow(): Promise<{ success: boolean; message: string; status: InsightRunStatus }> {
+  const response = await apiClient.post('/security-kb/insight/run');
+  return response.data;
+}
+
+export async function getInsightRunStatus(): Promise<InsightRunStatus> {
+  const response = await apiClient.get('/security-kb/insight/status');
   return response.data;
 }

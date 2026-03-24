@@ -981,6 +981,9 @@ class InsightConfigUpdate(BaseModel):
     enabled: Optional[bool] = None
     interval_hours: Optional[int] = None
     sources: Optional[List[str]] = None
+    insight_project_path: Optional[str] = None
+    insight_prompt: Optional[str] = None
+    attack_pattern_prompt: Optional[str] = None
 
 
 @router.get("/insight-config")
@@ -1010,8 +1013,40 @@ async def update_insight_config(
         current["interval_hours"] = body.interval_hours
     if body.sources is not None:
         current["sources"] = body.sources
+    if body.insight_project_path is not None:
+        current["insight_project_path"] = body.insight_project_path
+    if body.insight_prompt is not None:
+        current["insight_prompt"] = body.insight_prompt
+    if body.attack_pattern_prompt is not None:
+        current["attack_pattern_prompt"] = body.attack_pattern_prompt
     saved = save_insight_config(current)
     return {"config": saved, "source_options": get_source_options()}
+
+
+@router.post("/insight/run")
+async def run_insight_now(
+    background_tasks: Any = None,
+    current_user: Any = Depends(deps.get_current_user),
+) -> Any:
+    """立即触发一次洞察执行（后台异步运行）"""
+    import asyncio as _asyncio
+    from app.services.insight_runner_service import run_insight, get_insight_status
+
+    status = get_insight_status()
+    if status["running"]:
+        return {"success": False, "message": "洞察正在运行中，请稍后再试", "status": status}
+
+    _asyncio.create_task(run_insight())
+    return {"success": True, "message": "洞察已启动，正在后台运行", "status": get_insight_status()}
+
+
+@router.get("/insight/status")
+async def get_insight_run_status(
+    current_user: Any = Depends(deps.get_current_user),
+) -> Any:
+    """获取洞察执行状态"""
+    from app.services.insight_runner_service import get_insight_status
+    return get_insight_status()
 
 
 # ─── 注册子路由 ─────────────────────────────────────────────────────────────

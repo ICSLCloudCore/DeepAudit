@@ -102,7 +102,22 @@ async def lifespan(app: FastAPI):
     logger.info("演示账户: demo@example.com / demo123")
     logger.info("=" * 50)
 
+    # 启动安全知识库洞察调度器
+    try:
+        from app.services.insight_scheduler import start_scheduler
+        start_scheduler()
+        logger.info("  - 安全知识库洞察调度器已启动")
+    except Exception as e:
+        logger.warning(f"洞察调度器启动失败: {e}")
+
     yield
+
+    # 关闭洞察调度器
+    try:
+        from app.services.insight_scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
 
     logger.info("DeepAudit 后端服务已关闭")
 
