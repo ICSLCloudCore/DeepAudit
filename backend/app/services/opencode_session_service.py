@@ -354,7 +354,7 @@ class OpenCodeSessionService:
             return OpenCodeServerStatus.ERROR
 
     async def start_opencode_server(
-        self, project: Project, current_user_id: str
+        self, project: Project, current_user_id: str, audit_task_id: Optional[str] = None
     ) -> OpenCodeServerStatus:
         """
         启动OpenCode服务器 - 获取真实PID
@@ -364,8 +364,9 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Platform: {sys.platform}")
 
         try:
-            task_id = str(uuid.uuid4())
-            print(f"[OpenCode] Generated task ID: {task_id}")
+            # 使用 audit_task_id 作为目录名，如果没有提供则生成随机ID
+            task_id = audit_task_id if audit_task_id else str(uuid.uuid4())
+            print(f"[OpenCode] Task ID: {task_id}")
 
             project_path = None
             extract_dir = (
@@ -717,15 +718,6 @@ class OpenCodeSessionService:
         if not project:
             raise ValueError("Project not found")
 
-        server_status = await self.check_opencode_server_status(project)
-
-        if server_status == OpenCodeServerStatus.STOPPED:
-            print(f"[OpenCode] Server is stopped, starting it...")
-            server_status = await self.start_opencode_server(project, current_user.id)
-
-        if server_status == OpenCodeServerStatus.ERROR:
-            raise RuntimeError("Failed to start OpenCode server")
-
         final_prompt_content = await self.get_prompt_content(
             prompt_template_id, prompt_content, variables
         )
@@ -734,7 +726,7 @@ class OpenCodeSessionService:
             project_id, prompt_template_id, final_prompt_content, current_user
         )
 
-        # 创建审计任务
+        # 创建审计任务 - 先创建audit_task，这样可以用它的ID作为项目目录名
         audit_task = await self.create_opencode_audit_task(
             project_id,
             prompt_template_id,
@@ -742,6 +734,17 @@ class OpenCodeSessionService:
             current_user,
             db_session_id=db_session.id,
         )
+
+        server_status = await self.check_opencode_server_status(project)
+
+        if server_status == OpenCodeServerStatus.STOPPED:
+            print(f"[OpenCode] Server is stopped, starting it...")
+            server_status = await self.start_opencode_server(
+                project, current_user.id, audit_task.id
+            )
+
+        if server_status == OpenCodeServerStatus.ERROR:
+            raise RuntimeError("Failed to start OpenCode server")
 
         server_session_id = await self.create_opencode_server_session(project)
         message_id = None
@@ -1091,7 +1094,17 @@ class OpenCodeSessionService:
             print(f"[OpenCode] Project source_type: {project.source_type}")
             print(f"[OpenCode] Task ID: {audit_task_id}")
 
-            # 1. 尝试项目目录下的reports目录
+            # 1. 尝试 audit_task_id 相关的路径（最优先，因为项目就在这个目录下）
+            possible_paths.extend(
+                [
+                    Path(f"/tmp/{audit_task_id}") / "reports",
+                    Path(f"C:/temp/{audit_task_id}") / "reports",
+                    Path(f"/tmp/{audit_task_id}"),
+                    Path(f"C:/temp/{audit_task_id}"),
+                ]
+            )
+
+            # 2. 尝试项目目录下的reports目录
             if project.source_type == "zip":
                 from app.core.config import settings
 
@@ -1099,25 +1112,27 @@ class OpenCodeSessionService:
                 if zip_path.exists():
                     possible_paths.extend(
                         [
-                            Path(f"/tmp/{project.id}") / "reports",
+                            Path(f"/tmp/opencode_project_{project.id}") / "reports",
+                            Path(f"C:/temp/opencode_project_{project.id}") / "reports",
                         ]
                     )
             elif project.source_type == "repository":
                 possible_paths.extend(
                     [
                         Path(f"/tmp/{project.id}") / "reports",
+                        Path(f"C:/temp/{project.id}") / "reports",
                     ]
                 )
 
-            # 2. 尝试 task_id 相关的路径（OpenCode 工作目录可能使用 task_id）
+            # 3. 尝试其他可能的 task_id 相关路径
             possible_paths.extend(
                 [
-                    Path(f"/tmp/{audit_task_id}") / "reports",
                     Path(f"/tmp/opencode_{audit_task_id}") / "reports",
+                    Path(f"C:/temp/opencode_{audit_task_id}") / "reports",
                 ]
             )
 
-            # 3. 尝试用户主目录下的DeepAudit reports目录
+            # 4. 尝试用户主目录下的DeepAudit reports目录
             home_dir = Path.home()
             possible_paths.extend(
                 [
@@ -1127,12 +1142,22 @@ class OpenCodeSessionService:
                 ]
             )
 
+            # 5. 尝试当前工作目录下的reports目录
+            current_dir = Path.cwd()
+            possible_paths.extend(
+                [
+                    current_dir / "reports",
+                    current_dir / "docs" / "example",
+                ]
+            )
 
-            # 4. 尝试常见的 OpenCode 工作目录
+            # 6. 尝试常见的 OpenCode 工作目录
             possible_paths.extend(
                 [
                     Path("/tmp/opencode_project") / "reports",
                     Path("/tmp/opencode_workspace") / "reports",
+                    Path("C:/temp/opencode_project") / "reports",
+                    Path("C:/temp/opencode_workspace") / "reports",
                 ]
             )
 
