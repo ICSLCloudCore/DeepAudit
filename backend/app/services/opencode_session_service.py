@@ -1153,25 +1153,22 @@ class OpenCodeSessionService:
                 ]
             )
 
-            # 打印所有检查的路径
-            print(f"[OpenCode] Checking {len(possible_paths)} possible paths")
+            # 打印所有检查的路径（无论是否存在）
+            print(f"[OpenCode] ===== Auto Import Debug Info =====")
+            print(f"[OpenCode] Checking {len(possible_paths)} paths:")
+            for i, p in enumerate(possible_paths, 1):
+                exists = "EXISTS" if p.exists() else "NOT EXISTS"
+                print(f"[OpenCode] {i}. {p} [{exists}]")
+            print(f"[OpenCode] ===== End of paths =====")
 
             # 查找所有可能的JSON报告文件
             report_files = []
-            checked_dirs = []
             for reports_dir in possible_paths:
                 if reports_dir.exists() and reports_dir.is_dir():
-                    checked_dirs.append(str(reports_dir))
-                    print(f"[OpenCode] Checking reports directory: {reports_dir}")
+                    print(f"[OpenCode] Found directory: {reports_dir}")
                     for json_file in reports_dir.rglob("*.json"):
                         report_files.append(json_file)
-
-            if checked_dirs:
-                print(f"[OpenCode] Existing report dirs: {checked_dirs}")
-            else:
-                print(
-                    f"[OpenCode] No existing report directories found in any of the {len(possible_paths)} checked paths"
-                )
+                        print(f"[OpenCode] Found JSON file: {json_file}")
 
             # 如果找到报告文件，尝试导入
             if report_files:
