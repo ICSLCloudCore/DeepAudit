@@ -28,6 +28,7 @@ router = APIRouter()
 
 async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_id: str):
     """Start opencode serve in the background"""
+    print("[OpenCode] run start_opencode_serve")
     try:
         # Get project
         result = await db_session.execute(select(Project).where(Project.id == project_id))

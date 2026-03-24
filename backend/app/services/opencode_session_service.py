@@ -356,6 +356,8 @@ class OpenCodeSessionService:
     async def start_opencode_server(
         self, project: Project, current_user_id: str, audit_task_id: Optional[str] = None
     ) -> OpenCodeServerStatus:
+        print("[OpenCode] run start_opencode_server")
+
         """
         启动OpenCode服务器 - 获取真实PID
         """
