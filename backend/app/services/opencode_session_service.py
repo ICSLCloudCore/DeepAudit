@@ -365,8 +365,6 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Project source type: {project.source_type}")
         print(f"[OpenCode] Platform: {sys.platform}")
 
-        print(f"[[OpenCode] audit_Task_id: {audit_task_id}")
-
         try:
             # 使用 audit_task_id 作为目录名，如果没有提供则生成随机ID
             task_id = audit_task_id if audit_task_id else str(uuid.uuid4())
@@ -464,10 +462,6 @@ class OpenCodeSessionService:
 
             log_file = open(log_path, "w")
 
-            if sys.platform != "win32" and hasattr(os, "setsid"):
-                popen_kwargs["preexec_fn"] = os.setsid
-
-                    # Start the process directly with proper path handling
             try:
                 log_file = open(log_path, "w")
                 proc = subprocess.Popen(
