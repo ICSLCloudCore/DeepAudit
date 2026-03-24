@@ -1099,17 +1099,13 @@ class OpenCodeSessionService:
                 if zip_path.exists():
                     possible_paths.extend(
                         [
-                            Path(f"/tmp/opencode_project_{project.id}") / "reports",
-                            Path(f"C:/temp/opencode_project_{project.id}") / "reports",
-                            Path(f"C:/temp/opencode_project_{project.id[:8]}") / "reports",
+                            Path(f"/tmp/{project.id}") / "reports",
                         ]
                     )
             elif project.source_type == "repository":
                 possible_paths.extend(
                     [
                         Path(f"/tmp/{project.id}") / "reports",
-                        Path(f"C:/temp/{project.id}") / "reports",
-                        Path(f"C:/temp/{project.id[:8]}") / "reports",
                     ]
                 )
 
@@ -1117,10 +1113,7 @@ class OpenCodeSessionService:
             possible_paths.extend(
                 [
                     Path(f"/tmp/{audit_task_id}") / "reports",
-                    Path(f"C:/temp/{audit_task_id}") / "reports",
-                    Path(f"C:/temp/{audit_task_id[:8]}") / "reports",
                     Path(f"/tmp/opencode_{audit_task_id}") / "reports",
-                    Path(f"C:/temp/opencode_{audit_task_id}") / "reports",
                 ]
             )
 
@@ -1134,20 +1127,10 @@ class OpenCodeSessionService:
                 ]
             )
 
-            # 4. 尝试当前工作目录下的reports目录
-            current_dir = Path.cwd()
-            possible_paths.extend(
-                [
-                    current_dir / "reports",
-                    current_dir / "docs" / "example",
-                ]
-            )
 
-            # 5. 尝试常见的 OpenCode 工作目录
+            # 4. 尝试常见的 OpenCode 工作目录
             possible_paths.extend(
                 [
-                    Path("C:/temp/opencode_project") / "reports",
-                    Path("C:/temp/opencode_workspace") / "reports",
                     Path("/tmp/opencode_project") / "reports",
                     Path("/tmp/opencode_workspace") / "reports",
                 ]

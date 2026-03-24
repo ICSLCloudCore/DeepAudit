@@ -52,7 +52,7 @@ async def start_opencode_serve(project_id: str, db_session: AsyncSession, user_i
 
         # Determine project path
         project_path = None
-        extract_dir = Path(f"/tmp/{task_id}")
+        extract_dir = Path(f"/tmp/{project_id}")
         extract_dir.mkdir(parents=True, exist_ok=True)
 
         if project.source_type == "repository":
