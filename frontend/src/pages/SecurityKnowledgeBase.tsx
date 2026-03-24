@@ -13,70 +13,44 @@ export default function SecurityKnowledgeBase() {
   const [activeTab, setActiveTab] = useState('vulnerabilities');
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="space-y-6 p-6 cyber-bg-elevated min-h-screen font-mono relative">
+      {/* Grid background */}
+      <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
+
       {/* Page Header */}
-      <div
-        className="flex-shrink-0 px-6 py-4 border-b"
-        style={{
-          background: 'var(--cyber-bg-elevated)',
-          borderColor: 'var(--cyber-border)',
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{
-              background: 'linear-gradient(135deg, hsl(var(--primary) / 0.2), hsl(var(--primary) / 0.05))',
-              border: '1px solid hsl(var(--primary) / 0.4)',
-            }}
-          >
-            <BookOpen className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <h1
-              className="text-lg font-bold font-mono tracking-wide"
-              style={{ color: 'var(--cyber-text)', textShadow: '0 0 20px rgba(56,189,248,0.2)' }}
-            >
-              安全知识库
-            </h1>
-            <p className="text-xs font-mono mt-0.5" style={{ color: 'var(--cyber-text-muted)' }}>
-              Golang Security Knowledge Base
-            </p>
-          </div>
+      <div className="cyber-card p-0 relative z-10">
+        <div className="cyber-card-header">
+          <BookOpen className="w-5 h-5 text-primary" />
+          <h1 className="text-lg font-bold uppercase tracking-wider text-foreground">安全知识库</h1>
+          <p className="text-xs text-muted-foreground font-normal ml-1">Golang Security Knowledge Base</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex-1 min-h-0 flex flex-col px-6 pt-5 pb-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full min-h-0">
-          <TabsList
-            className="flex-shrink-0 self-start mb-5 gap-1"
-            style={{
-              background: 'var(--cyber-bg-elevated)',
-              border: '1px solid var(--cyber-border)',
-            }}
-          >
+      <div className="relative z-10">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid grid-cols-2 w-fit bg-muted border border-border p-1 h-auto gap-1 rounded mb-5">
             <TabsTrigger
               value="vulnerabilities"
-              className="font-mono text-sm gap-2 data-[state=active]:bg-primary/15 data-[state=active]:text-primary"
+              className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 px-4 text-muted-foreground transition-all rounded-sm text-xs flex items-center gap-2"
             >
               <Bug className="w-4 h-4" />
               洞察漏洞库
             </TabsTrigger>
             <TabsTrigger
               value="attack-patterns"
-              className="font-mono text-sm gap-2 data-[state=active]:bg-primary/15 data-[state=active]:text-primary"
+              className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 px-4 text-muted-foreground transition-all rounded-sm text-xs flex items-center gap-2"
             >
               <Swords className="w-4 h-4" />
               攻击模式库
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="vulnerabilities" className="flex-1 min-h-0 mt-0">
+          <TabsContent value="vulnerabilities">
             <VulnerabilityList />
           </TabsContent>
 
-          <TabsContent value="attack-patterns" className="flex-1 min-h-0 mt-0">
+          <TabsContent value="attack-patterns">
             <AttackPatternList />
           </TabsContent>
         </Tabs>

@@ -7,16 +7,12 @@ import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Download, Edit, ExternalLink, Calendar, Tag } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { getSeverityMeta } from './types';
 import type { VulnerabilityEntry, AttackPatternEntry } from '@/shared/api/securityKb';
-import {
-  exportVulnerabilityMd,
-  exportAttackPatternMd,
-} from '@/shared/api/securityKb';
-import { toast } from 'sonner';
+import { exportVulnerabilityMd, exportAttackPatternMd } from '@/shared/api/securityKb';
 
 type Mode = 'vulnerability' | 'attack-pattern';
 
@@ -31,18 +27,15 @@ interface Props {
 export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Props) {
   if (!entry) return null;
 
-  const sev = getSeverityMeta(entry.severity);
   const isVuln = mode === 'vulnerability';
+  const sev = getSeverityMeta(entry.severity);
   const vuln = isVuln ? (entry as VulnerabilityEntry) : null;
   const attack = !isVuln ? (entry as AttackPatternEntry) : null;
 
   const handleExport = async () => {
     try {
-      if (isVuln) {
-        await exportVulnerabilityMd(entry.id, entry.slug);
-      } else {
-        await exportAttackPatternMd(entry.id, entry.slug);
-      }
+      if (isVuln) await exportVulnerabilityMd(entry.id, entry.slug);
+      else await exportAttackPatternMd(entry.id, entry.slug);
       toast.success('已导出 .md 文件');
     } catch {
       toast.error('导出失败');
@@ -51,15 +44,9 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent
-        className="max-w-5xl max-h-[90vh] flex flex-col p-0"
-        style={{ background: 'var(--cyber-bg)', border: '1px solid var(--cyber-border)' }}
-      >
+      <DialogContent className="!w-[min(95vw,960px)] !max-w-none max-h-[90vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
         {/* Header */}
-        <DialogHeader
-          className="px-6 pt-5 pb-3 border-b flex-shrink-0"
-          style={{ borderColor: 'var(--cyber-border)' }}
-        >
+        <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -67,37 +54,28 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
                   {sev.label}
                 </Badge>
                 {isVuln && vuln?.category && (
-                  <Badge variant="outline" className="text-xs font-mono">
-                    {vuln.category}
-                  </Badge>
+                  <Badge variant="outline" className="text-xs font-mono">{vuln.category}</Badge>
                 )}
                 {!isVuln && attack?.attack_type && (
-                  <Badge variant="outline" className="text-xs font-mono">
-                    {attack.attack_type}
-                  </Badge>
+                  <Badge variant="outline" className="text-xs font-mono">{attack.attack_type}</Badge>
                 )}
                 {entry.is_system && (
-                  <Badge className="text-xs font-mono bg-primary/10 text-primary border border-primary/30">
-                    系统内置
-                  </Badge>
+                  <Badge className="cyber-badge-info text-xs font-mono">系统内置</Badge>
                 )}
                 {!entry.is_active && (
                   <Badge variant="outline" className="text-xs font-mono opacity-50">已禁用</Badge>
                 )}
               </div>
-              <DialogTitle
-                className="text-lg font-mono leading-snug"
-                style={{ color: 'var(--cyber-text)' }}
-              >
+              <DialogTitle className="text-base font-bold font-mono leading-snug text-foreground">
                 {entry.title}
               </DialogTitle>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Button size="sm" variant="outline" onClick={handleExport} className="font-mono text-xs h-8">
+              <Button size="sm" variant="outline" onClick={handleExport} className="cyber-btn-outline h-8 text-xs">
                 <Download className="w-3.5 h-3.5 mr-1.5" />导出 .md
               </Button>
               {!entry.is_system && onEdit && (
-                <Button size="sm" onClick={onEdit} className="font-mono text-xs h-8">
+                <Button size="sm" onClick={onEdit} className="cyber-btn-primary h-8 text-xs">
                   <Edit className="w-3.5 h-3.5 mr-1.5" />编辑
                 </Button>
               )}
@@ -106,24 +84,21 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
         </DialogHeader>
 
         {/* Meta bar */}
-        <div
-          className="px-6 py-2 border-b flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-mono flex-shrink-0"
-          style={{ borderColor: 'var(--cyber-border)', color: 'var(--cyber-text-muted)', background: 'var(--cyber-bg-elevated)' }}
-        >
+        <div className="px-6 py-2 border-b border-border flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-mono text-muted-foreground bg-muted/50 flex-shrink-0">
           {isVuln && vuln?.cve_id && (
-            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CVE: {vuln.cve_id}</span>
+            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CVE: <span className="text-orange-400">{vuln.cve_id}</span></span>
           )}
           {isVuln && vuln?.cwe_id && (
-            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CWE: {vuln.cwe_id}</span>
+            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CWE: <span className="text-sky-400">{vuln.cwe_id}</span></span>
           )}
           {!isVuln && attack?.capec_id && (
-            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CAPEC: {attack.capec_id}</span>
+            <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CAPEC: <span className="text-orange-400">{attack.capec_id}</span></span>
           )}
           {!isVuln && attack?.likelihood && (
-            <span>利用可能性: {attack.likelihood}</span>
+            <span>利用可能性: <span className="text-yellow-400">{attack.likelihood}</span></span>
           )}
           {isVuln && vuln?.affected_versions && (
-            <span>受影响版本: {vuln.affected_versions}</span>
+            <span>受影响版本: <span className="text-foreground/80">{vuln.affected_versions}</span></span>
           )}
           {entry.created_at && (
             <span className="flex items-center gap-1">
@@ -132,12 +107,8 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
             </span>
           )}
           {entry.source_url && (
-            <a
-              href={entry.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 hover:text-primary transition-colors"
-            >
+            <a href={entry.source_url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 hover:text-primary transition-colors">
               <ExternalLink className="w-3 h-3" />来源
             </a>
           )}
@@ -145,69 +116,41 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
 
         {/* Tags & packages */}
         {((entry.tags?.length ?? 0) > 0 || (entry.go_packages?.length ?? 0) > 0) && (
-          <div
-            className="px-6 py-2 border-b flex flex-wrap gap-1.5 flex-shrink-0"
-            style={{ borderColor: 'var(--cyber-border)' }}
-          >
+          <div className="px-6 py-2 border-b border-border flex flex-wrap gap-1.5 flex-shrink-0">
             {(entry.tags ?? []).map(tag => (
-              <Badge
-                key={tag}
-                variant="outline"
-                className="text-xs font-mono"
-                style={{ borderColor: 'var(--cyber-border-accent)', color: 'var(--cyber-text-muted)' }}
-              >
-                #{tag}
-              </Badge>
+              <Badge key={tag} variant="outline" className="text-xs font-mono cyber-badge-muted">#{tag}</Badge>
             ))}
             {(entry.go_packages ?? []).map(pkg => (
-              <Badge
-                key={pkg}
-                variant="outline"
-                className="text-xs font-mono bg-primary/5 text-primary/80 border-primary/30"
-              >
-                {pkg}
-              </Badge>
+              <Badge key={pkg} variant="outline" className="text-xs font-mono cyber-badge-info">{pkg}</Badge>
             ))}
           </div>
         )}
 
         {/* Summary */}
         {entry.summary && (
-          <div
-            className="px-6 py-3 border-b text-sm flex-shrink-0 italic"
-            style={{ borderColor: 'var(--cyber-border)', color: 'var(--cyber-text-muted)' }}
-          >
+          <div className="px-6 py-3 border-b border-border text-sm italic text-muted-foreground flex-shrink-0">
             {entry.summary}
           </div>
         )}
 
         {/* Markdown Content */}
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="px-6 py-5">
-            <div
-              className="prose prose-invert prose-sm max-w-none"
-              style={{ '--tw-prose-headings': 'hsl(var(--primary))', '--tw-prose-code': 'var(--cyber-text)' } as React.CSSProperties}
-            >
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {entry.content || '（暂无内容）'}
-              </ReactMarkdown>
-            </div>
-
-            {/* Mitigations for attack patterns */}
-            {!isVuln && attack?.mitigations && (
-              <>
-                <div className="mt-8 pt-6 border-t" style={{ borderColor: 'var(--cyber-border)' }}>
-                  <h3 className="text-sm font-mono font-semibold mb-3 text-primary">防御措施</h3>
-                  <div className="prose prose-invert prose-sm max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {attack.mitigations}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              </>
-            )}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {entry.content || '（暂无内容）'}
+            </ReactMarkdown>
           </div>
-        </ScrollArea>
+
+          {/* Mitigations for attack patterns */}
+          {!isVuln && attack?.mitigations && (
+            <div className="mt-8 pt-6 border-t border-border">
+              <h3 className="text-sm font-mono font-bold mb-3 text-primary uppercase tracking-wider">防御措施</h3>
+              <div className="prose prose-invert prose-sm max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{attack.mitigations}</ReactMarkdown>
+              </div>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
