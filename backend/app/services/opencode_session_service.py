@@ -1259,32 +1259,32 @@ class OpenCodeSessionService:
                                     print(f"[OpenCode] Failed to import vulnerability: {e}")
                                     continue
 
-                                if imported_count > 0:
-                                    # 更新任务的漏洞统计
-                                    result_task = await db.execute(
-                                        select(OpenCodeAuditTask).where(
-                                            OpenCodeAuditTask.id == audit_task_id
-                                        )
+                            if imported_count > 0:
+                                # 更新任务的漏洞统计
+                                result_task = await db.execute(
+                                    select(OpenCodeAuditTask).where(
+                                        OpenCodeAuditTask.id == audit_task_id
                                     )
-                                    task = result_task.scalar_one_or_none()
-                                    if task:
-                                        task.findings_count = imported_count
-                                        severity_summary = report_data.get("severity_summary", {})
-                                        task.critical_count = severity_summary.get(
-                                            "致命", 0
-                                        ) + severity_summary.get("critical", 0)
-                                        task.high_count = severity_summary.get(
-                                            "严重", 0
-                                        ) + severity_summary.get("high", 0)
-                                        task.medium_count = severity_summary.get(
-                                            "一般", 0
-                                        ) + severity_summary.get("medium", 0)
-                                        task.low_count = (
-                                            severity_summary.get("提示", 0)
-                                            + severity_summary.get("low", 0)
-                                            + severity_summary.get("info", 0)
-                                        )
-                                        await db.commit()
+                                )
+                                task = result_task.scalar_one_or_none()
+                                if task:
+                                    task.findings_count = imported_count
+                                    severity_summary = report_data.get("severity_summary", {})
+                                    task.critical_count = severity_summary.get(
+                                        "致命", 0
+                                    ) + severity_summary.get("critical", 0)
+                                    task.high_count = severity_summary.get(
+                                        "严重", 0
+                                    ) + severity_summary.get("high", 0)
+                                    task.medium_count = severity_summary.get(
+                                        "一般", 0
+                                    ) + severity_summary.get("medium", 0)
+                                    task.low_count = (
+                                        severity_summary.get("提示", 0)
+                                        + severity_summary.get("low", 0)
+                                        + severity_summary.get("info", 0)
+                                    )
+                                    await db.commit()
                                 print(
                                     f"[OpenCode] Successfully auto imported {imported_count} vulnerabilities"
                                 )
