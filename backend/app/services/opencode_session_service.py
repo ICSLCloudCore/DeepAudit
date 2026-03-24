@@ -365,6 +365,8 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Project source type: {project.source_type}")
         print(f"[OpenCode] Platform: {sys.platform}")
 
+        print(f"[OpenCode] audit_Task_id: {audit_task_id}")
+
         try:
             # 使用 audit_task_id 作为目录名，如果没有提供则生成随机ID
             task_id = audit_task_id if audit_task_id else str(uuid.uuid4())
@@ -1212,43 +1214,43 @@ class OpenCodeSessionService:
                                             "vuln_id", f"VULN-{imported_count + 1:03d}"
                                         ),
                                         severity=vuln_data.get("severity", "medium"),
-                                        cvss_score=vuln_data.get("cvss_score"),
-                                        cvss_vector=vuln_data.get("cvss_vector"),
-                                        cwe=vuln_data.get("cwe"),
-                                        confidence=vuln_data.get("confidence"),
-                                        location=vuln_data.get("location"),
-                                        file_path=vuln_data.get("file_path"),
-                                        line_start=vuln_data.get("line_start"),
-                                        line_end=vuln_data.get("line_end"),
+                                        cvss_score=vuln_data.get("cvss_score", "no data"),
+                                        cvss_vector=vuln_data.get("cvss_vector", "nno data"),
+                                        cwe=vuln_data.get("cwe", "no data"),
+                                        confidence=vuln_data.get("confidence", "no data"),
+                                        location=vuln_data.get("location", "no data"),
+                                        file_path=vuln_data.get("file_path", "no data"),
+                                        line_start=vuln_data.get("line_start", "no data"),
+                                        line_end=vuln_data.get("line_end", "no data"),
                                         vulnerability_title=vuln_data.get(
                                             "vulnerability_title", "未知漏洞"
                                         ),
                                         vulnerability_essence=vuln_data.get(
-                                            "vulnerability_essence"
+                                            "vulnerability_essence", "no data"
                                         ),
-                                        root_cause=vuln_data.get("root_cause"),
-                                        security_impact=vuln_data.get("security_impact"),
-                                        vulnerable_code=vuln_data.get("vulnerable_code"),
-                                        dataflow=vuln_data.get("dataflow"),
-                                        exploit_steps=vuln_data.get("exploit_steps"),
-                                        exploit_poc=vuln_data.get("exploit_poc"),
+                                        root_cause=vuln_data.get("root_cause", "no data"),
+                                        security_impact=vuln_data.get("security_impact", "no data"),
+                                        vulnerable_code=vuln_data.get("vulnerable_code", "no data"),
+                                        dataflow=vuln_data.get("dataflow", "no data"),
+                                        exploit_steps=vuln_data.get("exploit_steps", "no data"),
+                                        exploit_poc=vuln_data.get("exploit_poc", "no data"),
                                         impact_confidentiality=vuln_data.get(
-                                            "impact_confidentiality"
+                                            "impact_confidentiality", "no data"
                                         ),
-                                        impact_integrity=vuln_data.get("impact_integrity"),
-                                        impact_availability=vuln_data.get("impact_availability"),
-                                        fix_description=vuln_data.get("fix_description"),
-                                        fix_code_before=vuln_data.get("fix_code_before"),
-                                        fix_code_after=vuln_data.get("fix_code_after"),
-                                        manual_confirmation=vuln_data.get("manual_confirmation"),
+                                        impact_integrity=vuln_data.get("impact_integrity", "no data"),
+                                        impact_availability=vuln_data.get("impact_availability", "no data"),
+                                        fix_description=vuln_data.get("fix_description", "no data"),
+                                        fix_code_before=vuln_data.get("fix_code_before", "no data"),
+                                        fix_code_after=vuln_data.get("fix_code_after", "no data"),
+                                        manual_confirmation=vuln_data.get("manual_confirmation", "no data"),
                                         manual_confirmation_status=vuln_data.get(
                                             "manual_confirmation_status", "待确认"
                                         ),
                                         manual_confirmation_notes=vuln_data.get(
-                                            "manual_confirmation_notes"
+                                            "manual_confirmation_notes", "no data"
                                         ),
-                                        confirmed_by=vuln_data.get("confirmed_by"),
-                                        confirmed_at=vuln_data.get("confirmed_at"),
+                                        confirmed_by=vuln_data.get("confirmed_by", "no data"),
+                                        confirmed_at=vuln_data.get("confirmed_at", "no data"),
                                         status=vuln_data.get("status", "new"),
                                     )
                                     db.add(vuln)
