@@ -14,6 +14,7 @@ import PromptManager from "@/pages/PromptManager";
 import AgentManagement from "@/pages/AgentManagement";
 import SkillMarketplace from "@/pages/SkillMarketplace";
 import MCPMarketplace from "@/pages/MCPMarketplace";
+import SecurityKnowledgeBase from "@/pages/SecurityKnowledgeBase";
 import type { ReactNode } from 'react';
 
 export interface RouteConfig {
@@ -106,6 +107,12 @@ const routes: RouteConfig[] = [
     name: "审计规则",
     path: "/audit-rules",
     element: <AuditRules />,
+    visible: true,
+  },
+  {
+    name: "安全知识库",
+    path: "/security-kb",
+    element: <SecurityKnowledgeBase />,
     visible: true,
   },
   {

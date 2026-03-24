@@ -20,6 +20,7 @@ import {
     UserCircle,
     Shield,
     MessageSquare,
+    BookOpen,
 } from "lucide-react";
 import routes from "@/app/routes";
 
@@ -32,6 +33,7 @@ const routeIcons: Record<string, React.ReactNode> = {
     "/audit-tasks": <ListTodo className="w-[18px] h-[18px]" />,
     "/audit-rules": <Shield className="w-[18px] h-[18px]" />,
     "/prompts": <MessageSquare className="w-[18px] h-[18px]" />,
+    "/security-kb": <BookOpen className="w-[18px] h-[18px]" />,
     "/admin": <Settings className="w-[18px] h-[18px]" />,
     "/recycle-bin": <Trash2 className="w-[18px] h-[18px]" />,
 };
