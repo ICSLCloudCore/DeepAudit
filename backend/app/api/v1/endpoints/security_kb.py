@@ -1005,8 +1005,8 @@ async def update_insight_config(
     if body.enabled is not None:
         current["enabled"] = body.enabled
     if body.interval_hours is not None:
-        if body.interval_hours < 1:
-            raise HTTPException(status_code=400, detail="interval_hours 最小值为 1")
+        if body.interval_hours < 0:
+            raise HTTPException(status_code=400, detail="interval_hours 最小值为 0")
         current["interval_hours"] = body.interval_hours
     if body.sources is not None:
         current["sources"] = body.sources

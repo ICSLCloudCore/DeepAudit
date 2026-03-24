@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -32,11 +31,10 @@ interface Props {
 }
 
 const INTERVAL_PRESETS = [
-  { label: '每 1 小时', hours: 1 },
-  { label: '每 6 小时', hours: 6 },
-  { label: '每 12 小时', hours: 12 },
+  { label: '立即', hours: 0 },
   { label: '每天', hours: 24 },
   { label: '每周', hours: 168 },
+  { label: '每月', hours: 720 },
 ];
 
 export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
@@ -45,7 +43,6 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
 
   const [enabled, setEnabled] = useState(false);
   const [intervalHours, setIntervalHours] = useState(24);
-  const [intervalInput, setIntervalInput] = useState('24');
   const [selectedSources, setSelectedSources] = useState<string[]>(['github', 'nvd', 'go_vuln_db']);
   const [sourceOptions, setSourceOptions] = useState<InsightSourceOption[]>([]);
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
@@ -63,7 +60,6 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
       const c = res.config;
       setEnabled(c.enabled);
       setIntervalHours(c.interval_hours);
-      setIntervalInput(String(c.interval_hours));
       setSelectedSources(c.sources);
       setLastRunAt(c.last_run_at);
       setNextRunAt(c.next_run_at);
@@ -81,15 +77,8 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
     );
   };
 
-  const handleIntervalInput = (raw: string) => {
-    setIntervalInput(raw);
-    const n = parseInt(raw, 10);
-    if (!Number.isNaN(n) && n >= 1) setIntervalHours(n);
-  };
-
   const handlePreset = (hours: number) => {
     setIntervalHours(hours);
-    setIntervalInput(String(hours));
   };
 
   const handleSave = async () => {
@@ -97,16 +86,11 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
       toast.error('请至少选择一个洞察源');
       return;
     }
-    const hours = parseInt(intervalInput, 10);
-    if (Number.isNaN(hours) || hours < 1) {
-      toast.error('洞察周期最小为 1 小时');
-      return;
-    }
     setSaving(true);
     try {
       const res = await updateInsightConfig({
         enabled,
-        interval_hours: hours,
+        interval_hours: intervalHours,
         sources: selectedSources,
       });
       toast.success('洞察配置已保存');
@@ -211,18 +195,17 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-primary" />
                   <Label className="text-xs font-bold text-muted-foreground uppercase">
-                    洞察周期（小时）
+                    洞察周期
                   </Label>
                 </div>
 
-                {/* 快捷预设 */}
                 <div className="flex flex-wrap gap-2">
                   {INTERVAL_PRESETS.map(p => (
                     <button
                       key={p.hours}
                       type="button"
                       onClick={() => handlePreset(p.hours)}
-                      className={`px-3 py-1 text-xs font-mono rounded border transition-all ${
+                      className={`px-4 py-2 text-xs font-mono rounded border transition-all ${
                         intervalHours === p.hours
                           ? 'bg-primary text-background border-primary'
                           : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
@@ -231,19 +214,6 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                       {p.label}
                     </button>
                   ))}
-                </div>
-
-                {/* 自定义输入 */}
-                <div className="flex items-center gap-3">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={intervalInput}
-                    onChange={e => handleIntervalInput(e.target.value)}
-                    className="cyber-input w-28 h-9 font-mono text-sm"
-                    placeholder="小时数"
-                  />
-                  <span className="text-xs text-muted-foreground font-mono">小时 / 次</span>
                 </div>
               </div>
 
