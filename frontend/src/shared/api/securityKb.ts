@@ -40,6 +40,8 @@ export type VulnerabilityEntryUpdate = Partial<Omit<VulnerabilityEntryCreate, 's
 
 // ─── 攻击模式类型 ──────────────────────────────────────────────────────────
 
+export type PatternType = 'general' | 'go-specific' | 'cloud-business' | 'expert-experience';
+
 export interface AttackPatternEntry {
   id: string;
   pattern_id: string;
@@ -50,15 +52,12 @@ export interface AttackPatternEntry {
   title: string;
   slug: string;
   capec_id?: string;
-  attack_type: string;
+  pattern_type: PatternType;
   severity: Severity;
-  likelihood?: Likelihood;
   tags: string[];
   summary?: string;
   content: string;
   mitigations?: string;
-  go_packages: string[];
-  source_url?: string;
   is_system: boolean;
   is_active: boolean;
   created_by?: string;
@@ -70,15 +69,12 @@ export interface AttackPatternEntryCreate {
   title: string;
   slug: string;
   capec_id?: string;
-  attack_type: string;
+  pattern_type?: PatternType;
   severity: Severity;
-  likelihood?: Likelihood;
   tags?: string[];
   summary?: string;
   content: string;
   mitigations?: string;
-  go_packages?: string[];
-  source_url?: string;
   is_active?: boolean;
   version?: string;
   version_notes?: string;
@@ -98,10 +94,8 @@ export interface AttackPatternVersionCreate {
   content?: string;
   mitigations?: string;
   severity?: Severity;
-  likelihood?: Likelihood;
+  pattern_type?: PatternType;
   tags?: string[];
-  go_packages?: string[];
-  source_url?: string;
   is_active?: boolean;
 }
 
@@ -123,8 +117,9 @@ export interface KbListParams {
   skip?: number;
   limit?: number;
   q?: string;
+  severity?: string;
   // attack pattern filters (not used for vulnerability insights)
-  attack_type?: string;
+  pattern_type?: string;
   is_system?: boolean;
   is_active?: boolean;
 }
@@ -148,8 +143,7 @@ export interface ImportZipResponse {
 export interface ExportZipRequest {
   ids?: string[];
   severity?: string;
-  category?: string;
-  attack_type?: string;
+  pattern_type?: string;
 }
 
 // ─── 工具函数 ───────────────────────────────────────────────────────────────

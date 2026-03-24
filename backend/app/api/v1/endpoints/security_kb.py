@@ -114,9 +114,7 @@ def _vuln_to_markdown(entry: GoVulnerabilityEntry) -> str:
 
 def _attack_to_markdown(entry: GoAttackPatternEntry) -> str:
     tags = _json_loads_safe(entry.tags)
-    go_packages = _json_loads_safe(entry.go_packages)
     tags_yaml = "\n".join(f"  - {t}" for t in tags) if tags else ""
-    pkgs_yaml = "\n".join(f"  - {p}" for p in go_packages) if go_packages else ""
 
     lines = ["---"]
     lines.append(f'title: "{entry.title}"')
@@ -124,20 +122,12 @@ def _attack_to_markdown(entry: GoAttackPatternEntry) -> str:
     lines.append("entry_type: attack_pattern")
     if entry.capec_id:
         lines.append(f"capec_id: {entry.capec_id}")
-    lines.append(f"attack_type: {entry.attack_type}")
+    lines.append(f"pattern_type: {entry.pattern_type}")
     lines.append(f"severity: {entry.severity}")
-    if entry.likelihood:
-        lines.append(f"likelihood: {entry.likelihood}")
     if tags_yaml:
         lines.append(f"tags:\n{tags_yaml}")
     else:
         lines.append("tags: []")
-    if pkgs_yaml:
-        lines.append(f"go_packages:\n{pkgs_yaml}")
-    else:
-        lines.append("go_packages: []")
-    if entry.source_url:
-        lines.append(f'source_url: "{entry.source_url}"')
     if entry.summary:
         lines.append(f'summary: "{entry.summary}"')
     if entry.mitigations:
@@ -190,34 +180,29 @@ def _parse_md_to_attack_dict(raw_bytes: bytes, filename: str = "") -> dict:
     meta = post.metadata
     body = post.content.strip()
 
+    _valid_pattern_types = {"general", "go-specific", "cloud-business", "expert-experience"}
     title = meta.get("title") or (filename.replace(".md", "").replace("-", " ").title()) or "Untitled"
     slug_val = meta.get("slug") or _generate_slug(str(title))
     severity = meta.get("severity", "medium")
     if severity not in {"critical", "high", "medium", "low"}:
         severity = "medium"
-    likelihood = meta.get("likelihood")
-    if likelihood not in {"high", "medium", "low", None}:
-        likelihood = None
+    pattern_type = str(meta.get("pattern_type", "general"))
+    if pattern_type not in _valid_pattern_types:
+        pattern_type = "general"
 
     tags_raw = meta.get("tags", [])
     tags = list(tags_raw) if isinstance(tags_raw, (list, tuple)) else []
-
-    pkgs_raw = meta.get("go_packages", [])
-    go_packages = list(pkgs_raw) if isinstance(pkgs_raw, (list, tuple)) else []
 
     return {
         "title": str(title)[:200],
         "slug": str(slug_val)[:200],
         "capec_id": str(meta["capec_id"])[:50] if meta.get("capec_id") else None,
-        "attack_type": str(meta.get("attack_type", "other"))[:100],
+        "pattern_type": pattern_type,
         "severity": severity,
-        "likelihood": likelihood,
         "tags": tags,
         "summary": str(meta["summary"])[:1000] if meta.get("summary") else None,
         "content": body or "（内容待补充）",
         "mitigations": str(meta["mitigations"]) if meta.get("mitigations") else None,
-        "go_packages": go_packages,
-        "source_url": str(meta["source_url"])[:500] if meta.get("source_url") else None,
         "is_active": bool(meta.get("is_active", True)),
     }
 
@@ -543,7 +528,7 @@ async def list_attack_patterns(
     limit: int = Query(20, ge=1, le=100),
     q: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
-    attack_type: Optional[str] = Query(None),
+    pattern_type: Optional[str] = Query(None),
     is_system: Optional[bool] = Query(None),
     is_active: Optional[bool] = Query(None),
     all_versions: bool = Query(False, description="为 True 时返回所有版本，默认只返回最新版本"),
@@ -571,8 +556,8 @@ async def list_attack_patterns(
         )
     if severity:
         query = query.where(GoAttackPatternEntry.severity == severity)
-    if attack_type:
-        query = query.where(GoAttackPatternEntry.attack_type == attack_type)
+    if pattern_type:
+        query = query.where(GoAttackPatternEntry.pattern_type == pattern_type)
     if is_system is not None:
         query = query.where(GoAttackPatternEntry.is_system == is_system)
     if is_active is not None:
@@ -592,7 +577,6 @@ async def list_attack_patterns(
     def _serialize(e: GoAttackPatternEntry) -> dict:
         d = {c.name: getattr(e, c.name) for c in e.__table__.columns}
         d["tags"] = _json_loads_safe(e.tags)
-        d["go_packages"] = _json_loads_safe(e.go_packages)
         return d
 
     return AttackPatternEntryListResponse(
@@ -624,9 +608,8 @@ async def create_attack_pattern(
         is_latest=True,
         parent_id=None,
         **{k: v for k, v in data.model_dump().items()
-           if k not in ("tags", "go_packages", "version", "version_notes")},
+           if k not in ("tags", "version", "version_notes")},
         tags=json.dumps(data.tags, ensure_ascii=False),
-        go_packages=json.dumps(data.go_packages, ensure_ascii=False),
         is_system=False,
         created_by=current_user.id,
     )
@@ -775,7 +758,7 @@ async def export_attack_pattern_zip(
     if body.severity:
         query = query.where(GoAttackPatternEntry.severity == body.severity)
     if body.attack_type:
-        query = query.where(GoAttackPatternEntry.attack_type == body.attack_type)
+        query = query.where(GoAttackPatternEntry.pattern_type == body.attack_type)
 
     result = await db.execute(query)
     entries = result.scalars().all()
@@ -809,13 +792,13 @@ async def _get_attack_or_404(entry_id: str, db: AsyncSession) -> GoAttackPattern
 def _attack_response(entry: GoAttackPatternEntry) -> AttackPatternEntryResponse:
     d = {c.name: getattr(entry, c.name) for c in entry.__table__.columns}
     d["tags"] = _json_loads_safe(entry.tags)
-    d["go_packages"] = _json_loads_safe(entry.go_packages)
-    # Ensure new version fields are always present even for older rows
+    # Ensure version fields always present for older rows
     d.setdefault("pattern_id", entry.id)
     d.setdefault("version", "1.0.0")
     d.setdefault("version_notes", None)
     d.setdefault("is_latest", True)
     d.setdefault("parent_id", None)
+    d.setdefault("pattern_type", "general")
     return AttackPatternEntryResponse.model_validate(d)
 
 
@@ -841,7 +824,7 @@ async def _upsert_attack(
                 raise HTTPException(status_code=400, detail=f"slug '{slug}' 已存在，请开启覆盖选项")
             return None
         for k, v in parsed.items():
-            if k in ("tags", "go_packages"):
+            if k == "tags":
                 setattr(existing, k, json.dumps(v, ensure_ascii=False))
             elif k not in ("pattern_id", "is_latest", "parent_id"):
                 setattr(existing, k, v)
@@ -859,10 +842,9 @@ async def _upsert_attack(
         is_latest=True,
         parent_id=parsed.get("parent_id"),
         **{k: v for k, v in parsed.items()
-           if k not in ("tags", "go_packages", "pattern_id", "version",
+           if k not in ("tags", "pattern_id", "version",
                         "version_notes", "is_latest", "parent_id")},
         tags=json.dumps(parsed.get("tags", []), ensure_ascii=False),
-        go_packages=json.dumps(parsed.get("go_packages", []), ensure_ascii=False),
         is_system=False,
         created_by=current_user.id,
     )
@@ -948,7 +930,6 @@ async def create_attack_pattern_version(
     # Inherit fields from parent, override with provided data
     new_id = str(uuid.uuid4())
     parent_tags = _json_loads_safe(parent.tags)
-    parent_pkgs = _json_loads_safe(parent.go_packages)
 
     new_entry = GoAttackPatternEntry(
         id=new_id,
@@ -960,15 +941,12 @@ async def create_attack_pattern_version(
         slug=slug_candidate,
         title=data.title or parent.title,
         capec_id=parent.capec_id,
-        attack_type=parent.attack_type,
+        pattern_type=data.pattern_type or parent.pattern_type,
         severity=data.severity or parent.severity,
-        likelihood=data.likelihood or parent.likelihood,
         tags=json.dumps(data.tags if data.tags is not None else parent_tags, ensure_ascii=False),
         summary=data.summary if data.summary is not None else parent.summary,
         content=data.content or parent.content,
         mitigations=data.mitigations if data.mitigations is not None else parent.mitigations,
-        go_packages=json.dumps(data.go_packages if data.go_packages is not None else parent_pkgs, ensure_ascii=False),
-        source_url=data.source_url if data.source_url is not None else parent.source_url,
         is_system=False,
         is_active=data.is_active if data.is_active is not None else parent.is_active,
         created_by=current_user.id,

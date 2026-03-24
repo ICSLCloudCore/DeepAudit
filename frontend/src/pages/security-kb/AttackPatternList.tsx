@@ -20,7 +20,7 @@ import {
   Eye, Edit, Trash2, FileText, Archive, Lock, Calendar, Loader2, Swords, GitBranch,
 } from 'lucide-react';
 
-import { SEVERITY_OPTIONS, ATTACK_TYPE_OPTIONS, getSeverityMeta } from './types';
+import { SEVERITY_OPTIONS, PATTERN_TYPE_OPTIONS, getSeverityMeta, getPatternTypeMeta } from './types';
 import KbEntryDialog from './KbEntryDialog';
 import KbViewDialog from './KbViewDialog';
 import KbImportDialog from './KbImportDialog';
@@ -33,11 +33,7 @@ import {
 
 const PAGE_SIZE = 20;
 
-const LIKELIHOOD_COLOR: Record<string, string> = {
-  high: 'text-red-400',
-  medium: 'text-yellow-400',
-  low: 'text-sky-400',
-};
+// LIKELIHOOD_COLOR removed — likelihood field no longer exists
 
 export default function AttackPatternList() {
   const [items, setItems] = useState<AttackPatternEntry[]>([]);
@@ -46,7 +42,7 @@ export default function AttackPatternList() {
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [severity, setSeverity] = useState('');
-  const [attackType, setAttackType] = useState('');
+  const [patternType, setPatternType] = useState('');
 
   const [showCreate, setShowCreate] = useState(false);
   const [editingEntry, setEditingEntry] = useState<AttackPatternEntry | null>(null);
@@ -66,7 +62,7 @@ export default function AttackPatternList() {
         limit: PAGE_SIZE,
         q: q || undefined,
         severity: severity || undefined,
-        attack_type: attackType || undefined,
+        pattern_type: patternType || undefined,
       });
       setItems(res.items);
       setTotal(res.total);
@@ -78,7 +74,7 @@ export default function AttackPatternList() {
   }, [page, q, severity, attackType]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [q, severity, attackType]);
+  useEffect(() => { setPage(1); }, [q, severity, patternType]);
 
   const handleDelete = async () => {
     if (!deletingEntry) return;
@@ -102,7 +98,7 @@ export default function AttackPatternList() {
   const handleBatchExport = async () => {
     setExporting(true);
     try {
-      await exportAttackPatternsZip({ severity: severity || undefined, attack_type: attackType || undefined });
+      await exportAttackPatternsZip({ severity: severity || undefined, pattern_type: patternType || undefined });
       toast.success('ZIP 已导出');
     } catch { toast.error('导出失败'); }
     finally { setExporting(false); }
@@ -135,14 +131,16 @@ export default function AttackPatternList() {
             </SelectContent>
           </Select>
 
-          <Select value={attackType || 'all'} onValueChange={v => setAttackType(v === 'all' ? '' : v)}>
-            <SelectTrigger className="cyber-input w-36 h-9 text-sm">
-              <SelectValue placeholder="攻击类型" />
+          <Select value={patternType || 'all'} onValueChange={v => setPatternType(v === 'all' ? '' : v)}>
+            <SelectTrigger className="cyber-input w-40 h-9 text-sm">
+              <SelectValue placeholder="模式类型" />
             </SelectTrigger>
             <SelectContent className="cyber-dialog border-border">
               <SelectItem value="all">全部类型</SelectItem>
-              {ATTACK_TYPE_OPTIONS.map(c => (
-                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+              {PATTERN_TYPE_OPTIONS.map(p => (
+                <SelectItem key={p.value} value={p.value}>
+                  <span className={p.color}>{p.label}</span>
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -302,15 +300,13 @@ function AttackCard({ entry, onView, onEdit, onExport, onDelete, onVersions }: C
       >
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex flex-wrap gap-1.5">
+            {(() => {
+              const pt = getPatternTypeMeta(entry.pattern_type);
+              return <Badge className={`text-xs font-mono ${pt.bg} ${pt.color} border ${pt.border}`}>{pt.label}</Badge>;
+            })()}
             <Badge className={`text-xs font-mono ${sev.bg} ${sev.color} border ${sev.border}`}>
               {sev.label}
             </Badge>
-            <Badge variant="outline" className="text-xs font-mono">{entry.attack_type}</Badge>
-            {entry.likelihood && (
-              <span className={`text-[10px] font-mono ${LIKELIHOOD_COLOR[entry.likelihood] ?? 'text-muted-foreground'}`}>
-                利用:{entry.likelihood}
-              </span>
-            )}
             {entry.is_system && (
               <Badge className="cyber-badge-info text-xs font-mono">
                 <Lock className="w-2.5 h-2.5 mr-1" />系统
@@ -347,22 +343,6 @@ function AttackCard({ entry, onView, onEdit, onExport, onDelete, onVersions }: C
       {entry.summary && (
         <div className="px-4 pt-3 pb-2 cursor-pointer" onClick={onView}>
           <p className="text-xs line-clamp-2 leading-relaxed text-muted-foreground">{entry.summary}</p>
-        </div>
-      )}
-
-      {/* Go packages */}
-      {(entry.go_packages?.length ?? 0) > 0 && (
-        <div className="px-4 pb-2 flex flex-wrap gap-1">
-          {(entry.go_packages ?? []).slice(0, 4).map(pkg => (
-            <Badge key={pkg} variant="outline" className="text-[10px] font-mono px-1.5 py-0 cyber-badge-info">
-              {pkg}
-            </Badge>
-          ))}
-          {(entry.go_packages?.length ?? 0) > 4 && (
-            <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
-              +{(entry.go_packages?.length ?? 0) - 4}
-            </Badge>
-          )}
         </div>
       )}
 

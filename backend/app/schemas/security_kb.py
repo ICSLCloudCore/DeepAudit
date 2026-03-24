@@ -10,7 +10,7 @@ from datetime import datetime
 
 SLUG_PATTERN = re.compile(r'^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$')
 SEVERITY_VALUES = {"critical", "high", "medium", "low"}
-LIKELIHOOD_VALUES = {"high", "medium", "low"}
+PATTERN_TYPE_VALUES = {"general", "go-specific", "cloud-business", "expert-experience"}
 
 
 # ─── 漏洞洞察报告 Schema ─────────────────────────────────────────────────────
@@ -73,15 +73,12 @@ class AttackPatternEntryBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     slug: str = Field(..., min_length=1, max_length=200)
     capec_id: Optional[str] = Field(None, max_length=50)
-    attack_type: str = Field(..., min_length=1, max_length=100)
+    pattern_type: str = Field(default="general", description="general|go-specific|cloud-business|expert-experience")
     severity: str = Field(..., description="critical|high|medium|low")
-    likelihood: Optional[str] = Field(None, description="high|medium|low")
     tags: List[str] = Field(default_factory=list)
     summary: Optional[str] = Field(None, max_length=1000)
     content: str = Field(..., min_length=1)
     mitigations: Optional[str] = None
-    go_packages: List[str] = Field(default_factory=list)
-    source_url: Optional[str] = Field(None, max_length=500)
     is_active: bool = True
     # 版本管理字段
     version: str = Field(default="1.0.0", max_length=50)
@@ -101,11 +98,11 @@ class AttackPatternEntryBase(BaseModel):
             raise ValueError(f"severity 必须是 {sorted(SEVERITY_VALUES)} 之一")
         return v
 
-    @field_validator("likelihood")
+    @field_validator("pattern_type")
     @classmethod
-    def validate_likelihood(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in LIKELIHOOD_VALUES:
-            raise ValueError(f"likelihood 必须是 {sorted(LIKELIHOOD_VALUES)} 之一")
+    def validate_pattern_type(cls, v: str) -> str:
+        if v not in PATTERN_TYPE_VALUES:
+            raise ValueError(f"pattern_type 必须是 {sorted(PATTERN_TYPE_VALUES)} 之一")
         return v
 
 
@@ -116,15 +113,12 @@ class AttackPatternEntryCreate(AttackPatternEntryBase):
 class AttackPatternEntryUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     capec_id: Optional[str] = Field(None, max_length=50)
-    attack_type: Optional[str] = Field(None, min_length=1, max_length=100)
+    pattern_type: Optional[str] = None
     severity: Optional[str] = None
-    likelihood: Optional[str] = None
     tags: Optional[List[str]] = None
     summary: Optional[str] = Field(None, max_length=1000)
     content: Optional[str] = Field(None, min_length=1)
     mitigations: Optional[str] = None
-    go_packages: Optional[List[str]] = None
-    source_url: Optional[str] = Field(None, max_length=500)
     is_active: Optional[bool] = None
     version_notes: Optional[str] = Field(None, max_length=2000)
 
@@ -135,11 +129,11 @@ class AttackPatternEntryUpdate(BaseModel):
             raise ValueError(f"severity 必须是 {sorted(SEVERITY_VALUES)} 之一")
         return v
 
-    @field_validator("likelihood")
+    @field_validator("pattern_type")
     @classmethod
-    def validate_likelihood(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v not in LIKELIHOOD_VALUES:
-            raise ValueError(f"likelihood 必须是 {sorted(LIKELIHOOD_VALUES)} 之一")
+    def validate_pattern_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in PATTERN_TYPE_VALUES:
+            raise ValueError(f"pattern_type 必须是 {sorted(PATTERN_TYPE_VALUES)} 之一")
         return v
 
 
@@ -177,10 +171,8 @@ class AttackPatternVersionCreate(BaseModel):
     content: Optional[str] = Field(None, min_length=1)
     mitigations: Optional[str] = None
     severity: Optional[str] = None
-    likelihood: Optional[str] = None
+    pattern_type: Optional[str] = None
     tags: Optional[List[str]] = None
-    go_packages: Optional[List[str]] = None
-    source_url: Optional[str] = Field(None, max_length=500)
     is_active: Optional[bool] = None
 
 

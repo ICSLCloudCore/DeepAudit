@@ -61,15 +61,14 @@ class GoAttackPatternEntry(Base):
     title = Column(String(200), nullable=False)
     slug = Column(String(200), nullable=False, unique=True)
     capec_id = Column(String(50), nullable=True)
-    attack_type = Column(String(100), nullable=False)
+    # 模式类型: general(通用攻击模式) | go-specific(Go特有攻击模式)
+    #           cloud-business(云核业务攻击模式) | expert-experience(专家经验模式)
+    pattern_type = Column(String(100), nullable=False, default="general")
     severity = Column(String(20), nullable=False, default="medium")
-    likelihood = Column(String(20), nullable=True)
     tags = Column(Text, default="[]")
     summary = Column(Text, nullable=True)
     content = Column(Text, nullable=False)
     mitigations = Column(Text, nullable=True)
-    go_packages = Column(Text, default="[]")
-    source_url = Column(String(500), nullable=True)
     is_system = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_by = Column(String, ForeignKey("users.id"), nullable=True)
@@ -81,7 +80,7 @@ class GoAttackPatternEntry(Base):
 
     __table_args__ = (
         Index("ix_go_attack_pattern_id", "pattern_id"),
-        Index("ix_go_attack_attack_type", "attack_type"),
+        Index("ix_go_attack_pattern_type", "pattern_type"),
         Index("ix_go_attack_severity", "severity"),
         Index("ix_go_attack_is_system", "is_system"),
         Index("ix_go_attack_created_by", "created_by"),

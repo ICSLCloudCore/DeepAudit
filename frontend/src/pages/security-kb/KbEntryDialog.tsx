@@ -19,8 +19,7 @@ import { Loader2, Eye, Edit3, Bug, Swords } from 'lucide-react';
 
 import {
   SEVERITY_OPTIONS,
-  LIKELIHOOD_OPTIONS,
-  ATTACK_TYPE_OPTIONS,
+  PATTERN_TYPE_OPTIONS,
   titleToSlug,
 } from './types';
 import type { VulnerabilityEntry, AttackPatternEntry } from '@/shared/api/securityKb';
@@ -50,10 +49,9 @@ function initVulnForm() {
 
 function initAttackForm() {
   return {
-    title: '', slug: '', capec_id: '', attack_type: 'other', severity: 'medium',
-    likelihood: 'none', tags: '', summary: '', content: '', mitigations: '',
-    go_packages: '', source_url: '', is_active: true,
-    version: '1.0.0', version_notes: '',
+    title: '', slug: '', capec_id: '', pattern_type: 'general', severity: 'medium',
+    tags: '', summary: '', content: '', mitigations: '',
+    is_active: true, version: '1.0.0', version_notes: '',
   };
 }
 
@@ -70,13 +68,12 @@ function entryToVulnForm(e: VulnerabilityEntry) {
 function entryToAttackForm(e: AttackPatternEntry) {
   return {
     title: e.title, slug: e.slug,
-    capec_id: e.capec_id ?? '', attack_type: e.attack_type,
-    severity: e.severity, likelihood: e.likelihood ?? 'none',
+    capec_id: e.capec_id ?? '', pattern_type: e.pattern_type ?? 'general',
+    severity: e.severity,
     tags: (e.tags ?? []).join(', '),
     summary: e.summary ?? '', content: e.content,
     mitigations: e.mitigations ?? '',
-    go_packages: (e.go_packages ?? []).join(', '),
-    source_url: e.source_url ?? '', is_active: e.is_active,
+    is_active: e.is_active,
     version: e.version ?? '1.0.0', version_notes: e.version_notes ?? '',
   };
 }
@@ -166,15 +163,12 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
         const payload = {
           title, slug,
           capec_id: f.capec_id.trim() || undefined,
-          attack_type: f.attack_type,
+          pattern_type: f.pattern_type as 'general' | 'go-specific' | 'cloud-business' | 'expert-experience',
           severity: f.severity as 'critical' | 'high' | 'medium' | 'low',
-          likelihood: (f.likelihood === 'none' ? undefined : f.likelihood) as 'high' | 'medium' | 'low' | undefined,
           tags: parseTags(f.tags),
           summary: f.summary.trim() || undefined,
           content,
           mitigations: f.mitigations.trim() || undefined,
-          go_packages: parseTags(f.go_packages),
-          source_url: f.source_url.trim() || undefined,
           is_active: f.is_active,
           version: f.version.trim() || '1.0.0',
           version_notes: f.version_notes.trim() || undefined,
@@ -254,9 +248,24 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
             </div>
           </div>
 
-          {/* Row 2: 攻击模式专属字段（漏洞洞察报告无需分类/等级） */}
+          {/* Row 2: 攻击模式专属字段 */}
           {!isVuln && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">
+                  模式类型 <span className="text-red-400">*</span>
+                </Label>
+                <Select value={attackForm.pattern_type} onValueChange={v => setA('pattern_type', v)}>
+                  <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
+                  <SelectContent className="cyber-dialog border-border">
+                    {PATTERN_TYPE_OPTIONS.map(p => (
+                      <SelectItem key={p.value} value={p.value}>
+                        <span className={p.color}>{p.label}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-muted-foreground uppercase">
                   严重等级 <span className="text-red-400">*</span>
@@ -272,59 +281,35 @@ export default function KbEntryDialog({ mode, open, onClose, onSaved, editingEnt
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">
-                  攻击类型 <span className="text-red-400">*</span>
-                </Label>
-                <Select value={attackForm.attack_type} onValueChange={v => setA('attack_type', v)}>
-                  <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    {ATTACK_TYPE_OPTIONS.map(c => (
-                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">利用可能性</Label>
-                <Select value={attackForm.likelihood} onValueChange={v => setA('likelihood', v)}>
-                  <SelectTrigger className="cyber-input"><SelectValue /></SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    <SelectItem value="none">不指定</SelectItem>
-                    {LIKELIHOOD_OPTIONS.map(l => (
-                      <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           )}
 
-          {/* Row 3: 攻击模式 CAPEC + 来源 URL */}
+          {/* Row 3: 攻击模式 CAPEC 编号 */}
           {!isVuln && (
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase">CAPEC 编号</Label>
+              <Input value={attackForm.capec_id} onChange={e => setA('capec_id', e.target.value)} placeholder="CAPEC-126" className="cyber-input font-mono w-56" />
+            </div>
+          )}
+
+          {/* Row 4: 标签 + Go 包（仅漏洞洞察报告）/ 标签（攻击模式） */}
+          {isVuln ? (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">CAPEC 编号</Label>
-                <Input value={attackForm.capec_id} onChange={e => setA('capec_id', e.target.value)} placeholder="CAPEC-126" className="cyber-input font-mono" />
+                <Label className="text-xs font-bold text-muted-foreground uppercase">标签（逗号分隔）</Label>
+                <Input value={vulnForm.tags} onChange={e => setV('tags', e.target.value)} placeholder="golang, security" className="cyber-input font-mono" />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">来源 URL</Label>
-                <Input value={attackForm.source_url} onChange={e => setA('source_url', e.target.value)} placeholder="https://..." className="cyber-input font-mono" />
+                <Label className="text-xs font-bold text-muted-foreground uppercase">相关 Go 包（逗号分隔）</Label>
+                <Input value={vulnForm.go_packages} onChange={e => setV('go_packages', e.target.value)} placeholder="database/sql, os" className="cyber-input font-mono" />
               </div>
             </div>
-          )}
-
-          {/* Row 4: 标签 + Go 包 */}
-          <div className="grid grid-cols-2 gap-4">
+          ) : (
             <div className="space-y-2">
               <Label className="text-xs font-bold text-muted-foreground uppercase">标签（逗号分隔）</Label>
-              <Input value={form.tags} onChange={e => isVuln ? setV('tags', e.target.value) : setA('tags', e.target.value)} placeholder="golang, security" className="cyber-input font-mono" />
+              <Input value={attackForm.tags} onChange={e => setA('tags', e.target.value)} placeholder="golang, memory-safety" className="cyber-input font-mono" />
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase">相关 Go 包（逗号分隔）</Label>
-              <Input value={form.go_packages} onChange={e => isVuln ? setV('go_packages', e.target.value) : setA('go_packages', e.target.value)} placeholder="database/sql, os" className="cyber-input font-mono" />
-            </div>
-          </div>
+          )}
 
           {/* 来源 URL（漏洞洞察报告） */}
           {isVuln && (

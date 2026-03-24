@@ -7,10 +7,10 @@ import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Download, Edit, ExternalLink, Calendar, Tag } from 'lucide-react';
+import { Download, Edit, Calendar, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { getSeverityMeta } from './types';
+import { getSeverityMeta, getPatternTypeMeta } from './types';
 import type { VulnerabilityEntry, AttackPatternEntry } from '@/shared/api/securityKb';
 import { exportVulnerabilityMd, exportAttackPatternMd } from '@/shared/api/securityKb';
 
@@ -59,9 +59,10 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
                 {isVuln && (
                   <Badge variant="outline" className="text-xs font-mono">洞察报告</Badge>
                 )}
-                {!isVuln && attack?.attack_type && (
-                  <Badge variant="outline" className="text-xs font-mono">{attack.attack_type}</Badge>
-                )}
+                {!isVuln && attack?.pattern_type && (() => {
+                  const pt = getPatternTypeMeta(attack.pattern_type);
+                  return <Badge className={`text-xs font-mono ${pt.bg} ${pt.color} border ${pt.border}`}>{pt.label}</Badge>;
+                })()}
                 {!isVuln && attack?.version && (
                   <Badge className="text-xs font-mono bg-primary/10 text-primary border border-primary/30">
                     v{attack.version}
@@ -97,20 +98,11 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
             {attack?.capec_id && (
               <span className="flex items-center gap-1"><Tag className="w-3 h-3" />CAPEC: <span className="text-orange-400">{attack.capec_id}</span></span>
             )}
-            {attack?.likelihood && (
-              <span>利用可能性: <span className="text-yellow-400">{attack.likelihood}</span></span>
-            )}
             {entry.created_at && (
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
                 {new Date(entry.created_at).toLocaleDateString('zh-CN')}
               </span>
-            )}
-            {entry.source_url && (
-              <a href={entry.source_url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 hover:text-primary transition-colors">
-                <ExternalLink className="w-3 h-3" />来源
-              </a>
             )}
           </div>
         )}
@@ -133,13 +125,13 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
           </div>
         )}
 
-        {/* Tags & packages */}
-        {((entry.tags?.length ?? 0) > 0 || (entry.go_packages?.length ?? 0) > 0) && (
+        {/* Tags (vuln: tags + go_packages; attack: tags only) */}
+        {((entry.tags?.length ?? 0) > 0 || (isVuln && (entry as VulnerabilityEntry).go_packages?.length)) && (
           <div className="px-6 py-2 border-b border-border flex flex-wrap gap-1.5 flex-shrink-0">
             {(entry.tags ?? []).map(tag => (
               <Badge key={tag} variant="outline" className="text-xs font-mono cyber-badge-muted">#{tag}</Badge>
             ))}
-            {(entry.go_packages ?? []).map(pkg => (
+            {isVuln && ((entry as VulnerabilityEntry).go_packages ?? []).map(pkg => (
               <Badge key={pkg} variant="outline" className="text-xs font-mono cyber-badge-info">{pkg}</Badge>
             ))}
           </div>
