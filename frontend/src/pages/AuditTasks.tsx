@@ -1235,20 +1235,20 @@ export default function AuditTasks() {
                         </Button>
                       )}
                       {/* 任务详情按钮 - 跳转到 OpenCode 审计页面 */}
-                      {task.opencode_session_id && (
-                        <Link to={`/opencode-audit/${task.opencode_session_id}`}>
-                          <Button size="sm" className="cyber-btn-outline h-9">
-                            <FileText className="w-4 h-4 mr-2" />
-                            查看实时流
-                          </Button>
-                        </Link>
-                      )}
-                      <Link to={`/tasks/${task.id}`}>
-                        <Button size="sm" className="cyber-btn-outline h-9">
-                          <FileText className="w-4 h-4 mr-2" />
-                          查看详情
-                        </Button>
-                      </Link>
+                       {task.opencode_session_id && (
+                         <Link to={`/opencode-audit/${task.opencode_session_id}`}>
+                           <Button size="sm" className="cyber-btn-outline h-9">
+                             <FileText className="w-4 h-4 mr-2" />
+                             查看实时流
+                           </Button>
+                         </Link>
+                       )}
+                       <Link to={`/tasks/opencode/${task.id}/vulnerabilities`}>
+                         <Button size="sm" className="cyber-btn-outline h-9">
+                           <FileText className="w-4 h-4 mr-2" />
+                           查看问题
+                         </Button>
+                       </Link>
                       {task.project && (
                         <Link to={`/projects/${task.project.id}`}>
                           <Button size="sm" className="cyber-btn-primary h-9">

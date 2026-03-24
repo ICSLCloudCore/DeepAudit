@@ -97,3 +97,45 @@ CREATE TABLE IF NOT EXISTS task_executions (
 
 CREATE INDEX IF NOT EXISTS ix_task_executions_task_id ON task_executions(task_id);
 CREATE INDEX IF NOT EXISTS ix_task_executions_opencode_status ON task_executions(opencode_status);
+
+-- 创建 audit_vulnerabilities 表
+CREATE TABLE IF NOT EXISTS audit_vulnerabilities (
+    id VARCHAR(36) PRIMARY KEY,
+    task_id VARCHAR(36) NOT NULL,
+    vuln_id VARCHAR(50) NOT NULL,
+    severity VARCHAR(20) NOT NULL,
+    cvss_score FLOAT,
+    cvss_vector VARCHAR(255),
+    cwe VARCHAR(255),
+    confidence VARCHAR(20),
+    location VARCHAR(255),
+    file_path VARCHAR(500),
+    line_start INTEGER,
+    line_end INTEGER,
+    vulnerability_title VARCHAR(255) NOT NULL,
+    vulnerability_essence TEXT,
+    root_cause TEXT,
+    security_impact TEXT,
+    vulnerable_code TEXT,
+    dataflow TEXT,
+    exploit_steps TEXT,
+    exploit_poc TEXT,
+    impact_confidentiality VARCHAR(20),
+    impact_integrity VARCHAR(20),
+    impact_availability VARCHAR(20),
+    fix_description TEXT,
+    fix_code_before TEXT,
+    fix_code_after TEXT,
+    manual_confirmation BOOLEAN,
+    manual_confirmation_status VARCHAR(20) DEFAULT '待确认',
+    manual_confirmation_notes TEXT,
+    confirmed_by VARCHAR(36),
+    confirmed_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) DEFAULT 'new',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_audit_vulnerabilities_task_id ON audit_vulnerabilities(task_id);
+CREATE INDEX IF NOT EXISTS ix_audit_vulnerabilities_severity ON audit_vulnerabilities(severity);
+CREATE INDEX IF NOT EXISTS ix_audit_vulnerabilities_status ON audit_vulnerabilities(status);

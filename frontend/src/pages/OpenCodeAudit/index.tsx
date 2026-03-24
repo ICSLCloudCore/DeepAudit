@@ -5,9 +5,10 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams } from "react-router-dom";
-import { Terminal, Loader2, ArrowDown, Sparkle } from "lucide-react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Terminal, Loader2, ArrowDown, Sparkle, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 import { SplashScreen, Header, LogEntry, StatsPanel, MessageList } from "./components";
@@ -18,6 +19,7 @@ import { opencodeApi } from "@/shared/api/opencode";
 
 function OpenCodeAuditPageContent() {
   const { sessionId, projectId } = useParams<{ sessionId?: string; projectId?: string }>();
+  const navigate = useNavigate();
   
   const {
     session, logs, messages, isLoading,
@@ -293,6 +295,25 @@ function OpenCodeAuditPageContent() {
           <div className="flex-shrink-0 p-4 bg-card border-b border-border">
             <StatsPanel session={session} />
           </div>
+          
+          {/* 查看问题按钮 - 仅在任务完成时显示 */}
+          {session && isComplete && (
+            <div className="flex-shrink-0 p-4 border-t border-border">
+              <Button
+                className="w-full gap-2"
+                onClick={() => {
+                  // 这里需要根据实际情况获取taskId，暂时使用sessionId
+                  const taskId = session.id || session.task_id || sessionId;
+                  if (taskId) {
+                    navigate(`/tasks/opencode/${taskId}/vulnerabilities`);
+                  }
+                }}
+              >
+                <FileText className="w-4 h-4" />
+                查看问题
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

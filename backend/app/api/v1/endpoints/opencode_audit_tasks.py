@@ -2,19 +2,24 @@
 DeepAudit OpenCode 审计任务 API
 """
 
-from typing import Any, List, Optional
+import json
+import os
+from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from app.api import deps
 from app.db.session import get_db
 from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
 from app.models.project import Project
 from app.models.user import User
+from app.models.audit_vulnerabilities import AuditVulnerability
+from app.services.opencode_session_service import OpenCodeSessionService
 
 router = APIRouter()
 
@@ -379,3 +384,275 @@ async def delete_opencode_audit_task(
     await db.commit()
 
     return {"message": "任务已删除", "task_id": task_id}
+
+
+# ============ 漏洞相关 Schema ============
+
+
+class AuditVulnerabilityResponse(BaseModel):
+    """漏洞响应"""
+
+    id: str
+    task_id: str
+    vuln_id: str
+    severity: str
+    cvss_score: Optional[float] = None
+    cvss_vector: Optional[str] = None
+    cwe: Optional[str] = None
+    confidence: Optional[str] = None
+    location: Optional[str] = None
+    file_path: Optional[str] = None
+    line_start: Optional[int] = None
+    line_end: Optional[int] = None
+    vulnerability_title: str
+    vulnerability_essence: Optional[str] = None
+    root_cause: Optional[str] = None
+    security_impact: Optional[str] = None
+    vulnerable_code: Optional[str] = None
+    dataflow: Optional[str] = None
+    exploit_steps: Optional[str] = None
+    exploit_poc: Optional[str] = None
+    impact_confidentiality: Optional[str] = None
+    impact_integrity: Optional[str] = None
+    impact_availability: Optional[str] = None
+    fix_description: Optional[str] = None
+    fix_code_before: Optional[str] = None
+    fix_code_after: Optional[str] = None
+    manual_confirmation: Optional[bool] = None
+    manual_confirmation_status: Optional[str] = None
+    manual_confirmation_notes: Optional[str] = None
+    confirmed_by: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+    status: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ImportVulnerabilitiesRequest(BaseModel):
+    """导入漏洞请求"""
+
+    report_path: Optional[str] = Field(None, description="报告文件路径")
+    report_data: Optional[Dict] = Field(None, description="报告JSON数据")
+
+
+# ============ 漏洞相关 API Endpoints ============
+
+
+@router.post("/{task_id}/import-vulns", response_model=Dict[str, Any])
+async def import_vulnerabilities(
+    task_id: str,
+    request: ImportVulnerabilitiesRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    导入审计报告中的漏洞到数据库
+    """
+    # 验证任务存在且属于当前用户
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    # 获取报告数据
+    report_data = request.report_data
+    if request.report_path:
+        try:
+            with open(request.report_path, "r", encoding="utf-8") as f:
+                report_data = json.load(f)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"读取报告文件失败: {str(e)}")
+
+    if not report_data:
+        raise HTTPException(status_code=400, detail="报告数据不能为空")
+
+    # 解析漏洞数据
+    vulnerabilities = report_data.get("vulnerabilities", [])
+    if not vulnerabilities:
+        return {"message": "报告中没有漏洞数据", "imported_count": 0}
+
+    # 批量导入漏洞
+    imported_count = 0
+    for vuln_data in vulnerabilities:
+        try:
+            vuln = AuditVulnerability(
+                id=str(uuid4()),
+                task_id=task_id,
+                vuln_id=vuln_data.get("vuln_id", f"VULN-{imported_count + 1:03d}"),
+                severity=vuln_data.get("severity", "medium"),
+                cvss_score=vuln_data.get("cvss_score"),
+                cvss_vector=vuln_data.get("cvss_vector"),
+                cwe=vuln_data.get("cwe"),
+                confidence=vuln_data.get("confidence"),
+                location=vuln_data.get("location"),
+                file_path=vuln_data.get("file_path"),
+                line_start=vuln_data.get("line_start"),
+                line_end=vuln_data.get("line_end"),
+                vulnerability_title=vuln_data.get("vulnerability_title", "未知漏洞"),
+                vulnerability_essence=vuln_data.get("vulnerability_essence"),
+                root_cause=vuln_data.get("root_cause"),
+                security_impact=vuln_data.get("security_impact"),
+                vulnerable_code=vuln_data.get("vulnerable_code"),
+                dataflow=vuln_data.get("dataflow"),
+                exploit_steps=vuln_data.get("exploit_steps"),
+                exploit_poc=vuln_data.get("exploit_poc"),
+                impact_confidentiality=vuln_data.get("impact_confidentiality"),
+                impact_integrity=vuln_data.get("impact_integrity"),
+                impact_availability=vuln_data.get("impact_availability"),
+                fix_description=vuln_data.get("fix_description"),
+                fix_code_before=vuln_data.get("fix_code_before"),
+                fix_code_after=vuln_data.get("fix_code_after"),
+                manual_confirmation=vuln_data.get("manual_confirmation"),
+                manual_confirmation_status=vuln_data.get("manual_confirmation_status", "待确认"),
+                manual_confirmation_notes=vuln_data.get("manual_confirmation_notes"),
+                confirmed_by=vuln_data.get("confirmed_by"),
+                confirmed_at=vuln_data.get("confirmed_at"),
+                status=vuln_data.get("status", "new"),
+            )
+            db.add(vuln)
+            imported_count += 1
+        except Exception as e:
+            continue  # 跳过解析失败的漏洞
+
+    await db.commit()
+
+    # 更新任务的漏洞统计
+    if imported_count > 0:
+        task.findings_count = imported_count
+
+        # 统计各严重程度数量
+        severity_summary = report_data.get("severity_summary", {})
+        task.critical_count = severity_summary.get("致命", 0) + severity_summary.get("critical", 0)
+        task.high_count = severity_summary.get("严重", 0) + severity_summary.get("high", 0)
+        task.medium_count = severity_summary.get("一般", 0) + severity_summary.get("medium", 0)
+        task.low_count = (
+            severity_summary.get("提示", 0)
+            + severity_summary.get("low", 0)
+            + severity_summary.get("info", 0)
+        )
+
+        await db.commit()
+
+    return {
+        "message": f"成功导入 {imported_count} 个漏洞",
+        "imported_count": imported_count,
+        "total_in_report": len(vulnerabilities),
+    }
+
+
+@router.post("/{task_id}/scan-import-vulns")
+async def scan_import_vulnerabilities(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    扫描并导入审计报告中的漏洞
+    用户在调用 skill 导出 JSON 报告后，调用此接口触发扫描和导入
+    """
+    # 验证任务存在且属于当前用户
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    # 调用服务层扫描导入
+    service = OpenCodeSessionService(db)
+    await service.auto_import_vulnerabilities(db, task_id, task.project_id)
+
+    # 重新查询任务获取更新后的统计
+    await db.refresh(task)
+
+    return {
+        "message": "扫描导入完成",
+        "findings_count": task.findings_count,
+        "critical_count": task.critical_count,
+        "high_count": task.high_count,
+        "medium_count": task.medium_count,
+        "low_count": task.low_count,
+    }
+
+
+@router.get("/{task_id}/vulnerabilities", response_model=List[AuditVulnerabilityResponse])
+async def list_vulnerabilities(
+    task_id: str,
+    severity: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    获取任务的漏洞列表
+    """
+    # 验证任务存在且属于当前用户
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    # 查询漏洞
+    query = select(AuditVulnerability).where(AuditVulnerability.task_id == task_id)
+
+    if severity:
+        query = query.where(AuditVulnerability.severity == severity)
+
+    if status:
+        query = query.where(AuditVulnerability.status == status)
+
+    # 分页
+    query = query.order_by(AuditVulnerability.created_at.desc())
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size)
+
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.get("/{task_id}/vulnerabilities/{vuln_id}", response_model=AuditVulnerabilityResponse)
+async def get_vulnerability(
+    task_id: str,
+    vuln_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    获取单个漏洞详情
+    """
+    # 验证任务存在且属于当前用户
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    # 查询漏洞
+    vuln_result = await db.execute(
+        select(AuditVulnerability).where(
+            AuditVulnerability.id == vuln_id, AuditVulnerability.task_id == task_id
+        )
+    )
+    vuln = vuln_result.scalars().first()
+    if not vuln:
+        raise HTTPException(status_code=404, detail="漏洞不存在")
+
+    return vuln

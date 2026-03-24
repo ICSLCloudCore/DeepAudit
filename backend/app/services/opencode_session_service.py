@@ -12,16 +12,21 @@ import httpx
 import subprocess
 import json
 import traceback
+import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# 禁用 httpx 的详细日志
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
 from app.models.opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType
 from app.models.opencode_message_content import OpenCodeMessageContent, OpenCodeMessageContentType
 from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+from app.models.audit_vulnerabilities import AuditVulnerability
 from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
 from app.models.user import User
@@ -656,11 +661,11 @@ class OpenCodeSessionService:
         创建OpenCode审计任务
         """
         print(f"[OpenCode] Creating OpenCode audit task for project {project_id}")
-        
+
         # 获取提示词模板名称
         task_name = "OpenCode 审计任务"
         task_description = "使用 OpenCode 进行代码审计"
-        
+
         if prompt_template_id:
             result = await self.db.execute(
                 select(PromptTemplate).where(PromptTemplate.id == prompt_template_id)
@@ -669,7 +674,7 @@ class OpenCodeSessionService:
             if template:
                 task_name = f"OpenCode: {template.name}"
                 task_description = template.description or task_description
-        
+
         audit_task = OpenCodeAuditTask(
             project_id=project_id,
             created_by=current_user.id,
@@ -751,7 +756,12 @@ class OpenCodeSessionService:
                 await asyncio.sleep(3)
                 asyncio.create_task(
                     self._background_poll_result(
-                        project_id, db_session.id, audit_task.id, server_session_id, message_id, current_user.id
+                        project_id,
+                        db_session.id,
+                        audit_task.id,
+                        server_session_id,
+                        message_id,
+                        current_user.id,
                     )
                 )
             else:
@@ -778,7 +788,9 @@ class OpenCodeSessionService:
         project.opencode_current_session_id = db_session.id
         await self.db.commit()
 
-        print(f"[OpenCode] Audit started successfully, session ID: {db_session.id}, task ID: {audit_task.id}")
+        print(
+            f"[OpenCode] Audit started successfully, session ID: {db_session.id}, task ID: {audit_task.id}"
+        )
         return db_session, server_status
 
     async def poll_opencode_result_with_updates(
@@ -812,7 +824,7 @@ class OpenCodeSessionService:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(message_url)
-                    
+
                     if response.status_code == 200:
                         data: list = response.json()
                         # 当处理完成的次数与总数相同10次时，认为处理ok
@@ -820,7 +832,7 @@ class OpenCodeSessionService:
                             same_time += 1
                         if same_time == 10:
                             return True
-                        
+
                         for item in data[record_index:]:
                             info = item.get("info", {})
                             if info.get("finish") != None:
@@ -837,7 +849,9 @@ class OpenCodeSessionService:
                                             db.add(message_content)
                                             await db.commit()
                                         except Exception as e:
-                                            print(f"[OpenCode] Failed to save response content: {e}")
+                                            print(
+                                                f"[OpenCode] Failed to save response content: {e}"
+                                            )
                                             await db.rollback()
                                     elif part_type == "reasoning":
                                         # Save to database
@@ -851,7 +865,9 @@ class OpenCodeSessionService:
                                             db.add(message_content)
                                             await db.commit()
                                         except Exception as e:
-                                            print(f"[OpenCode] Failed to save reasoning content: {e}")
+                                            print(
+                                                f"[OpenCode] Failed to save reasoning content: {e}"
+                                            )
                                             await db.rollback()
                                 # 索引往前推
                                 record_index += 1
@@ -921,6 +937,17 @@ class OpenCodeSessionService:
                         if sign:
                             audit_task.status = OpenCodeAuditTaskStatus.COMPLETED
                             audit_task.current_step = "Audit completed"
+
+                            # 自动尝试导入漏洞报告
+                            try:
+                                await self.auto_import_vulnerabilities(
+                                    db_session_local,
+                                    audit_task.id,
+                                    project_id,
+                                )
+                                print(f"[OpenCode] Auto import completed for task {audit_task.id}")
+                            except Exception as e:
+                                print(f"[OpenCode] Auto import error: {e}")
                         else:
                             audit_task.status = OpenCodeAuditTaskStatus.FAILED
                             audit_task.error_message = "LLM Server response timeout"
@@ -1034,3 +1061,184 @@ class OpenCodeSessionService:
         templates = result.scalars().all()
 
         return templates, total
+
+    async def auto_import_vulnerabilities(
+        self,
+        db: AsyncSession,
+        audit_task_id: str,
+        project_id: str,
+    ):
+        """自动导入审计报告中的漏洞"""
+        import traceback
+        from pathlib import Path
+
+        print(f"[OpenCode] Auto importing vulnerabilities for task {audit_task_id}")
+
+        try:
+            # 查找项目路径
+            result_project = await db.execute(select(Project).where(Project.id == project_id))
+            project = result_project.scalar_one_or_none()
+
+            if not project:
+                print(f"[OpenCode] Project not found for auto import: {project_id}")
+                return
+
+            # 构建可能的报告路径
+            possible_paths = []
+
+            # 1. 尝试项目目录下的reports目录
+            if project.source_type == "zip":
+                from app.core.config import settings
+
+                zip_path = Path(settings.ZIP_STORAGE_PATH) / f"{project.id}.zip"
+                if zip_path.exists():
+                    possible_paths.extend(
+                        [
+                            Path(f"/tmp/opencode_project_{project.id}") / "reports",
+                            Path(f"C:/temp/opencode_project_{project.id}") / "reports",
+                        ]
+                    )
+            elif project.source_type == "repository":
+                possible_paths.extend(
+                    [
+                        Path(f"/tmp/{project.id}") / "reports",
+                        Path(f"C:/temp/{project.id}") / "reports",
+                    ]
+                )
+
+            # 2. 尝试用户主目录下的DeepAudit reports目录
+            home_dir = Path.home()
+            possible_paths.extend(
+                [
+                    home_dir / "DeepAudit" / "reports",
+                    home_dir / "Documents" / "DeepAudit" / "reports",
+                ]
+            )
+
+            # 3. 尝试当前工作目录下的reports目录
+            current_dir = Path.cwd()
+            possible_paths.extend(
+                [
+                    current_dir / "reports",
+                    current_dir / "docs" / "example",
+                ]
+            )
+
+            # 查找所有可能的JSON报告文件
+            report_files = []
+            for reports_dir in possible_paths:
+                if reports_dir.exists() and reports_dir.is_dir():
+                    print(f"[OpenCode] Checking reports directory: {reports_dir}")
+                    for json_file in reports_dir.rglob("*.json"):
+                        report_files.append(json_file)
+
+            # 如果找到报告文件，尝试导入
+            if report_files:
+                print(f"[OpenCode] Found {len(report_files)} potential report files")
+
+                # 尝试导入最近的报告文件
+                for report_file in report_files[:3]:
+                    try:
+                        with open(report_file, "r", encoding="utf-8") as f:
+                            report_data = json.load(f)
+
+                        if "vulnerabilities" in report_data:
+                            vulnerabilities = report_data["vulnerabilities"]
+                            print(
+                                f"[OpenCode] Found {len(vulnerabilities)} vulnerabilities in {report_file}"
+                            )
+
+                            imported_count = 0
+                            for vuln_data in vulnerabilities:
+                                try:
+                                    vuln = AuditVulnerability(
+                                        id=str(uuid.uuid4()),
+                                        task_id=audit_task_id,
+                                        vuln_id=vuln_data.get(
+                                            "vuln_id", f"VULN-{imported_count + 1:03d}"
+                                        ),
+                                        severity=vuln_data.get("severity", "medium"),
+                                        cvss_score=vuln_data.get("cvss_score"),
+                                        cvss_vector=vuln_data.get("cvss_vector"),
+                                        cwe=vuln_data.get("cwe"),
+                                        confidence=vuln_data.get("confidence"),
+                                        location=vuln_data.get("location"),
+                                        file_path=vuln_data.get("file_path"),
+                                        line_start=vuln_data.get("line_start"),
+                                        line_end=vuln_data.get("line_end"),
+                                        vulnerability_title=vuln_data.get(
+                                            "vulnerability_title", "未知漏洞"
+                                        ),
+                                        vulnerability_essence=vuln_data.get(
+                                            "vulnerability_essence"
+                                        ),
+                                        root_cause=vuln_data.get("root_cause"),
+                                        security_impact=vuln_data.get("security_impact"),
+                                        vulnerable_code=vuln_data.get("vulnerable_code"),
+                                        dataflow=vuln_data.get("dataflow"),
+                                        exploit_steps=vuln_data.get("exploit_steps"),
+                                        exploit_poc=vuln_data.get("exploit_poc"),
+                                        impact_confidentiality=vuln_data.get(
+                                            "impact_confidentiality"
+                                        ),
+                                        impact_integrity=vuln_data.get("impact_integrity"),
+                                        impact_availability=vuln_data.get("impact_availability"),
+                                        fix_description=vuln_data.get("fix_description"),
+                                        fix_code_before=vuln_data.get("fix_code_before"),
+                                        fix_code_after=vuln_data.get("fix_code_after"),
+                                        manual_confirmation=vuln_data.get("manual_confirmation"),
+                                        manual_confirmation_status=vuln_data.get(
+                                            "manual_confirmation_status", "待确认"
+                                        ),
+                                        manual_confirmation_notes=vuln_data.get(
+                                            "manual_confirmation_notes"
+                                        ),
+                                        confirmed_by=vuln_data.get("confirmed_by"),
+                                        confirmed_at=vuln_data.get("confirmed_at"),
+                                        status=vuln_data.get("status", "new"),
+                                    )
+                                    db.add(vuln)
+                                    imported_count += 1
+                                except Exception as e:
+                                    print(f"[OpenCode] Failed to import vulnerability: {e}")
+                                    continue
+
+                                if imported_count > 0:
+                                    # 更新任务的漏洞统计
+                                    result_task = await db.execute(
+                                        select(OpenCodeAuditTask).where(
+                                            OpenCodeAuditTask.id == audit_task_id
+                                        )
+                                    )
+                                    task = result_task.scalar_one_or_none()
+                                    if task:
+                                        task.findings_count = imported_count
+                                        severity_summary = report_data.get("severity_summary", {})
+                                        task.critical_count = severity_summary.get(
+                                            "致命", 0
+                                        ) + severity_summary.get("critical", 0)
+                                        task.high_count = severity_summary.get(
+                                            "严重", 0
+                                        ) + severity_summary.get("high", 0)
+                                        task.medium_count = severity_summary.get(
+                                            "一般", 0
+                                        ) + severity_summary.get("medium", 0)
+                                        task.low_count = (
+                                            severity_summary.get("提示", 0)
+                                            + severity_summary.get("low", 0)
+                                            + severity_summary.get("info", 0)
+                                        )
+                                        await db.commit()
+                                print(
+                                    f"[OpenCode] Successfully auto imported {imported_count} vulnerabilities"
+                                )
+                                return
+                    except Exception as e:
+                        print(f"[OpenCode] Failed to read report file {report_file}: {e}")
+                        continue
+            else:
+                print(f"[OpenCode] No report files found for auto import")
+
+        except Exception as e:
+            print(f"[OpenCode] Auto import vulnerabilities failed: {e}")
+            print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
