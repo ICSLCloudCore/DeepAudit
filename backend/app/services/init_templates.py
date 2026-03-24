@@ -119,80 +119,102 @@ Find as many issues as possible! Do NOT miss any security vulnerabilities or pot
 Please provide detailed risk level, exploitation method, and remediation suggestions for each vulnerability."""
     },
     {
-        "name": "性能优化审计",
-        "description": "专注于性能问题检测的提示词模板",
+        "name": "安全合规基线审计",
+        "description": "专注于Go代码安全合规基线检测，覆盖口令安全、密钥算法、TLS配置、随机数安全等核心基础安全要求",
         "template_type": "system",
         "is_default": False,
         "sort_order": 2,
         "variables": {"language": "编程语言", "code": "代码内容"},
-        "content_zh": """你是一个专业的性能优化专家。请专注于检测以下性能问题：
+        "content_zh": """你是一名专业的Go代码安全合规基线审计专家。请严格对照以下安全基线要求，逐项检测代码中存在的合规风险，不得遗漏。
 
-【数据库性能】
-- N+1查询问题
-- 缺少索引
-- 不必要的全表扫描
-- 大量数据一次性加载
-- 未使用连接池
+【口令安全基线】
+- 是否存在硬编码的明文密码或默认弱口令（如 "admin"、"123456"、"password"）
+- 密码长度校验是否满足最低要求（≥ 8 位，建议 ≥ 12 位）
+- 是否校验密码复杂度（大写字母、小写字母、数字、特殊字符）
+- 密码是否以明文形式写入日志、数据库或响应体
+- 密码存储是否使用强哈希函数（bcrypt / scrypt / argon2），而非 MD5/SHA1/SHA256 直接哈希
 
-【内存问题】
-- 内存泄漏
-- 大对象未及时释放
-- 缓存使用不当
-- 循环中创建大量对象
+【密钥与加密算法安全基线】
+- 是否使用已淘汰的对称加密算法：DES、3DES、RC4
+- AES 是否使用不安全模式（ECB），应使用 GCM 或经认证的 CBC
+- AES 密钥长度是否不足（< 128 位）
+- 是否使用 MD5 或 SHA1 对敏感数据（令牌、密码）进行哈希
+- RSA 密钥长度是否不足（< 2048 位），建议 ≥ 3072 位
+- 是否存在硬编码的 API Key、JWT 签名密钥、私钥 PEM 内容
 
-【算法效率】
-- 时间复杂度过高
-- 不必要的重复计算
-- 可优化的循环
-- 递归深度过大
+【随机数安全基线】
+- 是否使用 math/rand 生成安全敏感的随机值（密钥、令牌、验证码、Session ID）
+- 是否使用固定种子（如 rand.Seed(42)）初始化随机数生成器
+- 安全场景是否统一使用 crypto/rand 包
 
-【并发问题】
-- 线程安全问题
-- 死锁风险
-- 资源竞争
-- 不必要的同步
+【TLS / 传输安全基线】
+- tls.Config.MinVersion 是否低于 tls.VersionTLS12
+- 是否设置 InsecureSkipVerify: true（跳过证书验证）
+- 密码套件（CipherSuites）中是否包含弱算法（RC4、3DES、NULL 套件）
+- HTTP 客户端是否未配置证书验证，存在中间人攻击风险
 
-【I/O性能】
-- 同步阻塞I/O
-- 未使用缓冲
-- 频繁的小文件操作
-- 网络请求未优化
+【JWT 安全基线】
+- 是否允许 alg:none 算法，可绕过签名验证
+- HS256 签名密钥是否过短（< 256 bits）
+- 是否未验证 exp（过期时间）、iss（签发者）等关键声明
+- JWT Payload 中是否存储了不应公开的敏感信息（密码、私钥）
 
-请提供具体的优化建议和预期的性能提升。""",
-        "content_en": """You are a professional performance optimization expert. Please focus on detecting the following performance issues:
+【凭证与敏感信息管理基线】
+- 是否存在硬编码的数据库连接字符串、云服务 AccessKey/SecretKey
+- 敏感配置是否通过环境变量或配置中心（Vault/KMS/Secret Manager）注入
+- 日志输出中是否包含敏感字段（密码、Token、Cookie、信用卡号）
+- 错误响应中是否泄露了内部堆栈信息或系统路径
 
-【Database Performance】
-- N+1 query problems
-- Missing indexes
-- Unnecessary full table scans
-- Loading large amounts of data at once
-- Not using connection pools
+对每个发现的问题，请输出：
+1. 问题位置（行号/函数名）
+2. 违反的基线条款
+3. 风险等级（critical / high / medium / low）
+4. 具体修复建议（包含代码示例）""",
+        "content_en": """You are a professional Go code security compliance baseline auditor. Please strictly check the code against the following security baseline requirements, item by item, without omission.
 
-【Memory Issues】
-- Memory leaks
-- Large objects not released timely
-- Improper cache usage
-- Creating many objects in loops
+【Password Security Baseline】
+- Any hardcoded plaintext passwords or default weak passwords (e.g. "admin", "123456", "password")
+- Whether password length validation meets the minimum requirement (≥ 8 chars, recommended ≥ 12)
+- Whether password complexity is validated (uppercase, lowercase, digits, special characters)
+- Whether passwords are written in plaintext to logs, databases, or response bodies
+- Whether passwords are stored using strong hash functions (bcrypt / scrypt / argon2), NOT MD5/SHA1/SHA256 direct hash
 
-【Algorithm Efficiency】
-- High time complexity
-- Unnecessary repeated calculations
-- Optimizable loops
-- Excessive recursion depth
+【Cryptographic Algorithm Security Baseline】
+- Use of deprecated symmetric encryption: DES, 3DES, RC4
+- AES used in insecure mode (ECB); should use GCM or authenticated CBC
+- AES key length insufficient (< 128 bits)
+- MD5 or SHA1 used to hash sensitive data (tokens, passwords)
+- RSA key length insufficient (< 2048 bits); recommended ≥ 3072 bits
+- Hardcoded API Keys, JWT signing keys, or private key PEM content
 
-【Concurrency Issues】
-- Thread safety problems
-- Deadlock risks
-- Resource contention
-- Unnecessary synchronization
+【Random Number Security Baseline】
+- Use of math/rand for security-sensitive random values (keys, tokens, captcha, session IDs)
+- Fixed seed used (e.g. rand.Seed(42)) to initialize random number generator
+- Security contexts must consistently use the crypto/rand package
 
-【I/O Performance】
-- Synchronous blocking I/O
-- Not using buffers
-- Frequent small file operations
-- Unoptimized network requests
+【TLS / Transport Security Baseline】
+- tls.Config.MinVersion below tls.VersionTLS12
+- InsecureSkipVerify set to true (certificate validation skipped)
+- CipherSuites containing weak algorithms (RC4, 3DES, NULL ciphers)
+- HTTP clients not configured with certificate verification (MITM risk)
 
-Please provide specific optimization suggestions and expected performance improvements."""
+【JWT Security Baseline】
+- alg:none algorithm allowed, bypassing signature verification
+- HS256 signing key too short (< 256 bits)
+- Failure to validate exp (expiry), iss (issuer), or other critical claims
+- Sensitive information (passwords, private keys) stored in JWT Payload
+
+【Credential & Sensitive Information Management Baseline】
+- Hardcoded database connection strings, cloud AccessKey/SecretKey
+- Sensitive config not injected via environment variables or secret manager (Vault/KMS)
+- Sensitive fields (passwords, tokens, cookies, card numbers) present in log output
+- Internal stack traces or system paths leaked in error responses
+
+For each identified issue, output:
+1. Location (line number / function name)
+2. Violated baseline requirement
+3. Risk level (critical / high / medium / low)
+4. Specific remediation advice (with code example)"""
     },
     {
         "name": "代码质量审计",
@@ -465,58 +487,156 @@ SYSTEM_RULE_SETS = [
         ]
     },
     {
-        "name": "性能优化规则",
-        "description": "性能问题检测规则集",
-        "language": "all",
-        "rule_type": "performance",
+        "name": "安全合规基线规则",
+        "description": "面向Go代码的安全合规基线检测规则集，覆盖口令安全、密钥算法安全等基础安全要求",
+        "language": "go",
+        "rule_type": "compliance",
         "is_default": False,
         "sort_order": 2,
         "severity_weights": {"critical": 10, "high": 5, "medium": 2, "low": 1},
         "rules": [
             {
-                "rule_code": "PERF001",
-                "name": "N+1查询",
-                "description": "检测数据库N+1查询问题",
-                "category": "performance",
+                "rule_code": "COMP001",
+                "name": "弱口令检测",
+                "description": "检测代码中使用或生成弱口令的行为，包括硬编码默认密码、过短密码等",
+                "category": "compliance",
                 "severity": "high",
-                "custom_prompt": "检查是否存在N+1查询问题，在循环中执行数据库查询",
-                "fix_suggestion": "使用JOIN查询或批量查询替代循环查询",
+                "custom_prompt": (
+                    "检查Go代码中是否存在弱口令问题：\n"
+                    "1. 硬编码的默认密码或弱密码字面量（如 'admin'、'123456'、'password'）\n"
+                    "2. 密码长度校验不足（低于8位）\n"
+                    "3. 密码复杂度要求缺失（未校验大小写/数字/特殊字符）\n"
+                    "4. 密码明文存储到数据库或日志中"
+                ),
+                "fix_suggestion": (
+                    "1. 禁止在代码中硬编码密码，改用配置文件或密钥管理服务\n"
+                    "2. 强制密码最小长度 ≥ 8 位，建议 ≥ 12 位\n"
+                    "3. 要求密码包含大写字母、小写字母、数字、特殊字符\n"
+                    "4. 使用 bcrypt/scrypt/argon2 等强哈希函数存储密码"
+                ),
+                "reference_url": "https://owasp.org/www-community/controls/Password_Storage_Cheat_Sheet",
             },
             {
-                "rule_code": "PERF002",
-                "name": "内存泄漏",
-                "description": "检测潜在的内存泄漏",
-                "category": "performance",
+                "rule_code": "COMP002",
+                "name": "弱密码哈希算法",
+                "description": "检测使用MD5、SHA1等已知弱哈希算法处理敏感数据（如密码、凭证）",
+                "category": "compliance",
                 "severity": "critical",
-                "custom_prompt": "检查是否存在内存泄漏：未关闭的资源、循环引用、大对象未释放",
-                "fix_suggestion": "使用try-finally或with语句确保资源释放",
+                "custom_prompt": (
+                    "检查Go代码中是否使用了弱哈希算法处理敏感数据：\n"
+                    "1. 使用 crypto/md5 或 crypto/sha1 对密码、令牌进行哈希\n"
+                    "2. 使用不加盐（salt）的哈希\n"
+                    "3. 使用 golang.org/x/crypto 以外的弱哈希库处理密码"
+                ),
+                "fix_suggestion": (
+                    "1. 密码哈希必须使用 bcrypt（golang.org/x/crypto/bcrypt）、scrypt 或 argon2\n"
+                    "2. MD5/SHA1 仅允许用于非安全场景（如文件校验和），严禁用于密码/令牌\n"
+                    "3. 哈希时必须使用随机盐（salt），并与哈希值一同存储"
+                ),
+                "reference_url": "https://pkg.go.dev/golang.org/x/crypto/bcrypt",
             },
             {
-                "rule_code": "PERF003",
-                "name": "低效算法",
-                "description": "检测时间复杂度过高的算法",
-                "category": "performance",
-                "severity": "medium",
-                "custom_prompt": "检查是否存在低效算法，如O(n²)可优化为O(n)或O(nlogn)",
-                "fix_suggestion": "使用更高效的算法或数据结构",
+                "rule_code": "COMP003",
+                "name": "弱对称加密算法",
+                "description": "检测使用DES、3DES、RC4等已淘汰的对称加密算法",
+                "category": "compliance",
+                "severity": "critical",
+                "custom_prompt": (
+                    "检查Go代码中是否使用了弱对称加密算法：\n"
+                    "1. 使用 crypto/des（DES/3DES）\n"
+                    "2. 使用 RC4（golang.org/x/crypto/rc4）\n"
+                    "3. AES使用ECB模式（crypto/aes 配合 ECB 填充）\n"
+                    "4. 密钥长度不足（AES<128位，RSA<2048位）"
+                ),
+                "fix_suggestion": (
+                    "1. 对称加密使用 AES-GCM（crypto/aes + crypto/cipher GCM）\n"
+                    "2. AES密钥长度建议 256 位\n"
+                    "3. 禁止使用ECB模式，优先选择GCM或CBC（需配合HMAC认证）\n"
+                    "4. 立即从代码库中移除 DES/3DES/RC4 的使用"
+                ),
+                "reference_url": "https://pkg.go.dev/crypto/aes",
             },
             {
-                "rule_code": "PERF004",
-                "name": "不必要的对象创建",
-                "description": "在循环中创建不必要的对象",
-                "category": "performance",
-                "severity": "medium",
-                "custom_prompt": "检查是否在循环中创建不必要的对象，应该移到循环外",
-                "fix_suggestion": "将对象创建移到循环外部，或使用对象池",
+                "rule_code": "COMP004",
+                "name": "不安全的随机数生成",
+                "description": "检测使用 math/rand 等伪随机数生成器生成安全敏感的随机值（密钥、令牌、验证码等）",
+                "category": "compliance",
+                "severity": "high",
+                "custom_prompt": (
+                    "检查Go代码中是否使用了不安全的随机数：\n"
+                    "1. 使用 math/rand 生成密码、令牌、密钥、验证码\n"
+                    "2. 使用固定种子（如 rand.Seed(1)）初始化伪随机数\n"
+                    "3. 未使用 crypto/rand 生成安全随机数"
+                ),
+                "fix_suggestion": (
+                    "1. 所有安全敏感场景（令牌、密钥、验证码）必须使用 crypto/rand\n"
+                    "2. 使用 crypto/rand.Read() 或 crypto/rand.Int() 生成随机值\n"
+                    "3. math/rand 仅用于非安全场景（如测试数据、随机排序）"
+                ),
+                "reference_url": "https://pkg.go.dev/crypto/rand",
             },
             {
-                "rule_code": "PERF005",
-                "name": "同步阻塞",
-                "description": "检测同步阻塞操作",
-                "category": "performance",
-                "severity": "medium",
-                "custom_prompt": "检查是否存在同步阻塞操作，应该使用异步方式",
-                "fix_suggestion": "使用异步I/O或多线程处理",
+                "rule_code": "COMP005",
+                "name": "TLS配置不安全",
+                "description": "检测TLS配置中使用过时协议版本（TLS 1.0/1.1）或弱加密套件",
+                "category": "compliance",
+                "severity": "high",
+                "custom_prompt": (
+                    "检查Go代码中TLS配置是否不安全：\n"
+                    "1. tls.Config 中 MinVersion 低于 tls.VersionTLS12\n"
+                    "2. InsecureSkipVerify 设置为 true\n"
+                    "3. CipherSuites 中包含弱密码套件（如 RC4、3DES）\n"
+                    "4. 未配置 MinVersion 导致默认允许低版本TLS"
+                ),
+                "fix_suggestion": (
+                    "1. 设置 tls.Config.MinVersion = tls.VersionTLS12，建议 VersionTLS13\n"
+                    "2. 生产环境中禁止设置 InsecureSkipVerify: true\n"
+                    "3. 仅使用 Go 推荐的强密码套件（tls.CipherSuites()）\n"
+                    "4. 定期更新证书，使用2048位以上RSA或ECDSA P-256"
+                ),
+                "reference_url": "https://pkg.go.dev/crypto/tls#Config",
+            },
+            {
+                "rule_code": "COMP006",
+                "name": "硬编码密钥或Token",
+                "description": "检测代码中硬编码的API密钥、JWT密钥、私钥等敏感凭证",
+                "category": "compliance",
+                "severity": "critical",
+                "custom_prompt": (
+                    "检查Go代码中是否存在硬编码的敏感凭证：\n"
+                    "1. 硬编码的JWT签名密钥（如 var jwtSecret = \"xxx\"）\n"
+                    "2. 硬编码的API Key、Access Token、Secret Key\n"
+                    "3. 硬编码的数据库连接密码\n"
+                    "4. 硬编码的私钥PEM内容"
+                ),
+                "fix_suggestion": (
+                    "1. 所有密钥和凭证通过环境变量或配置中心（Vault/KMS）注入\n"
+                    "2. 使用 os.Getenv() 或 viper 读取配置，禁止字面量赋值\n"
+                    "3. 使用 .gitignore 防止配置文件提交到代码仓库\n"
+                    "4. 对已泄露的密钥立即吊销并轮换"
+                ),
+                "reference_url": "https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure",
+            },
+            {
+                "rule_code": "COMP007",
+                "name": "JWT安全配置",
+                "description": "检测JWT使用中的安全问题，包括算法混淆攻击、弱签名密钥、不验证有效期等",
+                "category": "compliance",
+                "severity": "high",
+                "custom_prompt": (
+                    "检查Go代码中JWT使用是否安全：\n"
+                    "1. 允许 alg:none 算法（可绕过签名验证）\n"
+                    "2. HS256签名密钥过短（< 256 bits）\n"
+                    "3. 未验证 exp（过期时间）声明\n"
+                    "4. 敏感信息（密码、私钥）存储在JWT payload中（payload不加密）"
+                ),
+                "fix_suggestion": (
+                    "1. 明确指定允许的算法，禁止 none 算法\n"
+                    "2. HS256密钥长度 ≥ 256 bits，或改用 RS256/ES256\n"
+                    "3. 始终验证 exp、iat、iss 等标准声明\n"
+                    "4. 敏感数据不放入JWT payload，如需加密使用JWE规范"
+                ),
+                "reference_url": "https://owasp.org/www-project-web-security-testing-guide/",
             },
         ]
     },

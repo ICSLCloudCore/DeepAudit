@@ -14,7 +14,7 @@ class AuditRuleBase(BaseModel):
     rule_code: str = Field(..., min_length=1, max_length=50, description="规则标识")
     name: str = Field(..., min_length=1, max_length=200, description="规则名称")
     description: Optional[str] = Field(None, description="规则描述")
-    category: str = Field(..., description="规则类别: security/bug/performance/style/maintainability")
+    category: str = Field(..., description="规则类别: security/bug/compliance/style/maintainability")
     severity: str = Field("medium", description="严重程度: critical/high/medium/low")
     custom_prompt: Optional[str] = Field(None, description="自定义检测提示词")
     fix_suggestion: Optional[str] = Field(None, description="修复建议模板")
@@ -60,7 +60,7 @@ class AuditRuleSetBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="规则集名称")
     description: Optional[str] = Field(None, description="规则集描述")
     language: str = Field("all", description="适用语言")
-    rule_type: str = Field("custom", description="规则集类型: security/quality/performance/custom")
+    rule_type: str = Field("custom", description="规则集类型: security/quality/compliance/custom")
     severity_weights: Optional[Dict[str, int]] = Field(
         default_factory=lambda: {"critical": 10, "high": 5, "medium": 2, "low": 1},
         description="严重程度权重"
