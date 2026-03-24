@@ -23,7 +23,14 @@ from sqlalchemy.future import select
 from app.api import deps
 from app.db.session import get_db
 from app.models.security_kb import GoAttackPatternEntry, GoVulnerabilityEntry
+from app.services.insight_config_service import (
+    load_insight_config,
+    save_insight_config,
+    get_source_options,
+)
 from app.models.user import User
+from pydantic import BaseModel
+
 from app.schemas.security_kb import (
     AttackPatternEntryCreate,
     AttackPatternEntryListResponse,
@@ -856,6 +863,46 @@ async def _upsert_attack(
     await db.commit()
     await db.refresh(entry)
     return entry
+
+
+# ─── 洞察配置路由 ────────────────────────────────────────────────────────────
+
+
+class InsightConfigUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    interval_hours: Optional[int] = None
+    sources: Optional[List[str]] = None
+
+
+@router.get("/insight-config")
+async def get_insight_config(
+    current_user: Any = Depends(deps.get_current_user),
+) -> Any:
+    """获取洞察配置（配置项 + 可选源列表）"""
+    config = load_insight_config()
+    return {
+        "config": config,
+        "source_options": get_source_options(),
+    }
+
+
+@router.put("/insight-config")
+async def update_insight_config(
+    body: InsightConfigUpdate,
+    current_user: Any = Depends(deps.get_current_user),
+) -> Any:
+    """更新洞察配置并持久化到 JSON 文件"""
+    current = load_insight_config()
+    if body.enabled is not None:
+        current["enabled"] = body.enabled
+    if body.interval_hours is not None:
+        if body.interval_hours < 1:
+            raise HTTPException(status_code=400, detail="interval_hours 最小值为 1")
+        current["interval_hours"] = body.interval_hours
+    if body.sources is not None:
+        current["sources"] = body.sources
+    saved = save_insight_config(current)
+    return {"config": saved, "source_options": get_source_options()}
 
 
 # ─── 注册子路由 ─────────────────────────────────────────────────────────────

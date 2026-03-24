@@ -299,3 +299,42 @@ export async function exportAttackPatternsZip(params: ExportZipRequest): Promise
     `attack_patterns_export_${exportTimestamp()}.zip`,
   );
 }
+
+// ─── 洞察配置 API ─────────────────────────────────────────────────────────────
+
+export interface InsightSourceOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+export interface InsightConfig {
+  enabled: boolean;
+  interval_hours: number;
+  sources: string[];
+  last_run_at: string | null;
+  next_run_at: string | null;
+}
+
+export interface InsightConfigResponse {
+  config: InsightConfig;
+  source_options: InsightSourceOption[];
+}
+
+export interface InsightConfigUpdate {
+  enabled?: boolean;
+  interval_hours?: number;
+  sources?: string[];
+}
+
+const INSIGHT_BASE = '/security-kb/insight-config';
+
+export async function getInsightConfig(): Promise<InsightConfigResponse> {
+  const response = await apiClient.get(INSIGHT_BASE);
+  return response.data;
+}
+
+export async function updateInsightConfig(data: InsightConfigUpdate): Promise<InsightConfigResponse> {
+  const response = await apiClient.put(INSIGHT_BASE, data);
+  return response.data;
+}
