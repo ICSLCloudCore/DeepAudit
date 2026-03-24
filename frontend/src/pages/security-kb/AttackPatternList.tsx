@@ -71,7 +71,7 @@ export default function AttackPatternList() {
     } finally {
       setLoading(false);
     }
-  }, [page, q, severity, attackType]);
+  }, [page, q, severity, patternType]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [q, severity, patternType]);
