@@ -97,6 +97,8 @@ def _vuln_to_markdown(entry: GoVulnerabilityEntry) -> str:
         lines.append("go_packages: []")
     if entry.source_url:
         lines.append(f'source_url: "{entry.source_url}"')
+    if entry.summary:
+        lines.append(f'summary: "{entry.summary}"')
     lines.append(f"is_active: {str(entry.is_active).lower()}")
     if entry.created_at:
         lines.append(f'created_at: "{entry.created_at.isoformat()}"')
@@ -104,9 +106,6 @@ def _vuln_to_markdown(entry: GoVulnerabilityEntry) -> str:
         lines.append(f'updated_at: "{entry.updated_at.isoformat()}"')
     lines.append("---")
     lines.append("")
-    if entry.summary:
-        lines.append(f"_{entry.summary}_")
-        lines.append("")
     lines.append(entry.content or "")
     return "\n".join(lines)
 
@@ -137,6 +136,12 @@ def _attack_to_markdown(entry: GoAttackPatternEntry) -> str:
         lines.append("go_packages: []")
     if entry.source_url:
         lines.append(f'source_url: "{entry.source_url}"')
+    if entry.summary:
+        lines.append(f'summary: "{entry.summary}"')
+    if entry.mitigations:
+        lines.append(f'mitigations: |')
+        for mline in entry.mitigations.splitlines():
+            lines.append(f"  {mline}")
     lines.append(f"is_active: {str(entry.is_active).lower()}")
     if entry.created_at:
         lines.append(f'created_at: "{entry.created_at.isoformat()}"')
@@ -144,15 +149,7 @@ def _attack_to_markdown(entry: GoAttackPatternEntry) -> str:
         lines.append(f'updated_at: "{entry.updated_at.isoformat()}"')
     lines.append("---")
     lines.append("")
-    if entry.summary:
-        lines.append(f"_{entry.summary}_")
-        lines.append("")
     lines.append(entry.content or "")
-    if entry.mitigations:
-        lines.append("")
-        lines.append("## 防御措施")
-        lines.append("")
-        lines.append(entry.mitigations)
     return "\n".join(lines)
 
 
@@ -398,7 +395,8 @@ async def import_vulnerability_md(
         raise HTTPException(status_code=400, detail="文件大小超过 10MB 限制")
 
     parsed = _parse_md_to_vuln_dict(raw, file.filename or "")
-    return await _upsert_vuln(parsed, overwrite, current_user, db)
+    entry = await _upsert_vuln(parsed, overwrite, current_user, db)
+    return _vuln_response(entry)
 
 
 @vuln_router.post("/import-zip", response_model=ImportZipResponse)
@@ -714,7 +712,8 @@ async def import_attack_pattern_md(
         raise HTTPException(status_code=400, detail="文件大小超过 10MB 限制")
 
     parsed = _parse_md_to_attack_dict(raw, file.filename or "")
-    return await _upsert_attack(parsed, overwrite, current_user, db)
+    entry = await _upsert_attack(parsed, overwrite, current_user, db)
+    return _attack_response(entry)
 
 
 @attack_router.post("/import-zip", response_model=ImportZipResponse)
