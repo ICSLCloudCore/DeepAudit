@@ -138,10 +138,10 @@ export default function ProjectDetail() {
   }
 
   useEffect(() => {
-    if (activeTab === 'issues' && (auditTasks.length > 0 || agentTasks.length > 0)) {
+    if (activeTab === 'issues' && (auditTasks.length > 0 || agentTasks.length > 0 || openCodeTasks.length > 0)) {
       loadLatestIssues();
     }
-  }, [activeTab, auditTasks, agentTasks]);
+  }, [activeTab, auditTasks, agentTasks, openCodeTasks]);
 
   const loadLatestIssues = async () => {
     const completedAuditTasks = auditTasks
@@ -161,9 +161,11 @@ export default function ProjectDetail() {
     setIssuesSummary({
       completedAuditTasksCount: completedAuditTasks.length,
       completedAgentTasksCount: completedAgentTasks.length,
+      completedOpenCodeTasksCount: completedOpenCodeTasks.length,
       fetchedAuditTasksCount: limitedAuditTasks.length,
       fetchedAgentTasksCount: limitedAgentTasks.length,
-      isLimited: completedAuditTasks.length > ISSUES_MAX_TASKS || completedAgentTasks.length > ISSUES_MAX_TASKS,
+      fetchedOpenCodeTasksCount: limitedOpenCodeTasks.length,
+      isLimited: completedAuditTasks.length > ISSUES_MAX_TASKS || completedAgentTasks.length > ISSUES_MAX_TASKS || completedOpenCodeTasks.length > ISSUES_MAX_TASKS,
       maxTasks: ISSUES_MAX_TASKS
     });
 
@@ -928,7 +930,7 @@ export default function ProjectDetail() {
 
         <TabsContent value="issues" className="flex flex-col gap-6 mt-6">
           <ProjectIssuesTab
-            hasAnyTasks={auditTasks.length > 0 || agentTasks.length > 0}
+            hasAnyTasks={auditTasks.length > 0 || agentTasks.length > 0 || openCodeTasks.length > 0}
             issuesSummary={issuesSummary}
             loading={loadingIssues}
             latestProblems={latestProblems}

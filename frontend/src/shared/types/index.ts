@@ -130,14 +130,16 @@ export type AggregatedAgentFinding = import("@/shared/api/agentTasks").AgentFind
 export type IssuesSummary = {
   completedAuditTasksCount: number;
   completedAgentTasksCount: number;
+  completedOpenCodeTasksCount: number;
   fetchedAuditTasksCount: number;
   fetchedAgentTasksCount: number;
+  fetchedOpenCodeTasksCount: number;
   isLimited: boolean;
   maxTasks: number;
 };
 
 export type LatestProblem = {
-  kind: "audit" | "agent";
+  kind: "audit" | "agent" | "opencode";
   id: string;
   task_id: string;
   task_created_at?: string;

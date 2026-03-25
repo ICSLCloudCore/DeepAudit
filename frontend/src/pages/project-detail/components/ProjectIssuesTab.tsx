@@ -62,7 +62,7 @@ export function ProjectIssuesTab(props: {
         </div>
         {hasAnyTasks && (
           <p className="text-sm text-muted-foreground font-mono">
-            已完成审计任务：{issuesSummary.completedAuditTasksCount} 次 / Agent审计：{issuesSummary.completedAgentTasksCount} 次
+            已完成审计任务：{issuesSummary.completedAuditTasksCount} 次 / Agent审计：{issuesSummary.completedAgentTasksCount} 次 / OpenCode审计：{(issuesSummary as any).completedOpenCodeTasksCount ?? 0} 次
             {issuesSummary.isLimited ? `（各仅展示最近 ${issuesSummary.maxTasks} 次）` : ""}
             ，共 {latestProblems.length} 条问题/漏洞
           </p>
