@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Download, Edit, Calendar } from 'lucide-react';
+import { Download, Edit, Calendar, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { getRiskLevelMeta, getPatternTypeMeta } from './types';
