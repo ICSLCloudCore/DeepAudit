@@ -45,11 +45,13 @@ import {
   PROJECT_DETAIL_ISSUES_MAX_TASKS as ISSUES_MAX_TASKS,
   PROJECT_DETAIL_REQUEST_TIMEOUT_MS as REQUEST_TIMEOUT_MS
 } from "@/shared/constants";
-import { ProjectIssuesTab } from "@/pages/project-detail/components/ProjectIssuesTab";
+import ProjectIssuesTab from "@/pages/project-detail/components/ProjectIssuesTab";
 import { ProjectTasksTab } from "@/pages/project-detail/components/ProjectTasksTab";
 import { ProjectStatsCards, type ProjectCombinedStats } from "@/pages/project-detail/components/ProjectStatsCards";
 import { opencodeApi, type StartAuditWithPromptResponse } from "@/shared/api/opencode";
 import { OpenCodeAuditDialog } from "@/components/opencode/OpenCodeAuditDialog";
+import { IssueStatusConfirmDialog } from "@/pages/project-detail/components/IssueStatusConfirmDialog";
+import { updateVulnerability } from "@/shared/api/opencodeAuditTasks";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
