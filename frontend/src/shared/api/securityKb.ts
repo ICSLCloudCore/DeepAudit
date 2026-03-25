@@ -362,13 +362,23 @@ export interface InsightConfigUpdate {
   attack_pattern_prompt?: string;
 }
 
+export interface InsightMessage {
+  role: string;
+  type: 'text' | 'reasoning';
+  text: string;
+  ts: string;
+}
+
 export interface InsightRunStatus {
   running: boolean;
   status: 'idle' | 'running' | 'success' | 'error';
   pid: number | null;
   port: string | null;
+  current_step: string;
   last_error: string;
   last_report: string;
+  logs: string[];
+  messages: InsightMessage[];
 }
 
 const INSIGHT_BASE = '/security-kb/insight-config';

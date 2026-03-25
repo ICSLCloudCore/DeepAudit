@@ -46,6 +46,39 @@ _insight_port: Optional[str] = None
 _insight_status: str = "idle"           # idle | running | success | error
 _insight_last_error: str = ""
 _insight_last_report: str = ""
+_insight_current_step: str = ""         # 当前步骤描述
+_insight_logs: list[str] = []           # 运行日志（最近 200 条）
+_insight_messages: list[dict] = []      # opencode 消息（think + text，最近 50 条）
+
+_MAX_LOGS = 200
+_MAX_MSGS = 50
+
+
+def _log(msg: str) -> None:
+    """记录一条运行日志，同时打印到 stdout。"""
+    global _insight_logs
+    print(f"[Insight] {msg}")
+    _insight_logs.append(msg)
+    if len(_insight_logs) > _MAX_LOGS:
+        _insight_logs = _insight_logs[-_MAX_LOGS:]
+
+
+def _set_step(step: str) -> None:
+    global _insight_current_step
+    _insight_current_step = step
+    _log(f"▶ {step}")
+
+
+def _add_message(role: str, content_type: str, text: str) -> None:
+    global _insight_messages
+    _insight_messages.append({
+        "role": role,
+        "type": content_type,   # "text" | "reasoning"
+        "text": text[:4000],    # 截断超长内容
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    if len(_insight_messages) > _MAX_MSGS:
+        _insight_messages = _insight_messages[-_MAX_MSGS:]
 
 
 def get_insight_status() -> dict[str, Any]:
@@ -54,9 +87,22 @@ def get_insight_status() -> dict[str, Any]:
         "status": _insight_status,
         "pid": _insight_pid,
         "port": _insight_port,
+        "current_step": _insight_current_step,
         "last_error": _insight_last_error,
         "last_report": _insight_last_report,
+        "logs": list(_insight_logs[-50:]),          # 返回最近 50 条日志
+        "messages": list(_insight_messages),        # 返回所有缓存消息
     }
+
+
+def _reset_state() -> None:
+    global _insight_logs, _insight_messages, _insight_current_step
+    global _insight_last_error, _insight_last_report
+    _insight_logs = []
+    _insight_messages = []
+    _insight_current_step = ""
+    _insight_last_error = ""
+    _insight_last_report = ""
 
 
 # ─── OpenCode 进程管理 ────────────────────────────────────────────────────────
@@ -77,7 +123,7 @@ def _start_opencode_process(project_path: str) -> tuple[int, str]:
         kwargs["preexec_fn"] = os.setsid
 
     proc = subprocess.Popen(["opencode", "serve"], **kwargs)
-    print(f"[Insight] opencode serve 已启动，PID={proc.pid}，日志: {log_path}")
+    _log(f"opencode serve 已启动，PID={proc.pid}，日志: {log_path}")
     return proc.pid, log_path
 
 
@@ -90,33 +136,35 @@ async def _wait_for_port(log_path: str, max_attempts: int = 20) -> Optional[str]
                 content = Path(log_path).read_text(encoding="utf-8", errors="replace")
                 m = re.search(r"http://127\.0\.0\.1:(\d+)", content)
                 if m:
-                    print(f"[Insight] 第 {attempt+1} 次尝试，检测到端口: {m.group(1)}")
+                    _log(f"检测到 opencode 端口: {m.group(1)}（第 {attempt+1} 次尝试）")
                     return m.group(1)
                 else:
-                    print(f"[Insight] 第 {attempt+1} 次尝试，日志暂无端口，当前内容: {content[:200]!r}")
+                    if attempt < 3 or attempt % 5 == 0:
+                        _log(f"等待端口中（第 {attempt+1} 次），日志内容: {content[:300]!r}")
             except Exception as exc:
-                print(f"[Insight] 读取日志失败: {exc}")
+                _log(f"读取 opencode 日志失败: {exc}")
         else:
-            print(f"[Insight] 第 {attempt+1} 次尝试，日志文件尚不存在: {log_path}")
+            if attempt < 3:
+                _log(f"等待日志文件（第 {attempt+1} 次）: {log_path}")
     return None
 
 
 def _stop_opencode_process(pid: int) -> None:
     """优雅地终止 opencode 进程（SIGTERM → SIGKILL）。"""
-    print(f"[Insight] 发送 SIGTERM 到 PID={pid}")
+    _log(f"发送 SIGTERM 到 PID={pid}")
     try:
         os.kill(pid, signal.SIGTERM)
     except OSError as e:
-        print(f"[Insight] SIGTERM 失败: {e}")
+        _log(f"SIGTERM 失败: {e}")
         return
     import time
     time.sleep(1)
     try:
         os.kill(pid, 0)
-        print(f"[Insight] 进程 PID={pid} 仍在运行，发送 SIGKILL")
+        _log(f"进程 PID={pid} 仍在运行，发送 SIGKILL")
         os.kill(pid, signal.SIGKILL)
     except OSError:
-        print(f"[Insight] 进程 PID={pid} 已退出")
+        _log(f"进程 PID={pid} 已退出")
 
 
 # ─── OpenCode HTTP 调用 ───────────────────────────────────────────────────────
@@ -125,13 +173,13 @@ async def _create_session(base_url: str) -> Optional[str]:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(f"{base_url}/session", json={"title": "Insight Session"})
-            print(f"[Insight] 创建会话响应: HTTP {resp.status_code}")
+            _log(f"创建会话响应: HTTP {resp.status_code}")
             if resp.status_code == 200:
                 session_id = resp.json().get("id")
-                print(f"[Insight] 会话 ID: {session_id}")
+                _log(f"会话 ID: {session_id}")
                 return session_id
     except Exception as e:
-        print(f"[Insight] 创建会话失败: {e}")
+        _log(f"创建会话失败: {e}")
     return None
 
 
@@ -143,10 +191,10 @@ async def _get_message_count(base_url: str, session_id: str) -> int:
             if resp.status_code == 200:
                 data = resp.json()
                 count = len(data) if isinstance(data, list) else 0
-                print(f"[Insight] 当前会话消息数: {count}")
+                _log(f"当前会话消息数: {count}")
                 return count
     except Exception as e:
-        print(f"[Insight] 获取消息数失败: {e}")
+        _log(f"获取消息数失败: {e}")
     return 0
 
 
@@ -156,21 +204,38 @@ async def _send_prompt(base_url: str, session_id: str, prompt: str) -> Optional[
     import string
     alphabet = string.ascii_letters + string.digits
     message_id = "msg_" + "".join(secrets.choice(alphabet) for _ in range(26))
-    print(f"[Insight] 发送 prompt，message_id={message_id}，内容前50字: {prompt[:50]!r}")
+    _log(f"发送 prompt，message_id={message_id}，内容: {prompt[:80]!r}")
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{base_url}/session/{session_id}/prompt_async",
                 json={"messageID": message_id, "parts": [{"type": "text", "text": prompt}]},
             )
-            print(f"[Insight] prompt_async 响应: HTTP {resp.status_code}")
+            _log(f"prompt_async 响应: HTTP {resp.status_code}")
             if resp.status_code in (200, 202, 204):
                 return message_id
             else:
-                print(f"[Insight] prompt_async 异常响应体: {resp.text[:200]}")
+                _log(f"prompt_async 异常响应体: {resp.text[:300]}")
     except Exception as e:
-        print(f"[Insight] 发送 prompt 失败: {e}")
+        _log(f"发送 prompt 失败: {e}")
     return None
+
+
+def _collect_new_messages(data: list, start_index: int, collected_indices: set) -> None:
+    """
+    从消息列表中提取新出现的 text / reasoning 片段，存入 _insight_messages。
+    collected_indices 记录已收集过的消息下标，避免重复。
+    """
+    for idx, item in enumerate(data[start_index:], start=start_index):
+        if idx in collected_indices:
+            continue
+        for part in item.get("parts", []):
+            ptype = part.get("type", "")
+            text = part.get("text", "").strip()
+            if ptype in ("text", "reasoning") and text:
+                _add_message("assistant", ptype, text)
+                collected_indices.add(idx)
+                break  # 每条消息只取第一个有效 part
 
 
 async def _wait_for_completion(
@@ -181,21 +246,22 @@ async def _wait_for_completion(
     label: str = "",
 ) -> bool:
     """
-    轮询 opencode 消息接口，等待 skill 执行完成。
+    轮询 opencode 消息接口，等待 skill 执行完成，同时收集 think/text 输出。
 
     start_index：发送本次 prompt 之前会话中已有的消息数量，
                  轮询只关注 data[start_index:] 的新消息，避免旧消息干扰。
 
     退出条件：
     - 主要：新消息数（new_count）连续 10 次不变，且 new_count > 0
-    - 兜底：new_count 持续为 0 超过 120 次（2 分钟），可能 skill 静默完成
+    - 兜底：new_count 持续为 0 超过 120 次（2 分钟）
     """
     message_url = f"{base_url}/session/{session_id}/message"
-    prev_new_count: int = -1   # 上一次的新消息数，-1 表示尚未取到
-    stable_count: int = 0      # new_count 连续不变的次数
-    tag = f"[Insight][{label}]" if label else "[Insight]"
+    prev_new_count: int = -1
+    stable_count: int = 0
+    collected_indices: set = set()
+    tag = label or "轮询"
 
-    print(f"{tag} 开始轮询，start_index={start_index}，max_polls={max_polls}")
+    _log(f"[{tag}] 开始轮询，start_index={start_index}")
 
     for poll_count in range(max_polls):
         try:
@@ -203,46 +269,44 @@ async def _wait_for_completion(
                 resp = await client.get(message_url)
                 if resp.status_code == 200:
                     data: list = resp.json()
-                    new_count = len(data) - start_index
-                    if new_count < 0:
-                        new_count = 0
+                    new_count = max(0, len(data) - start_index)
 
-                    # 每30次或前10次打印详细状态，便于诊断
+                    # 收集新消息内容（think/text）
+                    _collect_new_messages(data, start_index, collected_indices)
+
+                    # 每30次或前10次打印详细状态
                     if poll_count % 30 == 0 or poll_count < 10:
-                        print(
-                            f"{tag} 轮询 #{poll_count+1}: "
-                            f"总消息={len(data)}，新消息={new_count}，"
-                            f"stable_count={stable_count}，prev={prev_new_count}"
+                        _log(
+                            f"[{tag}] #{poll_count+1}: "
+                            f"总={len(data)} 新={new_count} "
+                            f"stable={stable_count} prev={prev_new_count}"
                         )
 
-                    # 稳定性判断：与上次相比是否有变化
                     if new_count == prev_new_count:
                         stable_count += 1
                     else:
                         if prev_new_count != -1:
-                            print(f"{tag} 新消息数变化: {prev_new_count} → {new_count}，stable重置")
+                            _log(f"[{tag}] 消息数变化: {prev_new_count}→{new_count}")
                         stable_count = 0
                     prev_new_count = new_count
 
-                    # 主退出条件：有新消息且稳定 10 次（≈10秒）
                     if stable_count >= 10 and new_count > 0:
-                        print(f"{tag} 执行完成（消息数稳定），new_count={new_count}，轮询 {poll_count+1} 次")
+                        _log(f"[{tag}] 执行完成，new_count={new_count}，共 {poll_count+1} 次轮询")
                         return True
 
-                    # 兜底退出条件：新消息一直为 0 超过 120 秒，认为 skill 静默完成
                     if stable_count >= 120 and new_count == 0:
-                        print(f"{tag} 兜底退出：新消息持续为0超过120秒，可能 skill 静默完成")
+                        _log(f"[{tag}] 兜底退出：新消息持续为0超过120秒")
                         return True
 
                 else:
-                    print(f"{tag} 轮询响应异常: HTTP {resp.status_code}，body={resp.text[:100]}")
+                    _log(f"[{tag}] 轮询异常 HTTP {resp.status_code}: {resp.text[:100]}")
 
         except Exception as e:
-            print(f"{tag} 轮询异常: {e}")
+            _log(f"[{tag}] 轮询异常: {e}")
 
         await asyncio.sleep(1)
 
-    print(f"{tag} 轮询超时（{max_polls}次），强制继续后续步骤")
+    _log(f"[{tag}] 超时（{max_polls}次），强制继续")
     return False
 
 
@@ -293,20 +357,20 @@ def parse_vuln_report_file(project_path: str) -> tuple[str, list[dict]]:
     返回 (文件全文, [单条条目dict])，文件不存在则返回 ("", [])。
     """
     report_path = Path(project_path) / "reports" / "vuln-insight-report.md"
-    print(f"[Insight] 尝试读取洞察报告: {report_path}")
+    _log(f"尝试读取洞察报告: {report_path}")
     if not report_path.exists():
-        print(f"[Insight] 洞察报告文件不存在: {report_path}")
+        _log(f"洞察报告文件不存在: {report_path}")
         # 列出 reports 目录内容辅助诊断
         reports_dir = Path(project_path) / "reports"
         if reports_dir.exists():
             files = list(reports_dir.iterdir())
-            print(f"[Insight] reports/ 目录下的文件: {[f.name for f in files]}")
+            _log(f"reports/ 目录下的文件: {[f.name for f in files]}")
         else:
-            print(f"[Insight] reports/ 目录不存在")
+            _log(f"reports/ 目录不存在")
         return "", []
 
     md_content = report_path.read_text(encoding="utf-8", errors="replace")
-    print(f"[Insight] 读取洞察报告成功: {report_path}，共 {len(md_content)} 字符")
+    _log(f"读取洞察报告成功: {report_path}，共 {len(md_content)} 字符")
 
     entry = _build_vuln_entry_from_report(md_content)
     return md_content, [entry]
@@ -352,7 +416,7 @@ def _build_vuln_entry_from_report(md_content: str) -> dict:
     slug_base = _slugify_simple(title) or uuid.uuid4().hex[:8]
     slug = f"{slug_base}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"[:200]
 
-    print(f"[Insight] 洞察报告解析结果: title={title!r}, tags={tags}, go_packages_count={len(go_packages)}")
+    _log(f"洞察报告解析结果: title={title!r}, tags={tags}, go_packages_count={len(go_packages)}")
     return {
         "title": title[:200],
         "slug": slug,
@@ -491,28 +555,28 @@ def parse_attack_pattern_files(project_path: str) -> list[dict]:
     每个文件作为一条攻击模式返回。
     """
     patterns_dir = Path(project_path) / "vuln-lib" / "patterns"
-    print(f"[Insight] 扫描攻击模式目录: {patterns_dir}")
+    _log(f"扫描攻击模式目录: {patterns_dir}")
     if not patterns_dir.exists():
-        print(f"[Insight] 攻击模式目录不存在: {patterns_dir}")
+        _log(f"攻击模式目录不存在: {patterns_dir}")
         return []
 
     all_files = sorted(set(
         list(patterns_dir.glob("*-patterns.md")) +
         list(patterns_dir.glob("*_patterns.md"))
     ))
-    print(f"[Insight] 发现 {len(all_files)} 个攻击模式文件: {[f.name for f in all_files]}")
+    _log(f"发现 {len(all_files)} 个攻击模式文件: {[f.name for f in all_files]}")
 
     entries: list[dict] = []
     for pf in all_files:
         try:
             md_content = pf.read_text(encoding="utf-8", errors="replace")
-            print(f"[Insight] 读取: {pf.name}，共 {len(md_content)} 字符")
+            _log(f"读取: {pf.name}，共 {len(md_content)} 字符")
             e = _parse_attack_pattern_file_as_whole(md_content, pf.name)
             entries.append(e)
         except Exception as exc:
-            print(f"[Insight] 读取/解析 {pf.name} 失败: {exc}")
+            _log(f"读取/解析 {pf.name} 失败: {exc}")
 
-    print(f"[Insight] 共解析 {len(entries)} 条攻击模式")
+    _log(f"共解析 {len(entries)} 条攻击模式")
     return entries
 
 
@@ -543,15 +607,15 @@ async def _save_vuln_entries(db: AsyncSession, entries: list[dict]) -> int:
         )
         db.add(entry)
         saved += 1
-        print(f"[Insight] 新增漏洞报告: slug={slug!r}, title={e['title'][:60]!r}")
+        _log(f"新增漏洞报告: slug={slug!r}, title={e['title'][:60]!r}")
 
     if saved:
         try:
             await db.commit()
-            print(f"[Insight] 漏洞报告已提交，共 {saved} 条")
+            _log(f"漏洞报告已提交，共 {saved} 条")
         except Exception as exc:
             await db.rollback()
-            print(f"[Insight] 保存漏洞条目失败（已回滚）: {exc}")
+            _log(f"保存漏洞条目失败（已回滚）: {exc}")
             return 0
     return saved
 
@@ -628,15 +692,15 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
             )
             db.add(new_entry)
             created += 1
-            print(f"[Insight] 新增攻击模式: slug={slug_base!r}, title={e['title'][:60]!r}")
+            _log(f"新增攻击模式: slug={slug_base!r}, title={e['title'][:60]!r}")
 
     if created + updated > 0:
         try:
             await db.commit()
-            print(f"[Insight] 攻击模式已提交：新增 {created}，更新 {updated}")
+            _log(f"攻击模式已提交：新增 {created}，更新 {updated}")
         except Exception as exc:
             await db.rollback()
-            print(f"[Insight] 保存攻击模式失败（已回滚）: {exc}")
+            _log(f"保存攻击模式失败（已回滚）: {exc}")
             return 0, 0
 
     return created, updated
@@ -650,30 +714,29 @@ async def run_insight() -> dict[str, Any]:
     返回 {"success": bool, "message": str, "vuln_count": int, "attack_count": int}
     """
     global _insight_running, _insight_pid, _insight_port, _insight_status
-    global _insight_last_error, _insight_last_report
 
     if _insight_running:
         return {"success": False, "message": "洞察正在运行中，请稍后", "vuln_count": 0, "attack_count": 0}
 
     _insight_running = True
     _insight_status = "running"
-    _insight_last_error = ""
-    _insight_last_report = ""
+    _reset_state()
 
     config = load_insight_config()
     project_path = config.get("insight_project_path", "").strip()
     insight_prompt = config.get("insight_prompt", "")
     attack_prompt = config.get("attack_pattern_prompt", "")
 
-    print(f"[Insight] ===== 洞察任务开始 =====")
-    print(f"[Insight] 项目路径: {project_path}")
-    print(f"[Insight] interval_hours: {config.get('interval_hours')}")
+    _log(f"===== 洞察任务开始 =====")
+    _log(f"项目路径: {project_path}")
+    _log(f"interval_hours: {config.get('interval_hours')}")
 
     if not project_path or not os.path.isdir(project_path):
         _insight_running = False
         _insight_status = "error"
+        global _insight_last_error
         _insight_last_error = f"洞察项目路径无效: '{project_path}'"
-        print(f"[Insight] 错误: {_insight_last_error}")
+        _log(f"错误: {_insight_last_error}")
         return {"success": False, "message": _insight_last_error, "vuln_count": 0, "attack_count": 0}
 
     pid: Optional[int] = None
@@ -681,7 +744,7 @@ async def run_insight() -> dict[str, Any]:
 
     try:
         # ── 1. 启动专用 opencode 进程 ──────────────────────────────────────
-        print(f"[Insight] 步骤1: 启动 opencode serve")
+        _set_step("步骤1/9：启动 opencode serve")
         pid, log_path = _start_opencode_process(project_path)
         _insight_pid = pid
 
@@ -691,10 +754,10 @@ async def run_insight() -> dict[str, Any]:
             raise RuntimeError("无法从日志中获取 opencode 端口（超过20次尝试）")
         _insight_port = port
         base_url = f"http://127.0.0.1:{port}"
-        print(f"[Insight] opencode 服务就绪: {base_url}")
+        _log(f"opencode 服务就绪: {base_url}")
 
         # ── 2. 健康检查 ────────────────────────────────────────────────────
-        print(f"[Insight] 步骤2: 健康检查")
+        _set_step("步骤2/9：健康检查")
         healthy = False
         for attempt in range(15):
             try:
@@ -702,87 +765,86 @@ async def run_insight() -> dict[str, Any]:
                     r = await client.get(f"{base_url}/global/health")
                     if r.status_code == 200 and r.json().get("healthy"):
                         healthy = True
-                        print(f"[Insight] 健康检查通过（第 {attempt+1} 次）")
+                        _log(f"健康检查通过（第 {attempt+1} 次）")
                         break
                     else:
-                        print(f"[Insight] 健康检查第 {attempt+1} 次: HTTP {r.status_code}, {r.text[:100]}")
+                        _log(f"健康检查第 {attempt+1} 次: HTTP {r.status_code}, {r.text[:100]}")
             except Exception as exc:
-                print(f"[Insight] 健康检查第 {attempt+1} 次异常: {exc}")
+                _log(f"健康检查第 {attempt+1} 次异常: {exc}")
             await asyncio.sleep(1)
         if not healthy:
             raise RuntimeError("opencode 健康检查超时（15次）")
 
         # ── 3. 创建会话 ────────────────────────────────────────────────────
-        print(f"[Insight] 步骤3: 创建 opencode 会话")
+        _set_step("步骤3/9：创建 opencode 会话")
         session_id = await _create_session(base_url)
         if not session_id:
             raise RuntimeError("无法创建 opencode 会话")
 
         # ── 4. 发送全局洞察 skill prompt ──────────────────────────────────
-        print(f"[Insight] 步骤4: 发送全局洞察 skill prompt")
-        # 记录发送前消息数（此时应为 0，但为严谨起见仍获取）
+        _set_step("步骤4/9：发送全局洞察 skill prompt")
         pre_insight_count = await _get_message_count(base_url, session_id)
         msg_id = await _send_prompt(base_url, session_id, insight_prompt)
         if not msg_id:
             raise RuntimeError("发送洞察 prompt 失败")
 
-        print(f"[Insight] 等待全局洞察 skill 执行完成（从消息索引 {pre_insight_count} 开始轮询）...")
+        _set_step("步骤4/9：等待全局洞察 skill 执行完成...")
         completed = await _wait_for_completion(
             base_url, session_id,
             start_index=pre_insight_count,
             label="洞察skill"
         )
         if not completed:
-            print(f"[Insight] 警告：洞察 skill 轮询超时，继续尝试读取报告文件")
+            _log("警告：洞察 skill 轮询超时，继续尝试读取报告文件")
 
         # ── 5. 从文件读取洞察报告，解析并保存 ────────────────────────────
-        print(f"[Insight] 步骤5: 读取 reports/vuln-insight-report.md")
+        _set_step("步骤5/9：读取 reports/vuln-insight-report.md")
         _, vuln_entries = parse_vuln_report_file(project_path)
-        print(f"[Insight] 解析到 {len(vuln_entries)} 条漏洞报告")
+        _log(f"解析到 {len(vuln_entries)} 条漏洞报告")
 
         vuln_count = 0
         if vuln_entries:
             async with AsyncSessionLocal() as db:
                 vuln_count = await _save_vuln_entries(db, vuln_entries)
-            print(f"[Insight] 已保存 {vuln_count} 条漏洞报告")
+            _log(f"已保存 {vuln_count} 条漏洞报告")
         else:
-            print(f"[Insight] 未读取到漏洞报告，跳过保存")
+            _log("未读取到漏洞报告文件，跳过保存")
 
         # ── 6. 发送攻击模式提取 skill prompt ────────────────────────────
         attack_created = 0
         attack_updated = 0
         if attack_prompt:
-            print(f"[Insight] 步骤6: 发送攻击模式提取 skill prompt")
-            # 关键：记录本次 prompt 发送前的消息数，轮询只看新消息
+            _set_step("步骤6/9：发送攻击模式提取 skill prompt")
             pre_attack_count = await _get_message_count(base_url, session_id)
-            print(f"[Insight] 发送攻击模式 prompt 前消息数: {pre_attack_count}")
+            _log(f"发送攻击模式 prompt 前消息数: {pre_attack_count}")
 
             atk_msg_id = await _send_prompt(base_url, session_id, attack_prompt)
             if atk_msg_id:
-                print(f"[Insight] 等待攻击模式提取 skill 执行完成（从消息索引 {pre_attack_count} 开始轮询）...")
+                _set_step("步骤6/9：等待攻击模式提取 skill 执行完成...")
                 await _wait_for_completion(
                     base_url, session_id,
                     start_index=pre_attack_count,
                     label="攻击模式skill"
                 )
             else:
-                print(f"[Insight] 攻击模式 prompt 发送失败，仍尝试读取已有文件")
+                _log("攻击模式 prompt 发送失败，仍尝试读取已有文件")
         else:
-            print(f"[Insight] 步骤6: 攻击模式 prompt 为空，跳过发送，直接读取文件")
+            _log("攻击模式 prompt 为空，跳过发送，直接读取文件")
 
         # ── 7. 从文件读取攻击模式，解析并 upsert ─────────────────────────
-        print(f"[Insight] 步骤7: 读取 vuln-lib/patterns/ 目录")
+        _set_step("步骤7/9：扫描 vuln-lib/patterns/ 目录")
         attack_entries = parse_attack_pattern_files(project_path)
-        print(f"[Insight] 解析到 {len(attack_entries)} 条攻击模式")
+        _log(f"解析到 {len(attack_entries)} 条攻击模式")
 
         if attack_entries:
             async with AsyncSessionLocal() as db:
                 attack_created, attack_updated = await _upsert_attack_entries(db, attack_entries)
-            print(f"[Insight] 攻击模式完成：新增 {attack_created}，更新 {attack_updated}")
+            _log(f"攻击模式完成：新增 {attack_created}，更新 {attack_updated}")
         else:
-            print(f"[Insight] 未读取到攻击模式文件，跳过保存")
+            _log("未读取到攻击模式文件，跳过保存")
 
         # ── 8. 更新运行时间 ───────────────────────────────────────────────
+        _set_step("步骤8/9：更新运行时间")
         now_iso = datetime.now(timezone.utc).isoformat()
         interval_hours: int = config.get("interval_hours", 24)
         if interval_hours > 0:
@@ -801,8 +863,10 @@ async def run_insight() -> dict[str, Any]:
             f"攻击模式 新增{attack_created}/更新{attack_updated}"
         )
         _insight_status = "success"
+        global _insight_last_report
         _insight_last_report = summary
-        print(f"[Insight] ===== {summary} =====")
+        _set_step("步骤9/9：完成")
+        _log(f"===== {summary} =====")
         return {
             "success": True, "message": summary,
             "vuln_count": vuln_count, "attack_count": attack_count,
@@ -810,7 +874,8 @@ async def run_insight() -> dict[str, Any]:
 
     except Exception as exc:
         err = str(exc)
-        print(f"[Insight] 洞察执行失败: {err}\n{traceback.format_exc()}")
+        _log(f"洞察执行失败: {err}")
+        _log(traceback.format_exc())
         _insight_status = "error"
         _insight_last_error = err
         return {"success": False, "message": err, "vuln_count": 0, "attack_count": 0}
@@ -818,9 +883,9 @@ async def run_insight() -> dict[str, Any]:
     finally:
         # ── 9. 关闭专用 opencode 进程 ─────────────────────────────────────
         if pid:
-            print(f"[Insight] 步骤9: 关闭专用 opencode 进程 PID={pid}")
+            _log(f"关闭专用 opencode 进程 PID={pid}")
             _stop_opencode_process(pid)
         _insight_running = False
         _insight_pid = None
         _insight_port = None
-        print(f"[Insight] ===== 洞察任务结束 =====")
+        _log(f"===== 洞察任务结束 =====")
