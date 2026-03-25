@@ -88,7 +88,7 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
           loadConfig();
         }
       } catch { /* 静默 */ }
-    }, 2000);
+    }, 5000);   // skill 运行期间每5秒刷新一次，避免频繁请求
   };
 
   const stopPolling = () => {
@@ -212,7 +212,7 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { stopPolling(); onClose(); } }}>
-      <DialogContent className="!w-[min(90vw,640px)] !max-w-none max-h-[90vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
+      <DialogContent className="!w-[min(95vw,720px)] !max-w-none max-h-[92vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -552,7 +552,7 @@ function InsightStatusPanel({ runStatus }: { runStatus: InsightRunStatus }) {
             {showLogs ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
           {showLogs && (
-            <div className="h-40 overflow-y-auto p-2 bg-black/30 font-mono text-[10px] leading-relaxed space-y-0.5">
+            <div className="h-56 overflow-y-auto p-2 bg-black/30 font-mono text-[10px] leading-relaxed space-y-0.5">
               {runStatus.logs.map((line, i) => (
                 <div key={i} className={`text-muted-foreground ${
                   line.includes('错误') || line.includes('失败') ? 'text-red-400' :

@@ -341,46 +341,108 @@ def _bump_minor_version(version: str) -> str:
 
 # ─── 文件等待 / 诊断辅助 ─────────────────────────────────────────────────────
 
-async def _wait_for_file(path: Path, label: str = "文件", timeout_secs: int = 120) -> bool:
+async def _wait_for_file(
+    path: Path,
+    label: str = "文件",
+    timeout_secs: int = 1800,
+    base_url: str = "",
+    session_id: str = "",
+    start_index: int = 0,
+) -> bool:
     """
-    轮询等待指定文件出现且大小 > 0。
-    每秒检查一次，最多等 timeout_secs 秒。
+    以文件存在作为 skill 完成的主要信号，轮询等待指定文件出现且大小 > 0。
+    每秒检查一次文件，每 30 秒打印一次目录快照和消息进度。
+    base_url/session_id/start_index 有值时，同步收集 opencode 消息到前端。
     返回 True 表示文件已存在，False 表示超时。
     """
-    _log(f"等待 {label} 出现: {path}（最多 {timeout_secs}s）")
+    _log(f"等待 {label} 生成: {path}（最多 {timeout_secs//60}分{timeout_secs%60}秒）")
+    _log(f"  skill 可能运行较长时间（需采集数据、调用 LLM），请耐心等待")
+
+    collected_indices: set = set()
+
     for elapsed in range(timeout_secs):
         if path.exists() and path.stat().st_size > 0:
-            _log(f"{label} 已生成（{elapsed}s 后），大小: {path.stat().st_size} 字节")
+            _log(f"✓ {label} 已生成（等待 {elapsed}s），大小: {path.stat().st_size} 字节")
             return True
-        if elapsed == 0 or elapsed % 10 == 0:
-            # 每 10 秒输出一次目录快照，辅助定位
+
+        # 每 30 秒输出一次诊断快照
+        if elapsed % 30 == 0:
             parent = path.parent
             if parent.exists():
                 files = [f.name for f in parent.iterdir()]
                 _log(f"  [{elapsed}s] {parent.name}/ 目录内容: {files}")
             else:
                 _log(f"  [{elapsed}s] 目录不存在: {parent}")
+
+            # 同步收集并记录新的 opencode 消息
+            if base_url and session_id:
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(f"{base_url}/session/{session_id}/message")
+                        if resp.status_code == 200:
+                            data: list = resp.json()
+                            new_msgs = data[start_index:]
+                            _log(f"  [{elapsed}s] 会话新消息数: {len(new_msgs)}")
+                            _collect_new_messages(data, start_index, collected_indices)
+                            # 打印最新一条文本消息，方便实时观察 skill 进度
+                            for item in reversed(new_msgs):
+                                for part in item.get("parts", []):
+                                    if part.get("type") == "text" and part.get("text", "").strip():
+                                        snippet = part["text"].strip()[:200]
+                                        _log(f"  [{elapsed}s] 最新消息: {snippet}")
+                                        break
+                                else:
+                                    continue
+                                break
+                except Exception:
+                    pass
+
         await asyncio.sleep(1)
-    _log(f"等待 {label} 超时（{timeout_secs}s），继续执行后续步骤")
+
+    _log(f"✗ 等待 {label} 超时（{timeout_secs}s）")
     return False
 
 
-async def _wait_for_dir_non_empty(path: Path, label: str = "目录", timeout_secs: int = 60) -> bool:
-    """轮询等待目录存在且含有 .md 文件。"""
-    _log(f"等待 {label} 有文件写入: {path}（最多 {timeout_secs}s）")
+async def _wait_for_dir_non_empty(
+    path: Path,
+    label: str = "目录",
+    timeout_secs: int = 1800,
+    base_url: str = "",
+    session_id: str = "",
+    start_index: int = 0,
+) -> bool:
+    """轮询等待目录存在且含有 .md 文件，以文件生成为主要信号。"""
+    _log(f"等待 {label} 有文件写入: {path}（最多 {timeout_secs//60}分）")
+    collected_indices: set = set()
+
     for elapsed in range(timeout_secs):
         if path.exists():
             md_files = list(path.glob("*.md"))
             if md_files:
-                _log(f"{label} 已有文件（{elapsed}s 后）: {[f.name for f in md_files]}")
+                _log(f"✓ {label} 已有文件（{elapsed}s）: {[f.name for f in md_files]}")
                 return True
-        if elapsed % 10 == 0:
+
+        if elapsed % 30 == 0:
             if path.exists():
                 _log(f"  [{elapsed}s] {path.name}/ 现有文件: {[f.name for f in path.iterdir()]}")
             else:
                 _log(f"  [{elapsed}s] 目录不存在: {path}")
+
+            if base_url and session_id:
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(f"{base_url}/session/{session_id}/message")
+                        if resp.status_code == 200:
+                            data: list = resp.json()
+                            new_msgs = data[start_index:]
+                            _log(f"  [{elapsed}s] 会话新消息数: {len(new_msgs)}")
+                            _collect_new_messages(data, start_index, collected_indices)
+                except Exception:
+                    pass
+
         await asyncio.sleep(1)
-    _log(f"等待 {label} 超时（{timeout_secs}s）")
+
+    _log(f"✗ 等待 {label} 超时（{timeout_secs}s）")
     return False
 
 
@@ -886,19 +948,19 @@ async def run_insight() -> dict[str, Any]:
         if not msg_id:
             raise RuntimeError("发送洞察 prompt 失败")
 
-        _set_step("步骤4/9：等待全局洞察 skill 执行完成...")
-        completed = await _wait_for_completion(
-            base_url, session_id,
-            start_index=pre_insight_count,
-            label="洞察skill"
-        )
-        if not completed:
-            _log("警告：洞察 skill 轮询超时，继续尝试读取报告文件")
-
-        # skill 的文件写入可能在 LLM 输出结束后仍在进行，等待文件出现
-        _set_step("步骤5/9：等待报告文件生成...")
+        # 不用 _wait_for_completion（消息稳定 ≠ skill 文件写入完成）。
+        # 直接等待报告文件出现，同时每30秒刷新消息到前端面板。
+        # skill 需要运行 fetch_issues.py、fetch_pr_diff.py 等子进程，耗时可达十几分钟。
+        _set_step("步骤4/9：等待报告文件生成（skill 正在运行，请耐心等待）...")
         report_path = Path(project_path) / "reports" / "vuln-insight-report.md"
-        await _wait_for_file(report_path, label="洞察报告", timeout_secs=120)
+        await _wait_for_file(
+            report_path,
+            label="洞察报告",
+            timeout_secs=1800,          # 最多等 30 分钟
+            base_url=base_url,
+            session_id=session_id,
+            start_index=pre_insight_count,
+        )
 
         # 记录 opencode 会话中所有文本消息，帮助定位 skill 行为
         await _dump_session_messages(base_url, session_id, start_index=pre_insight_count)
@@ -926,15 +988,16 @@ async def run_insight() -> dict[str, Any]:
 
             atk_msg_id = await _send_prompt(base_url, session_id, attack_prompt)
             if atk_msg_id:
-                _set_step("步骤6/9：等待攻击模式提取 skill 执行完成...")
-                await _wait_for_completion(
-                    base_url, session_id,
-                    start_index=pre_attack_count,
-                    label="攻击模式skill"
-                )
-                # 等待 patterns 目录有文件写入
+                _set_step("步骤6/9：等待攻击模式文件生成（skill 正在运行）...")
                 patterns_dir = Path(project_path) / "vuln-lib" / "patterns"
-                await _wait_for_dir_non_empty(patterns_dir, label="攻击模式目录", timeout_secs=60)
+                await _wait_for_dir_non_empty(
+                    patterns_dir,
+                    label="攻击模式目录",
+                    timeout_secs=1800,
+                    base_url=base_url,
+                    session_id=session_id,
+                    start_index=pre_attack_count,
+                )
                 await _dump_session_messages(base_url, session_id, start_index=pre_attack_count)
             else:
                 _log("攻击模式 prompt 发送失败，仍尝试读取已有文件")
