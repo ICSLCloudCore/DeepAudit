@@ -353,8 +353,25 @@ class OpenCodeSessionService:
             print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
             return OpenCodeServerStatus.ERROR
 
+    async def get_active_session(self, project: Project) -> Optional[OpenCodeSession]:
+        """获取项目的活跃 OpenCodeSession"""
+        from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+
+        if not project.opencode_active_session_id:
+            return None
+
+        result = await self.db.execute(
+            select(OpenCodeSession).where(OpenCodeSession.id == project.opencode_active_session_id)
+        )
+        session = result.scalar_one_or_none()
+
+        # 验证会话是否仍然有效
+        if session and session.status != OpenCodeSessionStatus.CLOSED:
+            return session
+        return None
+
     async def start_opencode_server(
-        self, project: Project, current_user_id: str, audit_task_id: str
+        self, project: Project, current_user_id: str, opencode_session_id: str
     ) -> OpenCodeServerStatus:
         print("[OpenCode] run start_opencode_server")
 
@@ -365,20 +382,22 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Project source type: {project.source_type}")
         print(f"[OpenCode] Platform: {sys.platform}")
 
-        print(f"[OpenCode] audit_Task_id: {audit_task_id}")
+        print(f"[OpenCode] opencode_session_id: {opencode_session_id}")
 
-        # 确保 audit_task_id 有值
-        if not audit_task_id:
-            raise ValueError("audit_task_id is required and cannot be empty")
+        # 确保 opencode_session_id 有值
+        if not opencode_session_id:
+            raise ValueError("opencode_session_id is required and cannot be empty")
 
         try:
-            # 使用 audit_task_id 作为目录名
-            task_id = audit_task_id
-            print(f"[OpenCode] Task ID: {task_id}")
+            # 使用 opencode_session_id 作为目录名
+            session_id = opencode_session_id
+            print(f"[OpenCode] Session ID: {session_id}")
 
             project_path = None
             extract_dir = (
-                Path(f"/tmp/{task_id}") if sys.platform != "win32" else Path(f"C:/temp/{task_id}")
+                Path(f"/tmp/{session_id}")
+                if sys.platform != "win32"
+                else Path(f"C:/temp/{session_id}")
             )
             print(f"[OpenCode] Extract directory: {extract_dir}")
             extract_dir.mkdir(parents=True, exist_ok=True)
@@ -640,9 +659,9 @@ class OpenCodeSessionService:
     async def create_opencode_session(
         self,
         project_id: str,
-        prompt_template_id: Optional[str],
-        prompt_content: str,
         current_user: User,
+        prompt_template_id: Optional[str] = None,
+        prompt_content: Optional[str] = None,
     ) -> OpenCodeSession:
         """
         创建OpenCode会话
@@ -653,7 +672,7 @@ class OpenCodeSessionService:
             project_id=project_id,
             status=OpenCodeSessionStatus.PENDING,
             prompt_template_id=prompt_template_id,
-            prompt_content=prompt_content,
+            prompt_content=prompt_content or "",
             created_by=current_user.id,
         )
 
@@ -747,11 +766,24 @@ class OpenCodeSessionService:
             prompt_template_id, prompt_content, variables
         )
 
-        db_session = await self.create_opencode_session(
-            project_id, prompt_template_id, final_prompt_content, current_user
-        )
+        # 检查是否有活跃的 OpenCodeSession
+        db_session = await self.get_active_session(project)
+        server_session_id = None
 
-        # 创建审计任务 - 先创建audit_task，这样可以用它的ID作为项目目录名
+        if db_session:
+            # 复用现有 session
+            print(f"[OpenCode] Reusing existing active session: {db_session.id}")
+            server_session_id = db_session.opencode_server_session_id
+        else:
+            # 创建新的 OpenCodeSession
+            db_session = await self.create_opencode_session(
+                project_id, current_user, prompt_template_id, final_prompt_content
+            )
+            # 更新 project 的活跃 session ID
+            project.opencode_active_session_id = db_session.id
+            await self.db.commit()
+
+        # 创建审计任务（总是创建新的 audit task）
         audit_task = await self.create_opencode_audit_task(
             project_id,
             prompt_template_id,
@@ -765,13 +797,17 @@ class OpenCodeSessionService:
         if server_status == OpenCodeServerStatus.STOPPED:
             print(f"[OpenCode] Server is stopped, starting it...")
             server_status = await self.start_opencode_server(
-                project, current_user.id, audit_task.id
+                project, current_user.id, opencode_session_id=db_session.id
             )
 
         if server_status == OpenCodeServerStatus.ERROR:
             raise RuntimeError("Failed to start OpenCode server")
 
-        server_session_id = await self.create_opencode_server_session(project)
+        # 如果没有 server_session_id，创建一个新的
+        if not server_session_id:
+            server_session_id = await self.create_opencode_server_session(project)
+            db_session.opencode_server_session_id = server_session_id
+            await self.db.commit()
         message_id = None
 
         if server_session_id:
@@ -1377,6 +1413,35 @@ class OpenCodeSessionService:
             project.opencode_log_path = None
             project.opencode_started_at = None
             project.updated_at = datetime.utcnow()
+
+            # 清理活跃会话相关
+            if project.opencode_active_session_id:
+                # 1. 清理 tmp 目录
+                session_id = project.opencode_active_session_id
+                session_dir = (
+                    Path(f"/tmp/{session_id}")
+                    if sys.platform != "win32"
+                    else Path(f"C:/temp/{session_id}")
+                )
+                if session_dir.exists():
+                    import shutil
+
+                    shutil.rmtree(session_dir)
+                    print(f"[OpenCode] Cleaned up session directory: {session_dir}")
+
+                # 2. 更新 OpenCodeSession 状态为 CLOSED
+                from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+
+                result = await self.db.execute(
+                    select(OpenCodeSession).where(OpenCodeSession.id == session_id)
+                )
+                session = result.scalar_one_or_none()
+                if session:
+                    session.status = OpenCodeSessionStatus.CLOSED
+                    session.completed_at = datetime.utcnow()
+
+                # 3. 清除 project 的活跃会话引用
+                project.opencode_active_session_id = None
 
             await self.db.commit()
             print(f"[OpenCode] Server stopped and project fields reset")

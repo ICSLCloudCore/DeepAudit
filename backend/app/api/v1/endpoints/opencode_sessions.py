@@ -536,20 +536,29 @@ async def start_opencode(
 
     # Start server
     if server_status == OpenCodeServerStatus.STOPPED or server_status == OpenCodeServerStatus.ERROR:
-        # Create audit task record (just start server type)
-        audit_task = await service.create_opencode_audit_task(
-            project_id=project_id,
-            prompt_template_id=None,
-            prompt_content=None,
-            current_user=current_user,
-            db_session_id=None,
-            is_just_start_server=True,
+        # Create OpenCodeSession record (not AuditTask)
+        db_session = await service.create_opencode_session(
+            project_id, current_user, prompt_template_id=None, prompt_content=None
         )
 
-        # Start server with audit_task.id as task_id
+        # Update project with active session ID
+        project.opencode_active_session_id = db_session.id
+        await db.commit()
+
+        # Start server with db_session.id as session_id
         server_status = await service.start_opencode_server(
-            project, current_user.id, audit_task_id=audit_task.id
+            project, current_user.id, opencode_session_id=db_session.id
         )
+
+        # Create server session and update db_session
+        if (
+            server_status == OpenCodeServerStatus.RUNNING
+            or server_status == OpenCodeServerStatus.STARTING
+        ):
+            server_session_id = await service.create_opencode_server_session(project)
+            db_session.opencode_server_session_id = server_session_id
+            db_session.status = OpenCodeSessionStatus.ACTIVE
+            await db.commit()
 
         if server_status == OpenCodeServerStatus.RUNNING:
             return {
@@ -557,18 +566,17 @@ async def start_opencode(
                 "message": "OpenCode serve started successfully",
                 "pid": project.opencode_pid,
                 "port": project.opencode_port,
-                "audit_task_id": audit_task.id,
+                "session_id": db_session.id,
             }
         elif server_status == OpenCodeServerStatus.STARTING:
             return {
                 "success": True,
                 "message": "OpenCode serve is starting",
-                "audit_task_id": audit_task.id,
+                "session_id": db_session.id,
             }
         else:
-            # Update task status to failed
-            audit_task.status = OpenCodeAuditTaskStatus.FAILED
-            audit_task.error_message = "Failed to start OpenCode server"
+            # Update session status to error
+            db_session.status = OpenCodeSessionStatus.ERROR
             await db.commit()
             raise HTTPException(status_code=500, detail="Failed to start OpenCode serve")
 
