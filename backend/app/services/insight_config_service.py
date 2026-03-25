@@ -38,31 +38,25 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "next_run_at": None,
     # 洞察项目路径（opencode serve 的工作目录）
     "insight_project_path": "",
-    # 发送给 opencode 的洞察 prompt（全局洞察 skill）
+    # 发送给 opencode 的洞察 prompt（触发全局洞察 skill）
+    # skill 执行完成后会将报告写入 {project_path}/report/vuln-insight-report.md
     "insight_prompt": (
-        "请对当前项目进行全面的安全漏洞洞察分析。"
-        "以Markdown格式输出洞察报告，每份报告使用 --- 分隔，每份报告包含以下字段：\n"
-        "title: 漏洞标题\n"
-        "summary: 简要摘要（100字以内）\n"
-        "tags: 标签列表（逗号分隔）\n"
-        "go_packages: 涉及的 Go 包路径列表（逗号分隔，可为空）\n"
-        "source_url: 参考链接（可为空）\n"
-        "---\n"
-        "（报告正文，详细描述漏洞原理、影响范围、复现方式、修复建议）\n"
-        "每份洞察报告对应一个独立漏洞，请输出尽量多的独立漏洞报告。"
+        "请调用全局洞察skill，对当前项目进行全面的安全漏洞洞察分析，"
+        "将分析结果输出到 report/vuln-insight-report.md 文件中。"
+        "报告格式要求：\n"
+        "- 文件以 # 标题行开头\n"
+        "- 每条漏洞以 #### VULN-XXX: 标题 格式独立成段\n"
+        "- 每段包含：- **严重程度**: 高/中/低、- **组件**: 组件名、"
+        "- **漏洞描述**: 简述、- **根因**: 根因分析、- **Issue**: #编号"
     ),
-    # 发送给 opencode 的攻击模式提取 prompt
+    # 发送给 opencode 的攻击模式提取 prompt（触发攻击模式提取 skill）
+    # skill 执行完成后会将各类攻击模式写入 {project_path}/vuln-lib/patterns/*-patterns.md
     "attack_pattern_prompt": (
-        "根据上面的安全漏洞洞察报告，提取攻击模式。"
-        "以Markdown格式输出攻击模式，每个攻击模式使用 --- 分隔，包含以下字段：\n"
-        "title: 攻击模式标题\n"
-        "pattern_type: 类型（general|go-specific|cloud-business|expert-experience）\n"
-        "risk_level: 风险等级（critical|high|medium|low）\n"
-        "tags: 标签列表（逗号分隔）\n"
-        "summary: 简要摘要（100字以内）\n"
-        "---\n"
-        "（攻击模式正文，详细描述攻击手法、触发条件、防御措施）\n"
-        "每个攻击模式对应一种独立的攻击手法。"
+        "请调用攻击模式提取skill，根据已生成的洞察报告提取攻击模式，"
+        "将各类攻击模式分别输出到 vuln-lib/patterns/ 目录下的对应文件，"
+        "文件名格式为 {类型}-patterns.md，例如 DOS-patterns.md、NIL-patterns.md。\n"
+        "每个攻击模式以 ## GO-ATK-{类型}-{序号}：标题 格式独立成段，"
+        "包含：**严重性**、**漏洞描述**（### 子节）、**测试方法**、**漏洞模式（典型代码）**等。"
     ),
 }
 
