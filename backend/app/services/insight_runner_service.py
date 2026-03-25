@@ -203,116 +203,24 @@ def _tags_from_text(raw: object) -> list[str]:
     return [t.strip() for t in str(raw or "").split(",") if t.strip()]
 
 
-# ─── 洞察报告解析（vuln-insight-report.md） ──────────────────────────────────
-
-# 漏洞严重程度 → risk_level 映射
-_SEVERITY_MAP = {
-    "高": "high", "高危": "high", "严重": "critical", "critical": "critical",
-    "high": "high", "中": "medium", "中危": "medium", "medium": "medium",
-    "低": "low", "低危": "low", "low": "low",
-}
-
-
-def _parse_vuln_report_md(md_content: str) -> list[dict]:
-    """
-    解析 vuln-insight-report.md 文件内容，提取每条漏洞。
-
-    格式约定：
-    - 整个文件作为一个大报告（title 取文件第一个 # 标题）
-    - 每个 #### VULN-XXX: 标题行起始一条漏洞条目
-    - 每条漏洞的 content = 从该 #### 到下一个 #### 之间的完整文本
-    - title = #### 标题行文本（去掉 VULN-XXX: 前缀后的描述）
-    - summary / severity / component / go_packages / source_url 从条目内的 - **字段**: 值 提取
-    - tags 由组件名 + 漏洞类型推断
-    """
-    entries: list[dict] = []
-    existing_slugs: set[str] = set()
-
-    # 按 #### (VULN-|CVE-|#) 标题拆分单个漏洞条目
-    # 匹配 #### VULN-001: xxx 或 #### CVE-2024-xxx 或 #### 任意四级标题
-    vuln_split = re.compile(r"(?:^|\n)(####\s+.+)", re.MULTILINE)
-    parts = vuln_split.split(md_content)
-
-    # parts[0] 是文件头（概述/统计等），parts[1::2] 是 #### 标题, parts[2::2] 是对应内容
-    vuln_blocks: list[tuple[str, str]] = []
-    i = 1
-    while i + 1 < len(parts):
-        heading = parts[i].strip()
-        body = parts[i + 1].strip()
-        vuln_blocks.append((heading, body))
-        i += 2
-
-    for heading, body in vuln_blocks:
-        # 从 #### VULN-001: 标题中提取人类可读标题
-        title_match = re.match(r"####\s+(?:VULN-\d+|CVE-[\d-]+|[A-Z]+-\d+)[：:]\s*(.+)", heading)
-        if title_match:
-            title = title_match.group(1).strip()
-        else:
-            # fallback：去掉 #### 前缀
-            title = re.sub(r"^####\s+", "", heading).strip()
-
-        if not title or len(title) < 3:
-            continue
-
-        # 将 heading + body 合并为条目的完整内容（便于还原上下文）
-        full_section = f"{heading}\n{body}"
-
-        # 从条目内提取结构化字段
-        def _extract_field(pattern: str, text: str) -> str:
-            m = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-            return m.group(1).strip() if m else ""
-
-        severity_raw = _extract_field(r"[-*]\s*\*\*(?:严重程度|Severity|风险等级)\*\*[：:]\s*(.+)", body)
-        risk_level = _SEVERITY_MAP.get(severity_raw.lower(), _SEVERITY_MAP.get(severity_raw, "medium"))
-
-        component = _extract_field(r"[-*]\s*\*\*(?:组件|Component)\*\*[：:]\s*(.+)", body)
-        vuln_type = _extract_field(r"[-*]\s*\*\*(?:漏洞类型|类型|Type)\*\*[：:]\s*(.+)", body)
-        issue_ref = _extract_field(r"[-*]\s*\*\*Issue\*\*[：:]\s*(.+)", body)
-        source_url = _extract_field(r"[-*]\s*\*\*(?:参考链接|链接|URL|CVE)\*\*[：:]\s*(https?://\S+)", body)
-
-        # 摘要：取「漏洞描述」段第一句话
-        desc_match = re.search(
-            r"[-*]\s*\*\*(?:漏洞描述|描述|Description)\*\*[：:]\s*(.+?)(?:\n|$)",
-            body, re.IGNORECASE
-        )
-        summary = desc_match.group(1).strip()[:1000] if desc_match else title[:200]
-
-        # tags：组件名 + 漏洞类型
-        tags: list[str] = []
-        if component:
-            tags.append(component)
-        if vuln_type:
-            tags.append(vuln_type)
-        if issue_ref:
-            tags.append(issue_ref)
-
-        # go_packages：从攻击向量或代码路径中尝试提取
-        pkg_matches = re.findall(r"github\.com/[\w/-]+", body)
-        go_packages = list(dict.fromkeys(pkg_matches))  # 去重保序
-
-        slug_base = _slugify_simple(title) or uuid.uuid4().hex[:8]
-        slug = _unique_slug(slug_base, existing_slugs)
-
-        entries.append({
-            "title": title[:200],
-            "slug": slug,
-            "tags": tags,
-            "summary": summary,
-            "content": full_section,        # 完整 md 段落内容
-            "go_packages": go_packages,
-            "source_url": source_url or None,
-            "is_active": True,
-        })
-
-    return entries
+# ─── 洞察报告解析（reports/vuln-insight-report.md） ─────────────────────────
+#
+# 整个文件对应一条 GoVulnerabilityEntry：
+#   content  = 文件全文（原始 md）
+#   title    = 文件第一个 # 标题行
+#   summary  = 概述段第一段有效文字（## 概述 下的段落）
+#   tags     = 从 ## 漏洞统计 或文件元信息中提取的关键词（项目名、漏洞类型等）
+#   go_packages = 正文中出现的 github.com/... 路径，去重
+#   source_url  = 正文中第一个 https:// 链接（若有）
 
 
 def parse_vuln_report_file(project_path: str) -> tuple[str, list[dict]]:
     """
-    读取 {project_path}/report/vuln-insight-report.md，返回 (文件全文, 条目列表)。
-    文件全文将被存入第一条「总报告」条目的 content（如有需要）。
+    读取 {project_path}/reports/vuln-insight-report.md，
+    将整个文件作为一条洞察报告返回。
+    返回 (文件全文, [单条条目dict])，文件不存在则返回 ("", [])。
     """
-    report_path = Path(project_path) / "report" / "vuln-insight-report.md"
+    report_path = Path(project_path) / "reports" / "vuln-insight-report.md"
     if not report_path.exists():
         print(f"[Insight] 洞察报告文件不存在: {report_path}")
         return "", []
@@ -320,8 +228,78 @@ def parse_vuln_report_file(project_path: str) -> tuple[str, list[dict]]:
     md_content = report_path.read_text(encoding="utf-8", errors="replace")
     print(f"[Insight] 读取洞察报告: {report_path}，共 {len(md_content)} 字符")
 
-    entries = _parse_vuln_report_md(md_content)
-    return md_content, entries
+    entry = _build_vuln_entry_from_report(md_content)
+    return md_content, [entry]
+
+
+def _build_vuln_entry_from_report(md_content: str) -> dict:
+    """
+    将整份 vuln-insight-report.md 内容解析为一条 GoVulnerabilityEntry。
+    content 保存原始 md 全文，其余字段从文档结构中提取。
+    """
+    # ── title：第一个 # 标题行 ──────────────────────────────────────────────
+    title_m = re.search(r"^#\s+(.+)", md_content, re.MULTILINE)
+    title = title_m.group(1).strip() if title_m else "漏洞洞察报告"
+
+    # ── summary：## 概述 段落的第一段有效文字 ────────────────────────────────
+    overview_m = re.search(
+        r"##\s*概述\s*\n+([\s\S]+?)(?:\n##|\Z)",
+        md_content, re.IGNORECASE
+    )
+    if overview_m:
+        # 取第一个非空段落（去掉列表符号和多余空行）
+        overview_text = overview_m.group(1).strip()
+        # 取第一个完整句子/段落（到第一个双换行或200字）
+        first_para = re.split(r"\n\n+", overview_text)[0].strip()
+        summary = re.sub(r"\s+", " ", first_para)[:1000] or title
+    else:
+        # fallback：取 > 引用行（分析时间/项目信息）
+        quote_m = re.search(r"^>\s*(.+)", md_content, re.MULTILINE)
+        summary = quote_m.group(1).strip()[:1000] if quote_m else title
+
+    # ── tags：项目名（> 项目: xxx）+ 漏洞类型（统计表中的类型列）─────────────
+    tags: list[str] = []
+    # 从 "> 项目：xxx" 提取项目名
+    proj_m = re.search(r"^>\s*项目[：:]\s*(.+)", md_content, re.MULTILINE)
+    if proj_m:
+        for p in re.split(r"[,，/\s]+", proj_m.group(1)):
+            p = p.strip()
+            if p and p not in tags:
+                tags.append(p)
+    # 从漏洞统计表中提取漏洞类型（第一列，跳过表头和分隔行）
+    for row_m in re.finditer(r"^\|\s*([^|]+?)\s*\([A-Z]+\)\s*\|", md_content, re.MULTILINE):
+        tag = row_m.group(1).strip()
+        if tag and tag not in tags:
+            tags.append(tag)
+    # 从 #### VULN-xxx 标题行提取组件名
+    for vuln_m in re.finditer(r"####\s+VULN-\d+[：:].+?[-—]\s*([^\n]+)", md_content):
+        # 最后一个 " - " 后的内容往往是漏洞类型
+        pass
+
+    # ── go_packages：全文中出现的 github.com/... ─────────────────────────────
+    pkg_matches = re.findall(r"github\.com/[\w./-]+", md_content)
+    go_packages = list(dict.fromkeys(pkg_matches))  # 去重保序
+
+    # ── source_url：正文中第一个 https:// 链接 ──────────────────────────────
+    url_m = re.search(r"https?://\S+", md_content)
+    source_url = url_m.group(0).rstrip("）).,。") if url_m else None
+
+    # ── slug：基于 title ─────────────────────────────────────────────────────
+    slug = _slugify_simple(title) or uuid.uuid4().hex[:8]
+    # 加时间戳后缀保证唯一性（同一项目多次洞察时）
+    slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    slug = slug[:200]
+
+    return {
+        "title": title[:200],
+        "slug": slug,
+        "tags": tags,
+        "summary": summary,
+        "content": md_content,          # 原始 md 全文
+        "go_packages": go_packages,
+        "source_url": source_url,
+        "is_active": True,
+    }
 
 
 # ─── 攻击模式解析（vuln-lib/patterns/*-patterns.md） ─────────────────────────
