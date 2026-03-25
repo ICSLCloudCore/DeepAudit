@@ -759,7 +759,7 @@ async def _save_vuln_entries(db: AsyncSession, entries: list[dict]) -> int:
             content=e["content"],
             go_packages=json.dumps(e.get("go_packages", []), ensure_ascii=False),
             source_url=e.get("source_url"),
-            is_system=True,
+            is_system=False,    # 洞察生成的报告允许用户编辑
             is_active=True,
         )
         db.add(entry)
@@ -809,7 +809,7 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
             new_id = str(uuid.uuid4())
             new_entry = GoAttackPatternEntry(
                 id=new_id,
-                pattern_id=existing.pattern_id,   # 保持同一 pattern_id
+                pattern_id=existing.pattern_id,
                 version=new_version,
                 version_notes=f"自动更新（洞察执行于 {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}）",
                 is_latest=True,
@@ -821,15 +821,12 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
                 tags=json.dumps(e["tags"], ensure_ascii=False),
                 summary=e.get("summary"),
                 content=e["content"],
-                is_system=True,
+                is_system=False,    # 洞察生成的攻击模式允许用户编辑
                 is_active=True,
             )
             db.add(new_entry)
             updated += 1
-            print(
-                f"[Insight] 更新攻击模式: slug={slug_base!r}, "
-                f"{old_version} → {new_version}, title={e['title'][:60]!r}"
-            )
+            _log(f"更新攻击模式: slug={slug_base!r}, {old_version} → {new_version}")
         else:
             new_id = str(uuid.uuid4())
             new_entry = GoAttackPatternEntry(
@@ -844,7 +841,7 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
                 tags=json.dumps(e["tags"], ensure_ascii=False),
                 summary=e.get("summary"),
                 content=e["content"],
-                is_system=True,
+                is_system=False,    # 洞察生成的攻击模式允许用户编辑
                 is_active=True,
             )
             db.add(new_entry)

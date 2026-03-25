@@ -65,7 +65,8 @@ MAX_ZIP_FILES = 500
 def _require_editable(entry: Any, current_user: User) -> None:
     if entry.is_system:
         raise HTTPException(status_code=403, detail="系统内置条目不允许修改或删除")
-    if entry.created_by != current_user.id and not current_user.is_superuser:
+    # created_by 为 None 表示由系统/洞察任务生成，任何登录用户均可编辑
+    if entry.created_by is not None and entry.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="无权操作他人条目")
 
 
@@ -222,6 +223,7 @@ async def list_vulnerabilities(
     base_filter = or_(
         GoVulnerabilityEntry.is_system == True,
         GoVulnerabilityEntry.created_by == current_user.id,
+        GoVulnerabilityEntry.created_by == None,
     )
     query = select(GoVulnerabilityEntry).where(base_filter)
 
@@ -420,6 +422,7 @@ async def export_vulnerability_zip(
     base_filter = or_(
         GoVulnerabilityEntry.is_system == True,
         GoVulnerabilityEntry.created_by == current_user.id,
+        GoVulnerabilityEntry.created_by == None,
     )
     query = select(GoVulnerabilityEntry).where(base_filter)
     if body.ids:
@@ -535,6 +538,7 @@ async def list_attack_patterns(
     base_filter = or_(
         GoAttackPatternEntry.is_system == True,
         GoAttackPatternEntry.created_by == current_user.id,
+        GoAttackPatternEntry.created_by == None,
     )
     query = select(GoAttackPatternEntry).where(base_filter)
 
@@ -747,6 +751,7 @@ async def export_attack_pattern_zip(
     base_filter = or_(
         GoAttackPatternEntry.is_system == True,
         GoAttackPatternEntry.created_by == current_user.id,
+        GoAttackPatternEntry.created_by == None,
     )
     query = select(GoAttackPatternEntry).where(base_filter)
     if body.ids:
