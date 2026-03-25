@@ -183,15 +183,16 @@ async def _wait_for_completion(
     """
     轮询 opencode 消息接口，等待 skill 执行完成。
 
-    关键参数 start_index：发送本次 prompt 之前会话中已有的消息数量。
-    轮询只关注 start_index 之后的新消息，避免被上一轮的旧消息干扰。
+    start_index：发送本次 prompt 之前会话中已有的消息数量，
+                 轮询只关注 data[start_index:] 的新消息，避免旧消息干扰。
 
-    退出条件：连续 10 次轮询时，新消息数量（data[start_index:]）不再增长。
+    退出条件：
+    - 主要：新消息数（new_count）连续 10 次不变，且 new_count > 0
+    - 兜底：new_count 持续为 0 超过 120 次（2 分钟），可能 skill 静默完成
     """
     message_url = f"{base_url}/session/{session_id}/message"
-    # 相对于 start_index 的 record_index
-    relative_index = 0
-    same_time = 0
+    prev_new_count: int = -1   # 上一次的新消息数，-1 表示尚未取到
+    stable_count: int = 0      # new_count 连续不变的次数
     tag = f"[Insight][{label}]" if label else "[Insight]"
 
     print(f"{tag} 开始轮询，start_index={start_index}，max_polls={max_polls}")
@@ -202,33 +203,39 @@ async def _wait_for_completion(
                 resp = await client.get(message_url)
                 if resp.status_code == 200:
                     data: list = resp.json()
-                    new_msgs = data[start_index:]  # 本轮 prompt 触发的新消息
-                    new_count = len(new_msgs)
+                    new_count = len(data) - start_index
+                    if new_count < 0:
+                        new_count = 0
 
-                    if poll_count % 30 == 0 or poll_count < 5:
-                        # 每30次或前5次打印详细状态
+                    # 每30次或前10次打印详细状态，便于诊断
+                    if poll_count % 30 == 0 or poll_count < 10:
                         print(
-                            f"{tag} 轮询 #{poll_count+1}: 总消息={len(data)}，"
-                            f"新消息={new_count}，relative_index={relative_index}，same_time={same_time}"
+                            f"{tag} 轮询 #{poll_count+1}: "
+                            f"总消息={len(data)}，新消息={new_count}，"
+                            f"stable_count={stable_count}，prev={prev_new_count}"
                         )
 
-                    if relative_index == new_count:
-                        same_time += 1
+                    # 稳定性判断：与上次相比是否有变化
+                    if new_count == prev_new_count:
+                        stable_count += 1
                     else:
-                        same_time = 0
+                        if prev_new_count != -1:
+                            print(f"{tag} 新消息数变化: {prev_new_count} → {new_count}，stable重置")
+                        stable_count = 0
+                    prev_new_count = new_count
 
-                    # 退出条件：新消息数稳定（至少有1条新消息，且连续10次不变）
-                    if same_time >= 10 and new_count > 0:
-                        print(f"{tag} 检测到执行完成，新消息数={new_count}，共轮询 {poll_count+1} 次")
+                    # 主退出条件：有新消息且稳定 10 次（≈10秒）
+                    if stable_count >= 10 and new_count > 0:
+                        print(f"{tag} 执行完成（消息数稳定），new_count={new_count}，轮询 {poll_count+1} 次")
                         return True
 
-                    # 推进 relative_index
-                    for item in new_msgs[relative_index:]:
-                        info = item.get("info", {})
-                        if info.get("finish") is not None:
-                            relative_index += 1
+                    # 兜底退出条件：新消息一直为 0 超过 120 秒，认为 skill 静默完成
+                    if stable_count >= 120 and new_count == 0:
+                        print(f"{tag} 兜底退出：新消息持续为0超过120秒，可能 skill 静默完成")
+                        return True
+
                 else:
-                    print(f"{tag} 轮询响应异常: HTTP {resp.status_code}")
+                    print(f"{tag} 轮询响应异常: HTTP {resp.status_code}，body={resp.text[:100]}")
 
         except Exception as e:
             print(f"{tag} 轮询异常: {e}")
