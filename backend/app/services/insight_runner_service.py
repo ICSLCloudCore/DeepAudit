@@ -339,6 +339,101 @@ def _bump_minor_version(version: str) -> str:
     return "1.1.0"
 
 
+# ─── 文件等待 / 诊断辅助 ─────────────────────────────────────────────────────
+
+async def _wait_for_file(path: Path, label: str = "文件", timeout_secs: int = 120) -> bool:
+    """
+    轮询等待指定文件出现且大小 > 0。
+    每秒检查一次，最多等 timeout_secs 秒。
+    返回 True 表示文件已存在，False 表示超时。
+    """
+    _log(f"等待 {label} 出现: {path}（最多 {timeout_secs}s）")
+    for elapsed in range(timeout_secs):
+        if path.exists() and path.stat().st_size > 0:
+            _log(f"{label} 已生成（{elapsed}s 后），大小: {path.stat().st_size} 字节")
+            return True
+        if elapsed == 0 or elapsed % 10 == 0:
+            # 每 10 秒输出一次目录快照，辅助定位
+            parent = path.parent
+            if parent.exists():
+                files = [f.name for f in parent.iterdir()]
+                _log(f"  [{elapsed}s] {parent.name}/ 目录内容: {files}")
+            else:
+                _log(f"  [{elapsed}s] 目录不存在: {parent}")
+        await asyncio.sleep(1)
+    _log(f"等待 {label} 超时（{timeout_secs}s），继续执行后续步骤")
+    return False
+
+
+async def _wait_for_dir_non_empty(path: Path, label: str = "目录", timeout_secs: int = 60) -> bool:
+    """轮询等待目录存在且含有 .md 文件。"""
+    _log(f"等待 {label} 有文件写入: {path}（最多 {timeout_secs}s）")
+    for elapsed in range(timeout_secs):
+        if path.exists():
+            md_files = list(path.glob("*.md"))
+            if md_files:
+                _log(f"{label} 已有文件（{elapsed}s 后）: {[f.name for f in md_files]}")
+                return True
+        if elapsed % 10 == 0:
+            if path.exists():
+                _log(f"  [{elapsed}s] {path.name}/ 现有文件: {[f.name for f in path.iterdir()]}")
+            else:
+                _log(f"  [{elapsed}s] 目录不存在: {path}")
+        await asyncio.sleep(1)
+    _log(f"等待 {label} 超时（{timeout_secs}s）")
+    return False
+
+
+async def _dump_session_messages(base_url: str, session_id: str, start_index: int = 0) -> None:
+    """
+    读取 opencode 会话消息，把所有文本内容记录到日志，辅助定位 skill 行为。
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{base_url}/session/{session_id}/message")
+            if resp.status_code != 200:
+                return
+            data: list = resp.json()
+            new_msgs = data[start_index:]
+            if not new_msgs:
+                _log("会话无新消息")
+                return
+            _log(f"── 会话消息详情（共 {len(new_msgs)} 条新消息）──")
+            for i, item in enumerate(new_msgs):
+                for part in item.get("parts", []):
+                    ptype = part.get("type", "")
+                    text = part.get("text", "").strip()
+                    if ptype == "text" and text:
+                        _log(f"  [消息{i+1}·text] {text[:500]}")
+                    elif ptype == "reasoning" and text:
+                        _log(f"  [消息{i+1}·think] {text[:300]}")
+                    elif ptype == "tool-invocation":
+                        tool = part.get("toolInvocation", {})
+                        tool_name = tool.get("toolName", "")
+                        tool_state = tool.get("state", "")
+                        _log(f"  [消息{i+1}·tool] {tool_name} state={tool_state}")
+                        if tool_state == "result":
+                            result = tool.get("result", "")
+                            _log(f"    result: {str(result)[:300]}")
+    except Exception as exc:
+        _log(f"读取会话消息失败: {exc}")
+
+
+# ─── 项目目录诊断 ─────────────────────────────────────────────────────────────
+
+def _log_project_tree(project_path: str, depth: int = 3) -> None:
+    """记录项目目录结构（最多3层），辅助确认 skill 输出路径。"""
+    _log(f"── 项目目录结构: {project_path} ──")
+    base = Path(project_path)
+    for item in sorted(base.rglob("*")):
+        rel = item.relative_to(base)
+        parts = rel.parts
+        if len(parts) <= depth:
+            indent = "  " * (len(parts) - 1)
+            size = f" ({item.stat().st_size}B)" if item.is_file() else "/"
+            _log(f"  {indent}{item.name}{size}")
+
+
 # ─── 洞察报告解析（reports/vuln-insight-report.md）──────────────────────────
 #
 # 整个文件对应一条 GoVulnerabilityEntry：
@@ -739,6 +834,9 @@ async def run_insight() -> dict[str, Any]:
         _log(f"错误: {_insight_last_error}")
         return {"success": False, "message": _insight_last_error, "vuln_count": 0, "attack_count": 0}
 
+    # 记录初始目录结构，确认 skill 输出路径是否已存在
+    _log_project_tree(project_path)
+
     pid: Optional[int] = None
     log_path: Optional[str] = None
 
@@ -797,6 +895,14 @@ async def run_insight() -> dict[str, Any]:
         if not completed:
             _log("警告：洞察 skill 轮询超时，继续尝试读取报告文件")
 
+        # skill 的文件写入可能在 LLM 输出结束后仍在进行，等待文件出现
+        _set_step("步骤5/9：等待报告文件生成...")
+        report_path = Path(project_path) / "reports" / "vuln-insight-report.md"
+        await _wait_for_file(report_path, label="洞察报告", timeout_secs=120)
+
+        # 记录 opencode 会话中所有文本消息，帮助定位 skill 行为
+        await _dump_session_messages(base_url, session_id, start_index=pre_insight_count)
+
         # ── 5. 从文件读取洞察报告，解析并保存 ────────────────────────────
         _set_step("步骤5/9：读取 reports/vuln-insight-report.md")
         _, vuln_entries = parse_vuln_report_file(project_path)
@@ -826,6 +932,10 @@ async def run_insight() -> dict[str, Any]:
                     start_index=pre_attack_count,
                     label="攻击模式skill"
                 )
+                # 等待 patterns 目录有文件写入
+                patterns_dir = Path(project_path) / "vuln-lib" / "patterns"
+                await _wait_for_dir_non_empty(patterns_dir, label="攻击模式目录", timeout_secs=60)
+                await _dump_session_messages(base_url, session_id, start_index=pre_attack_count)
             else:
                 _log("攻击模式 prompt 发送失败，仍尝试读取已有文件")
         else:
