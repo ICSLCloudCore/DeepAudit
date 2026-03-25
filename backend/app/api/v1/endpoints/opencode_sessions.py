@@ -18,6 +18,7 @@ from app.models.opencode_interaction import OpenCodeInteraction
 from app.models.opencode_message_content import OpenCodeMessageContent
 from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
+from app.models.user import User
 from app.api.deps import get_current_user
 from app.schemas.opencode_session import (
     OpenCodeSessionCreate,
@@ -31,8 +32,10 @@ from app.schemas.opencode_session import (
     AvailablePromptItem,
     OpenCodeInteractionResponse,
     OpenCodeInteractionListResponse,
+    OpenCodeServerStatus,
 )
 from app.services.opencode_session_service import OpenCodeSessionService
+from app.models.opencode_audit_task import OpenCodeAuditTaskStatus
 
 router = APIRouter()
 
@@ -308,11 +311,7 @@ async def session_stream(
         while True:
             query = (
                 select(OpenCodeMessageContent)
-                .where(
-                    and_(
-                        OpenCodeMessageContent.session_id == session_id
-                    )
-                )
+                .where(and_(OpenCodeMessageContent.session_id == session_id))
                 .order_by(OpenCodeMessageContent.message_index)
             )
             result = await db.execute(query)
@@ -320,23 +319,20 @@ async def session_stream(
             for msg in messages[total_num:]:
                 yield {
                     "event": "message",
-                    "data": json.dumps({
-                        "content_type": msg.content_type,
-                        "text_content": msg.text_content,
-                        "message_index": msg.message_index
-                    })
+                    "data": json.dumps(
+                        {
+                            "content_type": msg.content_type,
+                            "text_content": msg.text_content,
+                            "message_index": msg.message_index,
+                        }
+                    ),
                 }
                 await asyncio.sleep(0.5)
             total_num = len(messages)
             # 检查会话是否结束 不考虑另一边存储状态的时间差
             await db.refresh(session)
             if session.status in [OpenCodeSessionStatus.CLOSED, OpenCodeSessionStatus.ERROR]:
-                yield {
-                    "event": "done",
-                    "data": json.dumps({
-                        "content_type": session.status
-                    })
-                }
+                yield {"event": "done", "data": json.dumps({"content_type": session.status})}
                 break
 
             await asyncio.sleep(1)
@@ -505,3 +501,102 @@ async def get_session_interactions(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_id}/start")
+async def start_opencode(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Start opencode serve for a project (using new implementation)"""
+    # Get project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check permissions
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+
+    service = OpenCodeSessionService(db)
+
+    # Check if already running
+    server_status = await service.check_opencode_server_status(project)
+    if server_status == OpenCodeServerStatus.RUNNING:
+        return {
+            "success": True,
+            "message": "OpenCode serve is already running",
+            "pid": project.opencode_pid,
+            "port": project.opencode_port,
+        }
+
+    # Start server
+    if server_status == OpenCodeServerStatus.STOPPED or server_status == OpenCodeServerStatus.ERROR:
+        # Create audit task record (just start server type)
+        audit_task = await service.create_opencode_audit_task(
+            project_id=project_id,
+            prompt_template_id=None,
+            prompt_content=None,
+            current_user=current_user,
+            db_session_id=None,
+            is_just_start_server=True,
+        )
+
+        # Start server with audit_task.id as task_id
+        server_status = await service.start_opencode_server(
+            project, current_user.id, audit_task_id=audit_task.id
+        )
+
+        if server_status == OpenCodeServerStatus.RUNNING:
+            return {
+                "success": True,
+                "message": "OpenCode serve started successfully",
+                "pid": project.opencode_pid,
+                "port": project.opencode_port,
+                "audit_task_id": audit_task.id,
+            }
+        elif server_status == OpenCodeServerStatus.STARTING:
+            return {
+                "success": True,
+                "message": "OpenCode serve is starting",
+                "audit_task_id": audit_task.id,
+            }
+        else:
+            # Update task status to failed
+            audit_task.status = OpenCodeAuditTaskStatus.FAILED
+            audit_task.error_message = "Failed to start OpenCode server"
+            await db.commit()
+            raise HTTPException(status_code=500, detail="Failed to start OpenCode serve")
+
+    return {"success": True, "message": "OpenCode serve status: " + server_status}
+
+
+@router.post("/projects/{project_id}/stop")
+async def stop_opencode(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Stop opencode serve for a project (using new implementation)"""
+    # Get project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check permissions
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+
+    service = OpenCodeSessionService(db)
+    success = await service.stop_opencode_server(project)
+
+    if success:
+        return {"success": True, "message": "OpenCode serve stopped"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to stop OpenCode serve")

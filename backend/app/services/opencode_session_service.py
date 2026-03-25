@@ -354,7 +354,7 @@ class OpenCodeSessionService:
             return OpenCodeServerStatus.ERROR
 
     async def start_opencode_server(
-        self, project: Project, current_user_id: str, audit_task_id: Optional[str] = None
+        self, project: Project, current_user_id: str, audit_task_id: str
     ) -> OpenCodeServerStatus:
         print("[OpenCode] run start_opencode_server")
 
@@ -367,9 +367,13 @@ class OpenCodeSessionService:
 
         print(f"[OpenCode] audit_Task_id: {audit_task_id}")
 
+        # 确保 audit_task_id 有值
+        if not audit_task_id:
+            raise ValueError("audit_task_id is required and cannot be empty")
+
         try:
-            # 使用 audit_task_id 作为目录名，如果没有提供则生成随机ID
-            task_id = audit_task_id if audit_task_id else str(uuid.uuid4())
+            # 使用 audit_task_id 作为目录名
+            task_id = audit_task_id
             print(f"[OpenCode] Task ID: {task_id}")
 
             project_path = None
@@ -479,7 +483,7 @@ class OpenCodeSessionService:
                 import traceback
 
                 traceback.print_exc()
-                return
+                return OpenCodeServerStatus.ERROR
 
             print(f"[OpenCode] Started opencode serve with PID: {pid}")
 
@@ -664,9 +668,10 @@ class OpenCodeSessionService:
         self,
         project_id: str,
         prompt_template_id: Optional[str],
-        prompt_content: str,
+        prompt_content: Optional[str],
         current_user: User,
         db_session_id: Optional[str] = None,
+        is_just_start_server: bool = False,
     ) -> OpenCodeAuditTask:
         """
         创建OpenCode审计任务
@@ -674,29 +679,39 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Creating OpenCode audit task for project {project_id}")
 
         # 获取提示词模板名称
-        task_name = "OpenCode 审计任务"
-        task_description = "使用 OpenCode 进行代码审计"
+        if is_just_start_server:
+            task_name = "OpenCode Server 启动"
+            task_description = "仅启动 OpenCode 服务器，不执行审计"
+        else:
+            task_name = "OpenCode 审计任务"
+            task_description = "使用 OpenCode 进行代码审计"
 
-        if prompt_template_id:
-            result = await self.db.execute(
-                select(PromptTemplate).where(PromptTemplate.id == prompt_template_id)
-            )
-            template = result.scalar_one_or_none()
-            if template:
-                task_name = f"OpenCode: {template.name}"
-                task_description = template.description or task_description
+            if prompt_template_id:
+                result = await self.db.execute(
+                    select(PromptTemplate).where(PromptTemplate.id == prompt_template_id)
+                )
+                template = result.scalar_one_or_none()
+                if template:
+                    task_name = f"OpenCode: {template.name}"
+                    task_description = template.description or task_description
 
         audit_task = OpenCodeAuditTask(
             project_id=project_id,
             created_by=current_user.id,
             name=task_name,
             description=task_description,
+            task_type="opencode_serve" if is_just_start_server else "opencode_audit",
             opencode_session_id=db_session_id,
             opencode_prompt_template_id=prompt_template_id,
             prompt_content=prompt_content,
-            status=OpenCodeAuditTaskStatus.RUNNING,
-            current_step="Initializing audit",
+            status=OpenCodeAuditTaskStatus.RUNNING
+            if not is_just_start_server
+            else OpenCodeAuditTaskStatus.COMPLETED,
+            current_step="Starting OpenCode server"
+            if is_just_start_server
+            else "Initializing audit",
             started_at=datetime.utcnow(),
+            completed_at=datetime.utcnow() if is_just_start_server else None,
         )
 
         self.db.add(audit_task)
@@ -1207,9 +1222,7 @@ class OpenCodeSessionService:
                             imported_count = 0
                             for vuln_data in vulnerabilities:
                                 try:
-                                    current_vuln_id = vuln_data.get(
-                                        "vuln_id", str(uuid.uuid4())
-                                    )
+                                    current_vuln_id = vuln_data.get("vuln_id", str(uuid.uuid4()))
 
                                     # 检查是否已存在
                                     result = await db.execute(
@@ -1321,3 +1334,58 @@ class OpenCodeSessionService:
         except Exception as e:
             print(f"[OpenCode] Auto import vulnerabilities failed: {e}")
             print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+
+    async def stop_opencode_server(self, project: Project) -> bool:
+        """
+        停止OpenCode服务器
+        """
+        print(f"[OpenCode] Stopping OpenCode server for project {project.id}")
+
+        if not project.opencode_pid:
+            print(f"[OpenCode] No PID found, server is already stopped")
+            return True
+
+        try:
+            import os
+            import signal
+
+            pid_int = int(project.opencode_pid)
+            print(f"[OpenCode] Attempting to stop PID {pid_int}")
+
+            # 尝试优雅停止
+            try:
+                os.kill(pid_int, signal.SIGTERM)
+                print(f"[OpenCode] Sent SIGTERM to PID {pid_int}")
+
+                # 等待一段时间检查是否停止
+                await asyncio.sleep(1)
+
+                # 检查是否还在运行
+                try:
+                    os.kill(pid_int, 0)
+                    # 还在运行，强制杀死
+                    print(f"[OpenCode] PID {pid_int} still running, sending SIGKILL")
+                    os.kill(pid_int, signal.SIGKILL)
+                except OSError:
+                    print(f"[OpenCode] PID {pid_int} successfully stopped")
+            except OSError as e:
+                print(f"[OpenCode] PID {pid_int} already stopped: {e}")
+
+            # 重置项目字段
+            project.opencode_pid = None
+            project.opencode_port = None
+            project.opencode_log_path = None
+            project.opencode_started_at = None
+            project.updated_at = datetime.utcnow()
+
+            await self.db.commit()
+            print(f"[OpenCode] Server stopped and project fields reset")
+            return True
+
+        except ValueError as e:
+            print(f"[OpenCode] Invalid PID format: {e}")
+            return False
+        except Exception as e:
+            print(f"[OpenCode] Error stopping server: {e}")
+            print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+            return False

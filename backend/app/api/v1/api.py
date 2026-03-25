@@ -37,9 +37,9 @@ api_router.include_router(agent_tasks.router, prefix="/agent-tasks", tags=["agen
 api_router.include_router(embedding_config.router, prefix="/embedding", tags=["embedding"])
 api_router.include_router(ssh_keys.router, prefix="/ssh-keys", tags=["ssh-keys"])
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
+api_router.include_router(opencode_sessions.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(opencode_skills.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(opencode_mcp.router, prefix="/opencode", tags=["opencode"])
-api_router.include_router(opencode_sessions.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(project_config.router, prefix="/projects", tags=["project-config"])
 api_router.include_router(
     opencode_audit_tasks.router, prefix="/opencode-audit-tasks", tags=["opencode-audit-tasks"]
