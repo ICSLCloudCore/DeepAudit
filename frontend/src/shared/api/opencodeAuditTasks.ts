@@ -276,3 +276,15 @@ export async function scanImportVulnerabilities(
   const response = await apiClient.post(`/opencode-audit-tasks/${taskId}/scan-import-vulns`);
   return response.data;
 }
+
+/**
+ * 更新漏洞状态
+ */
+export async function updateVulnerability(
+  taskId: string,
+  vulnId: string,
+  data: { status: string; notes?: string }
+): Promise<any> {
+  const response = await apiClient.patch(`/opencode-audit-tasks/${taskId}/vulnerabilities/${vulnId}`, data);
+  return response.data;
+}

@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
   analyzing: "分析中",
   needs_review: "待审核",
   duplicate: "重复",
+  true_positive: "是问题",
 };
 
 function getStatusLabel(status?: string): string {
@@ -33,6 +34,7 @@ function getStatusBadgeClass(status?: string): string {
   switch (status) {
     case "resolved":
     case "fixed":
+    case "true_positive":
       return "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
     case "false_positive":
     case "wont_fix":
@@ -50,8 +52,9 @@ export function ProjectIssuesTab(props: {
   latestProblems: LatestProblem[];
   formatDate: (dateString: string) => string;
   onStatusChange?: (problem: LatestProblem, newStatus: string) => void;
+  onOpenStatusConfirm?: (problem: LatestProblem, newStatus: string) => void;
 }) {
-  const { hasAnyTasks, issuesSummary, loading, latestProblems, formatDate, onStatusChange } = props;
+  const { hasAnyTasks, issuesSummary, loading, latestProblems, formatDate, onStatusChange, onOpenStatusConfirm } = props;
 
   return (
     <>
@@ -155,7 +158,21 @@ export function ProjectIssuesTab(props: {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )}
-                  {issue.kind === "opencode" && (
+                  {issue.kind === "opencode" && onOpenStatusConfirm && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className={`text-xs font-mono border ${getStatusBadgeClass(issue.status)}`}>
+                          {getStatusLabel(issue.status)}
+                          <ChevronDown className="w-3 h-3 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onOpenStatusConfirm(issue, "true_positive")}>是问题</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onOpenStatusConfirm(issue, "false_positive")}>误报</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  {issue.kind === "opencode" && !onOpenStatusConfirm && (
                     <Badge className={`text-xs font-mono border ${getStatusBadgeClass(issue.status)}`}>
                       {getStatusLabel(issue.status)}
                     </Badge>

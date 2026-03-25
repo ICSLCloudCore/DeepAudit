@@ -656,3 +656,75 @@ async def get_vulnerability(
         raise HTTPException(status_code=404, detail="漏洞不存在")
 
     return vuln
+
+
+class UpdateVulnerabilityStatusRequest(BaseModel):
+    """更新漏洞状态请求"""
+
+    status: str = Field(..., description="状态: true_positive 或 false_positive")
+    notes: Optional[str] = Field(None, description="备注信息")
+
+
+@router.patch("/{task_id}/vulnerabilities/{vuln_id}")
+async def update_vulnerability_status(
+    task_id: str,
+    vuln_id: str,
+    request: UpdateVulnerabilityStatusRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    更新漏洞状态
+    """
+    # 验证任务存在且属于当前用户
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    # 查询漏洞
+    vuln_result = await db.execute(
+        select(AuditVulnerability).where(
+            AuditVulnerability.id == vuln_id, AuditVulnerability.task_id == task_id
+        )
+    )
+    vuln = vuln_result.scalars().first()
+    if not vuln:
+        raise HTTPException(status_code=404, detail="漏洞不存在")
+
+    # 验证状态值
+    valid_statuses = ["true_positive", "false_positive"]
+    if request.status not in valid_statuses:
+        raise HTTPException(
+            status_code=400, detail=f"无效的状态值，有效值为: {', '.join(valid_statuses)}"
+        )
+
+    # 状态标签映射
+    status_labels = {
+        "true_positive": "是问题",
+        "false_positive": "误报",
+    }
+
+    # 更新字段
+    vuln.status = request.status
+    vuln.manual_confirmation = True
+    vuln.manual_confirmation_status = status_labels.get(request.status, request.status)
+    vuln.manual_confirmation_notes = request.notes or status_labels.get(
+        request.status, request.status
+    )
+    vuln.confirmed_by = current_user.id
+    vuln.confirmed_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(vuln)
+
+    return {
+        "message": "状态已更新",
+        "vuln_id": vuln_id,
+        "status": vuln.status,
+        "manual_confirmation_status": vuln.manual_confirmation_status,
+    }

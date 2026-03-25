@@ -62,6 +62,8 @@ export default function ProjectDetail() {
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
   const [showTerminalDialog, setShowTerminalDialog] = useState(false);
   const [showOpenCodeAuditDialog, setShowOpenCodeAuditDialog] = useState(false);
+  const [showStatusConfirm, setShowStatusConfirm] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{ problem: LatestProblem; newStatus: string } | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<CreateProjectForm>({
     name: "",
@@ -376,10 +378,6 @@ export default function ProjectDetail() {
 
   const handleStatusChange = async (problem: LatestProblem, newStatus: string) => {
     try {
-      if (problem.kind === "opencode") {
-        toast.info("OpenCode 漏洞状态更新功能暂未开放");
-        return;
-      }
       if (problem.kind === "agent") {
         await updateAgentFinding(problem.task_id, problem.id, { status: newStatus });
       } else {
@@ -390,6 +388,30 @@ export default function ProjectDetail() {
     } catch (error) {
       console.error("Failed to update status:", error);
       toast.error("状态更新失败");
+    }
+  };
+
+  const handleOpenStatusConfirm = (problem: LatestProblem, newStatus: string) => {
+    setPendingStatusChange({ problem, newStatus });
+    setShowStatusConfirm(true);
+  };
+
+  const handleConfirmStatusChange = async (notes: string) => {
+    if (!pendingStatusChange) return;
+    try {
+      await updateVulnerability(
+        pendingStatusChange.problem.task_id,
+        pendingStatusChange.problem.id,
+        { status: pendingStatusChange.newStatus, notes }
+      );
+      toast.success("状态已更新");
+      await loadLatestIssues();
+    } catch (error) {
+      console.error("Failed to update status:", error);
+      toast.error("状态更新失败");
+    } finally {
+      setShowStatusConfirm(false);
+      setPendingStatusChange(null);
     }
   };
 
@@ -936,6 +958,7 @@ export default function ProjectDetail() {
             latestProblems={latestProblems}
             formatDate={formatDate}
             onStatusChange={handleStatusChange}
+            onOpenStatusConfirm={handleOpenStatusConfirm}
           />
         </TabsContent>
 
@@ -1106,6 +1129,15 @@ export default function ProjectDetail() {
         projectId={id || ""}
         onClose={() => setShowOpenCodeAuditDialog(false)}
         onStart={handleStartOpenCodeAudit}
+      />
+
+      {/* 状态确认对话框 */}
+      <IssueStatusConfirmDialog
+        open={showStatusConfirm}
+        onOpenChange={setShowStatusConfirm}
+        problemTitle={pendingStatusChange?.problem.title || ""}
+        newStatus={pendingStatusChange?.newStatus || ""}
+        onConfirm={handleConfirmStatusChange}
       />
     </div>
   );
