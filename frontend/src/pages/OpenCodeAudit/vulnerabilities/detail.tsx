@@ -19,6 +19,7 @@ import {
   Lightbulb,
   Info,
   Zap,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -310,6 +311,54 @@ export default function OpenCodeAuditVulnerabilityDetail() {
               </div>
             </div>
           </div>
+
+          {/* Confirmation Info - 仅在已确认时显示 */}
+          {vulnerability.manual_confirmation && (
+            <div className="cyber-card p-6 border-emerald-500/30">
+              <div className="cyber-card-header !mb-4">
+                <CheckCircle className="w-5 h-5 text-emerald-500" />
+                <h3 className="text-lg font-bold uppercase tracking-wider text-emerald-500">确认信息</h3>
+              </div>
+              <div className="space-y-4">
+                {vulnerability.confirmed_by && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase mb-1">确认人</p>
+                    <div className="flex items-center space-x-2">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                      <p className="text-foreground">{vulnerability.confirmed_by}</p>
+                    </div>
+                  </div>
+                )}
+                {vulnerability.confirmed_at && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase mb-1">确认时间</p>
+                    <p className="text-foreground">{formatDate(vulnerability.confirmed_at)}</p>
+                  </div>
+                )}
+                {vulnerability.manual_confirmation_status && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase mb-1">确认结果</p>
+                    <Badge className={`
+                      ${vulnerability.manual_confirmation_status === '是问题' 
+                        ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' 
+                        : 'bg-gray-500/20 text-gray-600 dark:text-gray-400 border-gray-500/30'}
+                      font-mono
+                    `}>
+                      {vulnerability.manual_confirmation_status}
+                    </Badge>
+                  </div>
+                )}
+                {vulnerability.manual_confirmation_notes && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase mb-1">确认备注</p>
+                    <p className="text-foreground text-sm leading-relaxed">
+                      {vulnerability.manual_confirmation_notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Impact Assessment */}
           {(vulnerability.impact_confidentiality || vulnerability.impact_integrity || vulnerability.impact_availability) && (
