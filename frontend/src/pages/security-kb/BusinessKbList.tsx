@@ -39,7 +39,7 @@ export default function BusinessKbList() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
-  const [filterType, setFilterType] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>('__all__');
 
   const [showCreate, setShowCreate] = useState(false);
   const [editingEntry, setEditingEntry] = useState<BusinessKbEntry | null>(null);
@@ -65,7 +65,7 @@ export default function BusinessKbList() {
         skip: (page - 1) * PAGE_SIZE,
         limit: PAGE_SIZE,
         q: q || undefined,
-        kb_type: filterType || undefined,
+        kb_type: filterType === '__all__' ? undefined : filterType,
       });
       setItems(res.items);
       setTotal(res.total);
@@ -78,6 +78,8 @@ export default function BusinessKbList() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [q, filterType]);
+
+  const handleFilterType = (v: string) => setFilterType(v);
 
   const handleDelete = async () => {
     if (!deletingEntry) return;
@@ -131,12 +133,12 @@ export default function BusinessKbList() {
             />
           </div>
 
-          <Select value={filterType} onValueChange={setFilterType}>
+          <Select value={filterType} onValueChange={handleFilterType}>
             <SelectTrigger className="cyber-input h-9 w-36 text-xs font-mono">
               <SelectValue placeholder="全部类型" />
             </SelectTrigger>
             <SelectContent className="cyber-dialog border-border">
-              <SelectItem value="" className="text-xs font-mono">全部类型</SelectItem>
+              <SelectItem value="__all__" className="text-xs font-mono">全部类型</SelectItem>
               {typeOptions.map(t => (
                 <SelectItem key={t.value} value={t.value} className="text-xs font-mono">{t.label}</SelectItem>
               ))}
