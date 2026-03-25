@@ -1,60 +1,100 @@
 /**
  * 洞察漏洞库 - 洞察配置对话框
- * 配置洞察开关、洞察周期、洞察源（多选）
+ * 配置洞察开关、洞察周期、项目路径、洞察源（多选）、Prompt，支持手动立即执行
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
   Loader2, Settings2, Rss, Clock, ToggleLeft, ToggleRight,
-  CheckCircle2, CircleDashed, Calendar, RefreshCw,
+  CheckCircle2, CircleDashed, Calendar, RefreshCw, Play,
+  FolderOpen, AlertTriangle, CheckCircle,
 } from 'lucide-react';
 
 import type {
   InsightConfig,
+  InsightRunStatus,
   InsightSourceOption,
 } from '@/shared/api/securityKb';
-import { getInsightConfig, updateInsightConfig } from '@/shared/api/securityKb';
+import {
+  getInsightConfig,
+  updateInsightConfig,
+  runInsightNow,
+  getInsightRunStatus,
+} from '@/shared/api/securityKb';
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** 配置保存成功后回调（用于更新列表页状态徽标） */
   onSaved: (config: InsightConfig) => void;
 }
 
 const INTERVAL_PRESETS = [
-  { label: '每 1 小时', hours: 1 },
-  { label: '每 6 小时', hours: 6 },
-  { label: '每 12 小时', hours: 12 },
+  { label: '立即', hours: 0 },
   { label: '每天', hours: 24 },
   { label: '每周', hours: 168 },
+  { label: '每月', hours: 720 },
 ];
 
 export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
 
   const [enabled, setEnabled] = useState(false);
   const [intervalHours, setIntervalHours] = useState(24);
-  const [intervalInput, setIntervalInput] = useState('24');
   const [selectedSources, setSelectedSources] = useState<string[]>(['github', 'nvd', 'go_vuln_db']);
   const [sourceOptions, setSourceOptions] = useState<InsightSourceOption[]>([]);
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
   const [nextRunAt, setNextRunAt] = useState<string | null>(null);
+  const [projectPath, setProjectPath] = useState('');
+  const [insightPrompt, setInsightPrompt] = useState('');
+  const [attackPrompt, setAttackPrompt] = useState('');
+  const [runStatus, setRunStatus] = useState<InsightRunStatus | null>(null);
+
+  // 轮询洞察状态
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      stopPolling();
+      return;
+    }
     loadConfig();
+    loadRunStatus();
   }, [open]);
+
+  const startPolling = () => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await getInsightRunStatus();
+        setRunStatus(s);
+        if (!s.running) {
+          stopPolling();
+          setRunning(false);
+          // 刷新 last_run_at
+          loadConfig();
+        }
+      } catch { /* 静默 */ }
+    }, 2000);
+  };
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
 
   const loadConfig = async () => {
     setLoading(true);
@@ -63,16 +103,29 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
       const c = res.config;
       setEnabled(c.enabled);
       setIntervalHours(c.interval_hours);
-      setIntervalInput(String(c.interval_hours));
       setSelectedSources(c.sources);
       setLastRunAt(c.last_run_at);
       setNextRunAt(c.next_run_at);
       setSourceOptions(res.source_options);
+      setProjectPath(c.insight_project_path ?? '');
+      setInsightPrompt(c.insight_prompt ?? '');
+      setAttackPrompt(c.attack_pattern_prompt ?? '');
     } catch {
       toast.error('加载洞察配置失败');
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadRunStatus = async () => {
+    try {
+      const s = await getInsightRunStatus();
+      setRunStatus(s);
+      if (s.running) {
+        setRunning(true);
+        startPolling();
+      }
+    } catch { /* 静默 */ }
   };
 
   const toggleSource = (value: string) => {
@@ -81,15 +134,8 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
     );
   };
 
-  const handleIntervalInput = (raw: string) => {
-    setIntervalInput(raw);
-    const n = parseInt(raw, 10);
-    if (!Number.isNaN(n) && n >= 1) setIntervalHours(n);
-  };
-
   const handlePreset = (hours: number) => {
     setIntervalHours(hours);
-    setIntervalInput(String(hours));
   };
 
   const handleSave = async () => {
@@ -97,17 +143,15 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
       toast.error('请至少选择一个洞察源');
       return;
     }
-    const hours = parseInt(intervalInput, 10);
-    if (Number.isNaN(hours) || hours < 1) {
-      toast.error('洞察周期最小为 1 小时');
-      return;
-    }
     setSaving(true);
     try {
       const res = await updateInsightConfig({
         enabled,
-        interval_hours: hours,
+        interval_hours: intervalHours,
         sources: selectedSources,
+        insight_project_path: projectPath,
+        insight_prompt: insightPrompt,
+        attack_pattern_prompt: attackPrompt,
       });
       toast.success('洞察配置已保存');
       onSaved(res.config);
@@ -116,6 +160,42 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
       toast.error('保存洞察配置失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRunNow = async () => {
+    if (!projectPath.trim()) {
+      toast.error('请先填写洞察项目路径');
+      return;
+    }
+    // 先保存当前配置，再触发执行
+    try {
+      await updateInsightConfig({
+        enabled,
+        interval_hours: intervalHours,
+        sources: selectedSources,
+        insight_project_path: projectPath,
+        insight_prompt: insightPrompt,
+        attack_pattern_prompt: attackPrompt,
+      });
+    } catch {
+      toast.error('保存配置失败，无法启动洞察');
+      return;
+    }
+    setRunning(true);
+    try {
+      const res = await runInsightNow();
+      if (res.success) {
+        toast.success(res.message);
+        setRunStatus(res.status);
+        startPolling();
+      } else {
+        toast.error(res.message);
+        setRunning(false);
+      }
+    } catch {
+      toast.error('启动洞察失败');
+      setRunning(false);
     }
   };
 
@@ -129,16 +209,15 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="!w-[min(90vw,560px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
-        {/* Header — custom close button so it stays visible over bg-muted */}
+    <Dialog open={open} onOpenChange={v => { if (!v) { stopPolling(); onClose(); } }}>
+      <DialogContent className="!w-[min(90vw,640px)] !max-w-none max-h-[90vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
+        {/* Header */}
         <div className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/20 rounded border border-primary/30 flex-shrink-0">
               <Settings2 className="w-5 h-5 text-primary" />
             </div>
             <div>
-              {/* DialogTitle must stay in DOM for a11y — hide the default one via sr-only */}
               <DialogTitle className="sr-only">洞察配置</DialogTitle>
               <span className="text-base font-bold uppercase tracking-wider font-mono text-foreground">洞察配置</span>
               <p className="text-xs text-muted-foreground font-normal mt-0.5">
@@ -146,10 +225,9 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
               </p>
             </div>
           </div>
-          {/* Explicit close button — visible against muted background */}
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => { stopPolling(); onClose(); }}
             className="flex-shrink-0 rounded-md w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             aria-label="关闭"
           >
@@ -176,7 +254,7 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                     <div>
                       <p className="text-sm font-mono font-bold text-foreground">自动洞察</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {enabled ? '已启用 — 系统将按周期自动抓取漏洞情报' : '已关闭 — 仅支持手动管理条目'}
+                        {enabled ? '已启用 — 系统将按周期自动抓取漏洞情报' : '已关闭 — 仅支持手动触发'}
                       </p>
                     </div>
                   </div>
@@ -184,8 +262,43 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                 </div>
               </div>
 
-              {/* ── 状态信息（仅启用时显示） ── */}
-              {enabled && (lastRunAt || nextRunAt) && (
+              {/* ── 运行状态 ── */}
+              {runStatus && (
+                <div className={`cyber-card p-3 flex items-start gap-3 ${
+                  runStatus.running ? 'border-primary/40 bg-primary/5' :
+                  runStatus.status === 'error' ? 'border-red-500/40 bg-red-500/5' :
+                  runStatus.status === 'success' ? 'border-emerald-500/40 bg-emerald-500/5' : ''
+                }`}>
+                  {runStatus.running ? (
+                    <Loader2 className="w-4 h-4 text-primary animate-spin mt-0.5 flex-shrink-0" />
+                  ) : runStatus.status === 'error' ? (
+                    <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                  ) : runStatus.status === 'success' ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                  ) : null}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-mono font-bold text-foreground">
+                      {runStatus.running ? '洞察进行中...' :
+                       runStatus.status === 'error' ? '最近一次洞察失败' :
+                       runStatus.status === 'success' ? '最近一次洞察完成' : '待机'}
+                    </p>
+                    {runStatus.running && runStatus.pid && (
+                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                        PID: {runStatus.pid}{runStatus.port ? ` · 端口: ${runStatus.port}` : ''}
+                      </p>
+                    )}
+                    {runStatus.last_error && (
+                      <p className="text-[10px] text-red-400 font-mono mt-0.5 truncate">{runStatus.last_error}</p>
+                    )}
+                    {runStatus.last_report && !runStatus.running && (
+                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{runStatus.last_report}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── 上次/下次运行 ── */}
+              {(lastRunAt || nextRunAt) && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="cyber-card p-3 flex items-start gap-2">
                     <RefreshCw className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -211,18 +324,16 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-primary" />
                   <Label className="text-xs font-bold text-muted-foreground uppercase">
-                    洞察周期（小时）
+                    洞察周期
                   </Label>
                 </div>
-
-                {/* 快捷预设 */}
                 <div className="flex flex-wrap gap-2">
                   {INTERVAL_PRESETS.map(p => (
                     <button
                       key={p.hours}
                       type="button"
                       onClick={() => handlePreset(p.hours)}
-                      className={`px-3 py-1 text-xs font-mono rounded border transition-all ${
+                      className={`px-4 py-2 text-xs font-mono rounded border transition-all ${
                         intervalHours === p.hours
                           ? 'bg-primary text-background border-primary'
                           : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
@@ -232,19 +343,27 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                     </button>
                   ))}
                 </div>
+              </div>
 
-                {/* 自定义输入 */}
-                <div className="flex items-center gap-3">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={intervalInput}
-                    onChange={e => handleIntervalInput(e.target.value)}
-                    className="cyber-input w-28 h-9 font-mono text-sm"
-                    placeholder="小时数"
-                  />
-                  <span className="text-xs text-muted-foreground font-mono">小时 / 次</span>
+              <Separator />
+
+              {/* ── 洞察项目路径 ── */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4 text-primary" />
+                  <Label className="text-xs font-bold text-muted-foreground uppercase">
+                    洞察项目路径
+                  </Label>
                 </div>
+                <Input
+                  value={projectPath}
+                  onChange={e => setProjectPath(e.target.value)}
+                  placeholder="例如 /workspace/my-go-project"
+                  className="cyber-input font-mono text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground font-mono">
+                  opencode serve 将在该目录下启动，对该项目进行安全洞察分析
+                </p>
               </div>
 
               <Separator />
@@ -306,7 +425,6 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                 )}
               </div>
 
-              {/* ── 已选洞察源摘要 ── */}
               {selectedSources.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {selectedSources.map(s => {
@@ -319,19 +437,70 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                   })}
                 </div>
               )}
+
+              <Separator />
+
+              {/* ── 洞察 Prompt ── */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Settings2 className="w-4 h-4 text-primary" />
+                  <Label className="text-xs font-bold text-muted-foreground uppercase">
+                    全局洞察 Prompt
+                  </Label>
+                </div>
+                <Textarea
+                  value={insightPrompt}
+                  onChange={e => setInsightPrompt(e.target.value)}
+                  rows={6}
+                  className="cyber-input font-mono text-xs resize-y"
+                  placeholder="发送给 opencode 的洞察分析指令..."
+                />
+              </div>
+
+              {/* ── 攻击模式提取 Prompt ── */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Settings2 className="w-4 h-4 text-primary" />
+                  <Label className="text-xs font-bold text-muted-foreground uppercase">
+                    攻击模式提取 Prompt
+                  </Label>
+                </div>
+                <Textarea
+                  value={attackPrompt}
+                  onChange={e => setAttackPrompt(e.target.value)}
+                  rows={6}
+                  className="cyber-input font-mono text-xs resize-y"
+                  placeholder="基于洞察结果提取攻击模式的指令..."
+                />
+              </div>
             </>
           )}
         </div>
 
         {/* Footer */}
-        <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
-          <Button type="button" variant="outline" onClick={onClose} disabled={saving} className="cyber-btn-outline">
-            取消
+        <DialogFooter className="flex-shrink-0 flex items-center justify-between gap-3 px-6 py-4 bg-muted border-t border-border">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleRunNow}
+            disabled={running || loading || saving}
+            className="cyber-btn-outline gap-2"
+          >
+            {running
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Play className="w-4 h-4" />
+            }
+            {running ? '洞察中...' : '立即执行洞察'}
           </Button>
-          <Button type="button" onClick={handleSave} disabled={saving || loading} className="cyber-btn-primary">
-            {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            保存配置
-          </Button>
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={() => { stopPolling(); onClose(); }} disabled={saving} className="cyber-btn-outline">
+              取消
+            </Button>
+            <Button type="button" onClick={handleSave} disabled={saving || loading} className="cyber-btn-primary">
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              保存配置
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
