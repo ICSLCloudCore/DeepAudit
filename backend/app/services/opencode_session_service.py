@@ -1007,6 +1007,7 @@ class OpenCodeSessionService:
                 sign = await self.poll_opencode_result_with_updates(
                     project, server_session_id, message_id, db_session_id, db_session_local
                 )
+                print(f"[Opencode] sign: {sign}")
 
                 result_db = await db_session_local.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
