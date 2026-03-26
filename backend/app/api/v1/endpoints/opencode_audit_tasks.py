@@ -96,6 +96,7 @@ class CreateOpenCodeAuditTaskRequest(BaseModel):
     name: Optional[str] = Field(None, description="任务名称")
     description: Optional[str] = Field(None, description="任务描述")
     branch_name: Optional[str] = Field(None, description="分支名称")
+    opencode_session_id: Optional[str] = Field(None, description="关联的OpenCode会话ID")
     opencode_prompt_template_id: Optional[str] = Field(None, description="OpenCode提示词模板ID")
     prompt_content: Optional[str] = Field(None, description="自定义提示词内容")
     audit_config: Optional[dict] = Field(None, description="审计配置")
@@ -190,6 +191,33 @@ async def create_opencode_audit_task(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在或无权访问")
 
+    # 如果有关联的 session，检查是否已有运行中的任务
+    if task_data.opencode_session_id:
+        running_task_result = await db.execute(
+            select(OpenCodeAuditTask)
+            .where(OpenCodeAuditTask.opencode_session_id == task_data.opencode_session_id)
+            .where(
+                OpenCodeAuditTask.status.in_(
+                    [OpenCodeAuditTaskStatus.PENDING, OpenCodeAuditTaskStatus.RUNNING]
+                )
+            )
+            .order_by(OpenCodeAuditTask.created_at.desc())
+        )
+        running_task = running_task_result.scalars().first()
+
+        if running_task:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "该会话已有运行中的审计任务",
+                    "running_task": {
+                        "id": running_task.id,
+                        "status": running_task.status,
+                        "name": running_task.name,
+                    },
+                },
+            )
+
     # 创建任务
     task = OpenCodeAuditTask(
         project_id=task_data.project_id,
@@ -197,6 +225,7 @@ async def create_opencode_audit_task(
         name=task_data.name,
         description=task_data.description,
         branch_name=task_data.branch_name,
+        opencode_session_id=task_data.opencode_session_id,
         opencode_prompt_template_id=task_data.opencode_prompt_template_id,
         prompt_content=task_data.prompt_content,
         audit_config=task_data.audit_config,

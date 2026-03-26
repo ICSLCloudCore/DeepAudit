@@ -683,6 +683,33 @@ class OpenCodeSessionService:
         print(f"[OpenCode] OpenCode db_session_id created: {session.id}")
         return session
 
+    async def _check_running_tasks(
+        self,
+        opencode_session_id: str,
+    ) -> Optional[OpenCodeAuditTask]:
+        """
+        检查指定的 OpenCodeSession 是否有正在运行或待处理的审计任务
+
+        Args:
+            opencode_session_id: OpenCodeSession 的 ID
+
+        Returns:
+            如果有运行中的任务，返回该任务；否则返回 None
+        """
+        from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+
+        result = await self.db.execute(
+            select(OpenCodeAuditTask)
+            .where(OpenCodeAuditTask.opencode_session_id == opencode_session_id)
+            .where(
+                OpenCodeAuditTask.status.in_(
+                    [OpenCodeAuditTaskStatus.PENDING, OpenCodeAuditTaskStatus.RUNNING]
+                )
+            )
+            .order_by(OpenCodeAuditTask.created_at.desc())
+        )
+        return result.scalars().first()
+
     async def create_opencode_audit_task(
         self,
         project_id: str,
@@ -696,6 +723,15 @@ class OpenCodeSessionService:
         创建OpenCode审计任务
         """
         print(f"[OpenCode] Creating OpenCode audit task for project {project_id}")
+
+        # 如果有关联的 session，检查是否已有运行中的任务
+        if db_session_id and not is_just_start_server:
+            running_task = await self._check_running_tasks(db_session_id)
+            if running_task:
+                raise ValueError(
+                    f"该会话已有运行中的审计任务。"
+                    f"任务ID: {running_task.id}, 状态: {running_task.status}"
+                )
 
         # 获取提示词模板名称
         if is_just_start_server:
