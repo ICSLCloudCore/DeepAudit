@@ -936,7 +936,9 @@ class OpenCodeSessionService:
                                 continue
 
                             if info.get("finish") != None:
+                                part_sum = 0
                                 for part in item.get("parts", []):
+                                    part_sum += 1
                                     if (part_type := part.get("type")) == "text":
                                         # Save to database
                                         try:
@@ -969,6 +971,8 @@ class OpenCodeSessionService:
                                                 f"[OpenCode] Failed to save reasoning content: {e}"
                                             )
                                             await db.rollback()
+                                if part_sum == 2:
+                                    return True
                                 # 索引往前推
                                 record_index += 1
                 await asyncio.sleep(poll_interval)
