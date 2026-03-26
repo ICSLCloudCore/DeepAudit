@@ -781,6 +781,8 @@ class OpenCodeSessionService:
             )
             # 更新 project 的活跃 session ID
             project.opencode_active_session_id = db_session.id
+            server_session_id = await self.create_opencode_server_session(project)
+            db_session.opencode_server_session_id = server_session_id
             await self.db.commit()
 
         # 创建审计任务（总是创建新的 audit task）
@@ -803,11 +805,6 @@ class OpenCodeSessionService:
         if server_status == OpenCodeServerStatus.ERROR:
             raise RuntimeError("Failed to start OpenCode server")
 
-        # 如果没有 server_session_id，创建一个新的
-        if not server_session_id:
-            server_session_id = await self.create_opencode_server_session(project)
-            db_session.opencode_server_session_id = server_session_id
-            await self.db.commit()
         message_id = None
 
         if server_session_id:
@@ -1147,6 +1144,21 @@ class OpenCodeSessionService:
                 print(f"[OpenCode] Project not found for auto import: {project_id}")
                 return
 
+            # 查找审计任务，获取 opencode_session_id
+            result_task = await db.execute(
+                select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == audit_task_id)
+            )
+            audit_task = result_task.scalar_one_or_none()
+
+            if not audit_task:
+                print(f"[OpenCode] Audit task not found for auto import: {audit_task_id}")
+                return
+
+            opencode_session_id = audit_task.opencode_session_id
+            if not opencode_session_id:
+                print(f"[OpenCode] No opencode_session_id found for audit task: {audit_task_id}")
+                return
+
             # 构建可能的报告路径
             possible_paths = []
 
@@ -1154,14 +1166,15 @@ class OpenCodeSessionService:
             print(f"[OpenCode] Project ID: {project.id}")
             print(f"[OpenCode] Project source_type: {project.source_type}")
             print(f"[OpenCode] Task ID: {audit_task_id}")
+            print(f"[OpenCode] OpenCode Session ID: {opencode_session_id}")
 
-            # 1. 尝试 audit_task_id 相关的路径（最优先，因为项目就在这个目录下）
+            # 1. 尝试 opencode_session_id 相关的路径（最优先，因为项目就在这个目录下）
             possible_paths.extend(
                 [
-                    Path(f"/tmp/{audit_task_id}") / "reports",
-                    Path(f"C:/temp/{audit_task_id}") / "reports",
-                    Path(f"/tmp/{audit_task_id}"),
-                    Path(f"C:/temp/{audit_task_id}"),
+                    Path(f"/tmp/{opencode_session_id}") / "reports",
+                    Path(f"C:/temp/{opencode_session_id}") / "reports",
+                    Path(f"/tmp/{opencode_session_id}"),
+                    Path(f"C:/temp/{opencode_session_id}"),
                 ]
             )
 
@@ -1185,11 +1198,11 @@ class OpenCodeSessionService:
                     ]
                 )
 
-            # 3. 尝试其他可能的 task_id 相关路径
+            # 3. 尝试其他可能的 opencode_session_id 相关路径
             possible_paths.extend(
                 [
-                    Path(f"/tmp/opencode_{audit_task_id}") / "reports",
-                    Path(f"C:/temp/opencode_{audit_task_id}") / "reports",
+                    Path(f"/tmp/opencode_{opencode_session_id}") / "reports",
+                    Path(f"C:/temp/opencode_{opencode_session_id}") / "reports",
                 ]
             )
 
