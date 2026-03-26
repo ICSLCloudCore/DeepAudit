@@ -609,29 +609,14 @@ async def start_opencode(
 
     # Start server
     if server_status == OpenCodeServerStatus.STOPPED or server_status == OpenCodeServerStatus.ERROR:
-        # Create OpenCodeSession record (not AuditTask)
-        db_session = await service.create_opencode_session(
-            project_id, current_user, prompt_template_id=None, prompt_content=None
+        # 使用 create_full_opencode_session 创建完整会话（包含所有逻辑）
+        db_session, server_status = await service.create_full_opencode_session(
+            project_id,
+            project,
+            current_user,
+            prompt_template_id=None,
+            prompt_content=None,
         )
-
-        # Update project with active session ID
-        project.opencode_active_session_id = db_session.id
-        await db.commit()
-
-        # Start server with db_session.id as session_id
-        server_status = await service.start_opencode_server(
-            project, current_user.id, opencode_session_id=db_session.id
-        )
-
-        # Create server session and update db_session
-        if (
-            server_status == OpenCodeServerStatus.RUNNING
-            or server_status == OpenCodeServerStatus.STARTING
-        ):
-            server_session_id = await service.create_opencode_server_session(project)
-            db_session.opencode_server_session_id = server_session_id
-            db_session.status = OpenCodeSessionStatus.ACTIVE
-            await db.commit()
 
         if server_status == OpenCodeServerStatus.RUNNING:
             return {

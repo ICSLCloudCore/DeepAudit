@@ -326,20 +326,12 @@ class OpenCodeSessionService:
             return OpenCodeServerStatus.STOPPED
 
         try:
-            import os
-
-            pid_int = int(project.opencode_pid)
-            print(f"[OpenCode] Checking if PID {pid_int} is running...")
-
-            os.kill(pid_int, 0)
-            print(f"[OpenCode] PID {pid_int} is running")
-
             is_healthy = await self.check_opencode_server_health(project)
             if is_healthy:
-                print(f"[OpenCode] PID {pid_int} is running and healthy")
+                print(f"[OpenCode] PID {project.opencode_pid} is running and healthy")
                 return OpenCodeServerStatus.RUNNING
             else:
-                print(f"[OpenCode] PID {pid_int} is running but not responding")
+                print(f"[OpenCode] PID {project.opencode_pid} is running but not responding")
                 return OpenCodeServerStatus.ERROR
 
         except ValueError as e:
@@ -366,7 +358,11 @@ class OpenCodeSessionService:
         session = result.scalar_one_or_none()
 
         # 验证会话是否仍然有效
-        if session and session.status != OpenCodeSessionStatus.CLOSED:
+        if (
+            session
+            and session.status != OpenCodeSessionStatus.CLOSED
+            and session.status != OpenCodeSessionStatus.ERROR
+        ):
             return session
         return None
 
@@ -683,6 +679,93 @@ class OpenCodeSessionService:
         print(f"[OpenCode] OpenCode db_session_id created: {session.id}")
         return session
 
+    async def create_full_opencode_session(
+        self,
+        project_id: str,
+        project: Project,
+        current_user: User,
+        prompt_template_id: Optional[str] = None,
+        prompt_content: Optional[str] = None,
+    ) -> tuple[OpenCodeSession, OpenCodeServerStatus]:
+        """
+        创建完整的OpenCode会话（包含启动server、等待RUNNING、创建服务器会话和数据库记录）
+
+        Args:
+            project_id: 项目ID
+            project: Project对象（用于调用opencode server API）
+            current_user: 当前用户
+            prompt_template_id: 提示词模板ID（可选）
+            prompt_content: 提示词内容（可选）
+
+        Returns:
+            tuple: (OpenCodeSession对象, final_server_status)
+        """
+        print(f"[OpenCode] Creating full OpenCode session for project {project_id}")
+
+        # 1. 先创建数据库记录（用于获取 session.id 来启动 server）
+        session = OpenCodeSession(
+            project_id=project_id,
+            status=OpenCodeSessionStatus.PENDING,
+            prompt_template_id=prompt_template_id,
+            prompt_content=prompt_content or "",
+            created_by=current_user.id,
+        )
+
+        self.db.add(session)
+        await self.db.commit()
+        await self.db.refresh(session)
+
+        # 2. 检查并启动 opencode server（如果需要）
+        server_status = await self.check_opencode_server_status(project)
+
+        if (
+            server_status == OpenCodeServerStatus.STOPPED
+            or server_status == OpenCodeServerStatus.ERROR
+        ):
+            server_status = await self.start_opencode_server(
+                project, current_user.id, opencode_session_id=session.id
+            )
+
+        if server_status == OpenCodeServerStatus.ERROR:
+            raise RuntimeError("Failed to start OpenCode server")
+
+        # 3. 如果 server 是 STARTING，等待它变成 RUNNING
+        if server_status == OpenCodeServerStatus.STARTING:
+            print(f"[OpenCode] Server is STARTING, waiting for RUNNING...")
+            max_wait_seconds = 30
+            poll_interval = 1
+
+            for wait_count in range(max_wait_seconds):
+                await asyncio.sleep(poll_interval)
+                server_status = await self.check_opencode_server_status(project)
+
+                if server_status == OpenCodeServerStatus.RUNNING:
+                    print(f"[OpenCode] Server is now RUNNING after {wait_count + 1} seconds")
+                    break
+                elif server_status == OpenCodeServerStatus.ERROR:
+                    raise RuntimeError("Server entered ERROR state while starting")
+
+            if server_status != OpenCodeServerStatus.RUNNING:
+                raise RuntimeError(f"Server failed to start within {max_wait_seconds} seconds")
+
+        # 4. 创建 OpenCode 服务器会话（此时 server 应该是 RUNNING）
+        server_session_id = await self.create_opencode_server_session(project)
+
+        if not server_session_id:
+            print(f"[OpenCode] Error: Failed to create server session")
+            raise RuntimeError("Failed to create OpenCode server session")
+
+        # 5. 更新数据库，保存 server_session_id和active_session_id
+        session.opencode_server_session_id = server_session_id
+        session.status = OpenCodeSessionStatus.ACTIVE
+        project.opencode_active_session_id = session.id
+
+        await self.db.commit()
+        await self.db.refresh(session)
+
+        print(f"[OpenCode] Full session created, server_session_id: {server_session_id}")
+        return session, server_status
+
     async def _check_running_tasks(
         self,
         opencode_session_id: str,
@@ -811,15 +894,11 @@ class OpenCodeSessionService:
             print(f"[OpenCode] Reusing existing active session: {db_session.id}")
             server_session_id = db_session.opencode_server_session_id
         else:
-            # 创建新的 OpenCodeSession
-            db_session = await self.create_opencode_session(
-                project_id, current_user, prompt_template_id, final_prompt_content
+            # 创建新的完整 OpenCodeSession（包含 server session）
+            db_session, _ = await self.create_full_opencode_session(
+                project_id, project, current_user, prompt_template_id, final_prompt_content
             )
-            # 更新 project 的活跃 session ID
-            project.opencode_active_session_id = db_session.id
-            server_session_id = await self.create_opencode_server_session(project)
-            db_session.opencode_server_session_id = server_session_id
-            await self.db.commit()
+            server_session_id = db_session.opencode_server_session_id
 
         # 创建审计任务（总是创建新的 audit task）
         audit_task = await self.create_opencode_audit_task(
@@ -829,17 +908,6 @@ class OpenCodeSessionService:
             current_user,
             db_session_id=db_session.id,
         )
-
-        server_status = await self.check_opencode_server_status(project)
-
-        if server_status == OpenCodeServerStatus.STOPPED:
-            print(f"[OpenCode] Server is stopped, starting it...")
-            server_status = await self.start_opencode_server(
-                project, current_user.id, opencode_session_id=db_session.id
-            )
-
-        if server_status == OpenCodeServerStatus.ERROR:
-            raise RuntimeError("Failed to start OpenCode server")
 
         message_id = None
 
@@ -1028,7 +1096,6 @@ class OpenCodeSessionService:
                 )
                 audit_task = result_task.scalar_one_or_none()
                 print(f"[OpenCode] audit_task: {audit_task}")
-
 
                 if db_session:
                     if not sign:
