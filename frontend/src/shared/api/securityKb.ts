@@ -362,13 +362,23 @@ export interface InsightConfigUpdate {
   attack_pattern_prompt?: string;
 }
 
+export interface InsightMessage {
+  role: string;
+  type: 'text' | 'reasoning';
+  text: string;
+  ts: string;
+}
+
 export interface InsightRunStatus {
   running: boolean;
   status: 'idle' | 'running' | 'success' | 'error';
   pid: number | null;
   port: string | null;
+  current_step: string;
   last_error: string;
   last_report: string;
+  logs: string[];
+  messages: InsightMessage[];
 }
 
 const INSIGHT_BASE = '/security-kb/insight-config';
@@ -390,5 +400,123 @@ export async function runInsightNow(): Promise<{ success: boolean; message: stri
 
 export async function getInsightRunStatus(): Promise<InsightRunStatus> {
   const response = await apiClient.get('/security-kb/insight/status');
+  return response.data;
+}
+
+// ─── 业务知识库类型 ───────────────────────────────────────────────────────────
+
+export interface BusinessKbTypeOption {
+  value: string;
+  label: string;
+  description: string;
+  color: string;
+}
+
+export interface BusinessKbEntry {
+  id: string;
+  title: string;
+  slug: string;
+  kb_type: string;
+  version: string;
+  tags: string[];
+  products: string[];
+  summary?: string;
+  content: string;
+  is_system: boolean;
+  is_active: boolean;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BusinessKbEntryCreate {
+  title: string;
+  slug: string;
+  kb_type: string;
+  version?: string;
+  tags?: string[];
+  products?: string[];
+  summary?: string;
+  content: string;
+  is_active?: boolean;
+}
+
+export type BusinessKbEntryUpdate = Partial<Omit<BusinessKbEntryCreate, 'slug'>>;
+
+export interface BusinessKbListResponse {
+  items: BusinessKbEntry[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+// ─── 业务知识库 API ───────────────────────────────────────────────────────────
+
+const BIZ_KB_BASE = '/security-kb/business-kb';
+
+export async function getBusinessKbTypes(): Promise<BusinessKbTypeOption[]> {
+  const response = await apiClient.get(`${BIZ_KB_BASE}/types/options`);
+  return response.data;
+}
+
+export async function listBusinessKb(params: {
+  skip?: number; limit?: number; q?: string; kb_type?: string; is_active?: boolean;
+}): Promise<BusinessKbListResponse> {
+  const response = await apiClient.get(BIZ_KB_BASE, { params });
+  return response.data;
+}
+
+export async function getBusinessKb(id: string): Promise<BusinessKbEntry> {
+  const response = await apiClient.get(`${BIZ_KB_BASE}/${id}`);
+  return response.data;
+}
+
+export async function createBusinessKb(data: BusinessKbEntryCreate): Promise<BusinessKbEntry> {
+  const response = await apiClient.post(BIZ_KB_BASE, data);
+  return response.data;
+}
+
+export async function updateBusinessKb(id: string, data: BusinessKbEntryUpdate): Promise<BusinessKbEntry> {
+  const response = await apiClient.put(`${BIZ_KB_BASE}/${id}`, data);
+  return response.data;
+}
+
+export async function deleteBusinessKb(id: string): Promise<void> {
+  await apiClient.delete(`${BIZ_KB_BASE}/${id}`);
+}
+
+export async function exportBusinessKbMd(id: string, slug: string): Promise<void> {
+  const response = await apiClient.get(`${BIZ_KB_BASE}/${id}/export`, { responseType: 'blob' });
+  const url = URL.createObjectURL(response.data);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${slug}.md`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function exportBusinessKbZip(params: { ids?: string[] }): Promise<void> {
+  const response = await apiClient.post(`${BIZ_KB_BASE}/export-zip`, params, { responseType: 'blob' });
+  const url = URL.createObjectURL(response.data);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'business-kb-export.zip'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function importBusinessKbMd(file: File, overwrite: boolean): Promise<BusinessKbEntry> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('overwrite', String(overwrite));
+  const response = await apiClient.post(`${BIZ_KB_BASE}/import`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+}
+
+export async function importBusinessKbZip(file: File, overwrite: boolean): Promise<ImportZipResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('overwrite', String(overwrite));
+  const response = await apiClient.post(`${BIZ_KB_BASE}/import-zip`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return response.data;
 }

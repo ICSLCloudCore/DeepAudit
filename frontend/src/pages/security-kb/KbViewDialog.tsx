@@ -102,19 +102,27 @@ export default function KbViewDialog({ mode, open, onClose, onEdit, entry }: Pro
           </div>
         )}
 
-        {/* Vuln meta bar — simplified (date + source only) */}
+        {/* Vuln meta bar — date + truncated source link */}
         {isVuln && (
-          <div className="px-6 py-2 border-b border-border flex flex-wrap gap-x-5 gap-y-1.5 text-xs font-mono text-muted-foreground bg-muted/50 flex-shrink-0">
+          <div className="px-6 py-2 border-b border-border flex flex-wrap items-center gap-x-5 gap-y-1 text-xs font-mono text-muted-foreground bg-muted/50 flex-shrink-0">
             {entry.created_at && (
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 flex-shrink-0">
                 <Calendar className="w-3 h-3" />
                 {new Date(entry.created_at).toLocaleDateString('zh-CN')}
               </span>
             )}
-            {entry.source_url && (
-              <a href={entry.source_url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 hover:text-primary transition-colors">
-                <ExternalLink className="w-3 h-3" />来源
+            {(entry as VulnerabilityEntry).source_url && (
+              <a
+                href={(entry as VulnerabilityEntry).source_url!}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={(entry as VulnerabilityEntry).source_url!}
+                className="flex items-center gap-1 min-w-0 hover:text-primary transition-colors"
+              >
+                <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                <span className="truncate max-w-[260px]">
+                  {(entry as VulnerabilityEntry).source_url}
+                </span>
               </a>
             )}
           </div>

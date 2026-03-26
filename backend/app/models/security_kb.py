@@ -2,6 +2,7 @@
 Golang 安全知识库模型
 - GoVulnerabilityEntry: 洞察漏洞库条目
 - GoAttackPatternEntry: 攻击模式库条目
+- BusinessKbEntry: 业务知识库条目
 """
 
 import uuid
@@ -84,4 +85,33 @@ class GoAttackPatternEntry(Base):
         Index("ix_go_attack_is_system", "is_system"),
         Index("ix_go_attack_created_by", "created_by"),
         Index("ix_go_attack_is_latest", "is_latest"),
+    )
+
+
+class BusinessKbEntry(Base):
+    """业务知识库条目表"""
+    __tablename__ = "business_kb_entries"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(200), nullable=False)
+    slug = Column(String(200), nullable=False, unique=True)
+    # 条目类型（值由配置文件定义，如 protocol-standard / test-baseline / threat-analysis / framework-analysis）
+    kb_type = Column(String(100), nullable=False, default="protocol-standard")
+    version = Column(String(50), nullable=False, default="1.0.0")
+    tags = Column(Text, default="[]")                  # JSON 数组
+    products = Column(Text, default="[]")              # 涉及产品，JSON 数组
+    summary = Column(Text, nullable=True)
+    content = Column(Text, nullable=False)
+    is_system = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    creator = relationship("User", foreign_keys=[created_by])
+
+    __table_args__ = (
+        Index("ix_business_kb_type", "kb_type"),
+        Index("ix_business_kb_is_system", "is_system"),
+        Index("ix_business_kb_created_by", "created_by"),
     )

@@ -17,11 +17,13 @@ import { toast } from 'sonner';
 import {
   Loader2, Settings2, Rss, Clock, ToggleLeft, ToggleRight,
   CheckCircle2, CircleDashed, Calendar, RefreshCw, Play,
-  FolderOpen, AlertTriangle, CheckCircle,
+  FolderOpen, AlertTriangle, CheckCircle, Terminal, MessageSquare,
+  ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 import type {
   InsightConfig,
+  InsightMessage,
   InsightRunStatus,
   InsightSourceOption,
 } from '@/shared/api/securityKb';
@@ -86,7 +88,7 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
           loadConfig();
         }
       } catch { /* 静默 */ }
-    }, 2000);
+    }, 5000);   // skill 运行期间每5秒刷新一次，避免频繁请求
   };
 
   const stopPolling = () => {
@@ -210,7 +212,7 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { stopPolling(); onClose(); } }}>
-      <DialogContent className="!w-[min(90vw,640px)] !max-w-none max-h-[90vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
+      <DialogContent className="!w-[min(95vw,720px)] !max-w-none max-h-[92vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -262,39 +264,9 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
                 </div>
               </div>
 
-              {/* ── 运行状态 ── */}
-              {runStatus && (
-                <div className={`cyber-card p-3 flex items-start gap-3 ${
-                  runStatus.running ? 'border-primary/40 bg-primary/5' :
-                  runStatus.status === 'error' ? 'border-red-500/40 bg-red-500/5' :
-                  runStatus.status === 'success' ? 'border-emerald-500/40 bg-emerald-500/5' : ''
-                }`}>
-                  {runStatus.running ? (
-                    <Loader2 className="w-4 h-4 text-primary animate-spin mt-0.5 flex-shrink-0" />
-                  ) : runStatus.status === 'error' ? (
-                    <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-                  ) : runStatus.status === 'success' ? (
-                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                  ) : null}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono font-bold text-foreground">
-                      {runStatus.running ? '洞察进行中...' :
-                       runStatus.status === 'error' ? '最近一次洞察失败' :
-                       runStatus.status === 'success' ? '最近一次洞察完成' : '待机'}
-                    </p>
-                    {runStatus.running && runStatus.pid && (
-                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                        PID: {runStatus.pid}{runStatus.port ? ` · 端口: ${runStatus.port}` : ''}
-                      </p>
-                    )}
-                    {runStatus.last_error && (
-                      <p className="text-[10px] text-red-400 font-mono mt-0.5 truncate">{runStatus.last_error}</p>
-                    )}
-                    {runStatus.last_report && !runStatus.running && (
-                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{runStatus.last_report}</p>
-                    )}
-                  </div>
-                </div>
+              {/* ── 运行状态 + 实时日志 ── */}
+              {runStatus && runStatus.status !== 'idle' && (
+                <InsightStatusPanel runStatus={runStatus} />
               )}
 
               {/* ── 上次/下次运行 ── */}
@@ -504,5 +476,132 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── 洞察状态面板（步骤 + 实时日志 + 模型响应） ───────────────────────────────
+
+function InsightStatusPanel({ runStatus }: { runStatus: InsightRunStatus }) {
+  const [showLogs, setShowLogs] = useState(true);
+  const [showMessages, setShowMessages] = useState(true);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const msgsEndRef = useRef<HTMLDivElement>(null);
+
+  // 新日志自动滚到底部
+  useEffect(() => {
+    if (showLogs) logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [runStatus.logs, showLogs]);
+
+  useEffect(() => {
+    if (showMessages) msgsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [runStatus.messages, showMessages]);
+
+  const statusColor = runStatus.running
+    ? 'border-primary/40 bg-primary/5'
+    : runStatus.status === 'error'
+      ? 'border-red-500/40 bg-red-500/5'
+      : runStatus.status === 'success'
+        ? 'border-emerald-500/40 bg-emerald-500/5'
+        : '';
+
+  const statusIcon = runStatus.running
+    ? <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
+    : runStatus.status === 'error'
+      ? <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+      : <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />;
+
+  return (
+    <div className="space-y-2">
+      {/* 状态卡片 */}
+      <div className={`cyber-card p-3 flex items-start gap-3 ${statusColor}`}>
+        {statusIcon}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-mono font-bold text-foreground">
+              {runStatus.running ? runStatus.current_step || '洞察进行中...' :
+               runStatus.status === 'error' ? '洞察失败' :
+               runStatus.status === 'success' ? '洞察完成' : ''}
+            </p>
+            {runStatus.pid && runStatus.running && (
+              <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0">
+                PID {runStatus.pid}{runStatus.port ? ` :${runStatus.port}` : ''}
+              </span>
+            )}
+          </div>
+          {runStatus.last_error && (
+            <p className="text-[10px] text-red-400 font-mono mt-0.5 break-all">{runStatus.last_error}</p>
+          )}
+          {runStatus.last_report && !runStatus.running && (
+            <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{runStatus.last_report}</p>
+          )}
+        </div>
+      </div>
+
+      {/* 实时日志 */}
+      {runStatus.logs.length > 0 && (
+        <div className="cyber-card p-0 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowLogs(v => !v)}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-mono font-bold text-muted-foreground uppercase hover:text-foreground transition-colors bg-muted/50"
+          >
+            <span className="flex items-center gap-1.5">
+              <Terminal className="w-3 h-3" />
+              运行日志（{runStatus.logs.length} 条）
+            </span>
+            {showLogs ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          {showLogs && (
+            <div className="h-56 overflow-y-auto p-2 bg-black/30 font-mono text-[10px] leading-relaxed space-y-0.5">
+              {runStatus.logs.map((line, i) => (
+                <div key={i} className={`text-muted-foreground ${
+                  line.includes('错误') || line.includes('失败') ? 'text-red-400' :
+                  line.includes('完成') || line.includes('成功') || line.includes('通过') ? 'text-emerald-400' :
+                  line.startsWith('▶') ? 'text-primary' : ''
+                }`}>
+                  {line}
+                </div>
+              ))}
+              <div ref={logsEndRef} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 模型响应（think + text） */}
+      {runStatus.messages.length > 0 && (
+        <div className="cyber-card p-0 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowMessages(v => !v)}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-mono font-bold text-muted-foreground uppercase hover:text-foreground transition-colors bg-muted/50"
+          >
+            <span className="flex items-center gap-1.5">
+              <MessageSquare className="w-3 h-3" />
+              模型响应（{runStatus.messages.length} 条）
+            </span>
+            {showMessages ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          {showMessages && (
+            <div className="h-52 overflow-y-auto p-2 space-y-2">
+              {runStatus.messages.map((msg: InsightMessage, i: number) => (
+                <div key={i} className={`text-[10px] font-mono p-2 rounded border ${
+                  msg.type === 'reasoning'
+                    ? 'border-violet-500/20 bg-violet-500/5 text-violet-300'
+                    : 'border-primary/20 bg-primary/5 text-foreground'
+                }`}>
+                  <div className="text-[9px] uppercase text-muted-foreground mb-1 flex items-center gap-1">
+                    {msg.type === 'reasoning' ? '💭 思考过程' : '📝 模型输出'}
+                    <span className="ml-auto opacity-60">{msg.ts.slice(11, 19)}</span>
+                  </div>
+                  <pre className="whitespace-pre-wrap break-all leading-relaxed">{msg.text}</pre>
+                </div>
+              ))}
+              <div ref={msgsEndRef} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

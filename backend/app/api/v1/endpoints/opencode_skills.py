@@ -212,6 +212,58 @@ async def upload_skill(
     return skill.to_dict()
 
 
+@router.get("/skills/{skill_id}/download")
+async def download_skill(
+    skill_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Download a skill as a ZIP file.
+
+    優先返回上传时保存的原始 ZIP；若原始 ZIP 不存在但 opencode_file_path 目录存在，
+    则即时打包 opencode_file_path 目录并返回。
+    """
+    from fastapi.responses import FileResponse, StreamingResponse
+    import io
+    import zipfile as _zipfile
+
+    result = await db.execute(select(OpenCodeSkill).where(OpenCodeSkill.id == skill_id))
+    skill = result.scalar_one_or_none()
+
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+
+    # 优先使用上传时保存的原始 ZIP
+    if skill.file_path and os.path.isfile(skill.file_path):
+        filename = os.path.basename(skill.file_path)
+        return FileResponse(
+            path=skill.file_path,
+            media_type="application/zip",
+            filename=filename,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # fallback：从 opencode_file_path 目录即时打包
+    if skill.opencode_file_path and os.path.isdir(skill.opencode_file_path):
+        buf = io.BytesIO()
+        base_dir = Path(skill.opencode_file_path)
+        dir_name = base_dir.name
+        with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
+            for file_path in base_dir.rglob("*"):
+                if file_path.is_file():
+                    arcname = dir_name / file_path.relative_to(base_dir)
+                    zf.write(file_path, arcname)
+        buf.seek(0)
+        safe_name = f"{skill.name.replace(' ', '_')}-{skill.version}.zip"
+        return StreamingResponse(
+            buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+        )
+
+    raise HTTPException(status_code=404, detail="Skill 文件不存在，无法下载")
+
+
 @router.put("/skills/{skill_id}")
 async def update_skill(
     skill_id: str,
