@@ -199,8 +199,8 @@ export default function ProjectDetail() {
           return enriched;
         }),
         mapWithConcurrency(limitedOpenCodeTasks, ISSUES_FETCH_CONCURRENCY, async (task) => {
-          const vulnerabilities = await getVulnerabilities(task.id);
-          const enriched = (vulnerabilities || []).map((vuln) => ({
+          const response = await getVulnerabilities(task.id, { page_size: 1000 });
+          const enriched = (response.items || []).map((vuln) => ({
             ...vuln,
             task_created_at: task.created_at,
             task_completed_at: task.completed_at

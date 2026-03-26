@@ -232,6 +232,14 @@ export async function importVulnerabilities(
   return response.data;
 }
 
+export interface PaginatedAuditVulnerabilities {
+  items: AuditVulnerability[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 /**
  * 获取漏洞列表
  */
@@ -243,7 +251,7 @@ export async function getVulnerabilities(
     page?: number;
     page_size?: number;
   }
-): Promise<AuditVulnerability[]> {
+): Promise<PaginatedAuditVulnerabilities> {
   const response = await apiClient.get(`/opencode-audit-tasks/${taskId}/vulnerabilities`, { params });
   return response.data;
 }

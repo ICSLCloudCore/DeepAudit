@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy import func
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -460,6 +461,16 @@ class AuditVulnerabilityResponse(BaseModel):
         from_attributes = True
 
 
+class PaginatedVulnerabilitiesResponse(BaseModel):
+    """分页漏洞响应"""
+
+    items: List[AuditVulnerabilityResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class ImportVulnerabilitiesRequest(BaseModel):
     """导入漏洞请求"""
 
@@ -613,7 +624,7 @@ async def scan_import_vulnerabilities(
     }
 
 
-@router.get("/{task_id}/vulnerabilities", response_model=List[AuditVulnerabilityResponse])
+@router.get("/{task_id}/vulnerabilities", response_model=PaginatedVulnerabilitiesResponse)
 async def list_vulnerabilities(
     task_id: str,
     severity: Optional[str] = None,
@@ -636,22 +647,34 @@ async def list_vulnerabilities(
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在或无权访问")
 
-    # 查询漏洞
-    query = select(AuditVulnerability).where(AuditVulnerability.task_id == task_id)
+    # 构建基础查询
+    base_query = select(AuditVulnerability).where(AuditVulnerability.task_id == task_id)
 
     if severity:
-        query = query.where(AuditVulnerability.severity == severity)
+        base_query = base_query.where(AuditVulnerability.severity == severity)
 
     if status:
-        query = query.where(AuditVulnerability.status == status)
+        base_query = base_query.where(AuditVulnerability.status == status)
 
-    # 分页
-    query = query.order_by(AuditVulnerability.created_at.desc())
+    # 查询总数量
+    count_query = select(func.count()).select_from(base_query.subquery())
+    count_result = await db.execute(count_query)
+    total = count_result.scalar() or 0
+
+    # 查询当前页数据
+    query = base_query.order_by(AuditVulnerability.created_at.desc())
     offset = (page - 1) * page_size
     query = query.offset(offset).limit(page_size)
 
     result = await db.execute(query)
-    return result.scalars().all()
+    items = result.scalars().all()
+
+    # 计算总页数
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+    return PaginatedVulnerabilitiesResponse(
+        items=items, total=total, page=page, page_size=page_size, total_pages=total_pages
+    )
 
 
 @router.get("/{task_id}/vulnerabilities/{vuln_id}", response_model=AuditVulnerabilityResponse)
