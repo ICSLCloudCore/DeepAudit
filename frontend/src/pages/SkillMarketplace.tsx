@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import {
   Package,
   Upload,
+  Download,
   Search,
   Filter,
   Trash2,
@@ -48,6 +49,7 @@ const SkillMarketplace: React.FC = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [skillToDelete, setSkillToDelete] = useState<OpenCodeSkill | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -174,6 +176,19 @@ const SkillMarketplace: React.FC = () => {
       toast.error(errorMessage);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDownloadSkill = async (skill: OpenCodeSkill) => {
+    try {
+      setDownloadingId(skill.id);
+      await opencodeApi.downloadSkill(skill.id, skill.name, skill.version);
+      toast.success(`${skill.name} 下载成功`);
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail ?? error?.message ?? "下载失败";
+      toast.error(`下载失败：${msg}`);
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -323,20 +338,29 @@ const SkillMarketplace: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-xs cyber-btn-ghost"
-                          onClick={() => console.log("View skill:", skill.id)}
+                          title="下载 ZIP"
+                          disabled={downloadingId === skill.id}
+                          onClick={() => handleDownloadSkill(skill)}
                         >
-                          <Eye className="w-3 h-3 mr-1" />
+                          {downloadingId === skill.id ? (
+                            <div className="loading-spinner w-3 h-3 mr-1" />
+                          ) : (
+                            <Download className="w-3 h-3 mr-1" />
+                          )}
+                          下载
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-xs cyber-btn-ghost text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                          title="删除"
                           onClick={() => {
                             setSkillToDelete(skill);
                             setShowDeleteDialog(true);
                           }}
                         >
                           <Trash2 className="w-3 h-3 mr-1" />
+                          删除
                         </Button>
                       </div>
                     </div>

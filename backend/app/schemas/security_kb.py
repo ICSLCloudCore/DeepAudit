@@ -204,3 +204,58 @@ class ExportZipRequest(BaseModel):
     severity: Optional[str] = None
     category: Optional[str] = None
     attack_type: Optional[str] = None
+
+
+# ─── 业务知识库 Schema ───────────────────────────────────────────────────────
+
+
+class BusinessKbEntryBase(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    slug: str = Field(..., min_length=1, max_length=200)
+    kb_type: str = Field(..., min_length=1, max_length=100)
+    version: str = Field(default="1.0.0", max_length=50)
+    tags: List[str] = Field(default_factory=list)
+    products: List[str] = Field(default_factory=list)
+    summary: Optional[str] = Field(None, max_length=1000)
+    content: str = Field(..., min_length=1)
+    is_active: bool = True
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, v: str) -> str:
+        if not SLUG_PATTERN.match(v):
+            raise ValueError("slug 只能包含小写字母、数字和连字符，且不能以连字符开头或结尾")
+        return v
+
+
+class BusinessKbEntryCreate(BusinessKbEntryBase):
+    pass
+
+
+class BusinessKbEntryUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    kb_type: Optional[str] = Field(None, min_length=1, max_length=100)
+    version: Optional[str] = Field(None, max_length=50)
+    tags: Optional[List[str]] = None
+    products: Optional[List[str]] = None
+    summary: Optional[str] = Field(None, max_length=1000)
+    content: Optional[str] = Field(None, min_length=1)
+    is_active: Optional[bool] = None
+
+
+class BusinessKbEntryResponse(BusinessKbEntryBase):
+    id: str
+    is_system: bool
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BusinessKbEntryListResponse(BaseModel):
+    items: List[BusinessKbEntryResponse]
+    total: int
+    skip: int
+    limit: int

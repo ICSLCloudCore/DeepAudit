@@ -293,6 +293,20 @@ export const opencodeApi = {
     return response.data;
   },
 
+  downloadSkill: async (id: string, name: string, version: string) => {
+    const response = await apiClient.get(`/opencode/skills/${id}/download`, {
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name.replace(/\s+/g, '_')}-${version}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
   // MCPs
   listMcps: async (params?: {
     mcp_type?: string;

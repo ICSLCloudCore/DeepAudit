@@ -23,7 +23,7 @@ from sqlalchemy.future import select
 
 from app.api import deps
 from app.db.session import get_db
-from app.models.security_kb import GoAttackPatternEntry, GoVulnerabilityEntry
+from app.models.security_kb import GoAttackPatternEntry, GoVulnerabilityEntry, BusinessKbEntry
 from app.services.insight_config_service import (
     load_insight_config,
     save_insight_config,
@@ -46,6 +46,10 @@ from app.schemas.security_kb import (
     VulnerabilityEntryListResponse,
     VulnerabilityEntryResponse,
     VulnerabilityEntryUpdate,
+    BusinessKbEntryCreate,
+    BusinessKbEntryListResponse,
+    BusinessKbEntryResponse,
+    BusinessKbEntryUpdate,
 )
 
 router = APIRouter()
@@ -61,7 +65,8 @@ MAX_ZIP_FILES = 500
 def _require_editable(entry: Any, current_user: User) -> None:
     if entry.is_system:
         raise HTTPException(status_code=403, detail="系统内置条目不允许修改或删除")
-    if entry.created_by != current_user.id and not current_user.is_superuser:
+    # created_by 为 None 表示由系统/洞察任务生成，任何登录用户均可编辑
+    if entry.created_by is not None and entry.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="无权操作他人条目")
 
 
@@ -218,6 +223,7 @@ async def list_vulnerabilities(
     base_filter = or_(
         GoVulnerabilityEntry.is_system == True,
         GoVulnerabilityEntry.created_by == current_user.id,
+        GoVulnerabilityEntry.created_by == None,
     )
     query = select(GoVulnerabilityEntry).where(base_filter)
 
@@ -416,6 +422,7 @@ async def export_vulnerability_zip(
     base_filter = or_(
         GoVulnerabilityEntry.is_system == True,
         GoVulnerabilityEntry.created_by == current_user.id,
+        GoVulnerabilityEntry.created_by == None,
     )
     query = select(GoVulnerabilityEntry).where(base_filter)
     if body.ids:
@@ -531,6 +538,7 @@ async def list_attack_patterns(
     base_filter = or_(
         GoAttackPatternEntry.is_system == True,
         GoAttackPatternEntry.created_by == current_user.id,
+        GoAttackPatternEntry.created_by == None,
     )
     query = select(GoAttackPatternEntry).where(base_filter)
 
@@ -743,6 +751,7 @@ async def export_attack_pattern_zip(
     base_filter = or_(
         GoAttackPatternEntry.is_system == True,
         GoAttackPatternEntry.created_by == current_user.id,
+        GoAttackPatternEntry.created_by == None,
     )
     query = select(GoAttackPatternEntry).where(base_filter)
     if body.ids:
@@ -981,6 +990,9 @@ class InsightConfigUpdate(BaseModel):
     enabled: Optional[bool] = None
     interval_hours: Optional[int] = None
     sources: Optional[List[str]] = None
+    insight_project_path: Optional[str] = None
+    insight_prompt: Optional[str] = None
+    attack_pattern_prompt: Optional[str] = None
 
 
 @router.get("/insight-config")
@@ -1005,16 +1017,372 @@ async def update_insight_config(
     if body.enabled is not None:
         current["enabled"] = body.enabled
     if body.interval_hours is not None:
-        if body.interval_hours < 1:
-            raise HTTPException(status_code=400, detail="interval_hours 最小值为 1")
+        if body.interval_hours < 0:
+            raise HTTPException(status_code=400, detail="interval_hours 最小值为 0")
         current["interval_hours"] = body.interval_hours
     if body.sources is not None:
         current["sources"] = body.sources
+    if body.insight_project_path is not None:
+        current["insight_project_path"] = body.insight_project_path
+    if body.insight_prompt is not None:
+        current["insight_prompt"] = body.insight_prompt
+    if body.attack_pattern_prompt is not None:
+        current["attack_pattern_prompt"] = body.attack_pattern_prompt
     saved = save_insight_config(current)
     return {"config": saved, "source_options": get_source_options()}
+
+
+@router.post("/insight/run")
+async def run_insight_now(
+    background_tasks: Any = None,
+    current_user: Any = Depends(deps.get_current_user),
+) -> Any:
+    """立即触发一次洞察执行（后台异步运行）"""
+    import asyncio as _asyncio
+    from app.services.insight_runner_service import run_insight, get_insight_status
+
+    status = get_insight_status()
+    if status["running"]:
+        return {"success": False, "message": "洞察正在运行中，请稍后再试", "status": status}
+
+    _asyncio.create_task(run_insight())
+    return {"success": True, "message": "洞察已启动，正在后台运行", "status": get_insight_status()}
+
+
+@router.get("/insight/status")
+async def get_insight_run_status(
+    current_user: Any = Depends(deps.get_current_user),
+) -> Any:
+    """获取洞察执行状态"""
+    from app.services.insight_runner_service import get_insight_status
+    return get_insight_status()
+
+
+# ─── 业务知识库路由 ──────────────────────────────────────────────────────────
+
+business_kb_router = APIRouter(prefix="/business-kb")
+
+
+def _biz_serialize(e: BusinessKbEntry) -> dict:
+    d = {c.name: getattr(e, c.name) for c in e.__table__.columns}
+    d["tags"] = _json_loads_safe(e.tags)
+    d["products"] = _json_loads_safe(e.products)
+    return d
+
+
+def _biz_to_markdown(entry: BusinessKbEntry) -> str:
+    tags = _json_loads_safe(entry.tags)
+    products = _json_loads_safe(entry.products)
+    tags_yaml = "\n".join(f"  - {t}" for t in tags) if tags else ""
+    prods_yaml = "\n".join(f"  - {p}" for p in products) if products else ""
+
+    lines = ["---"]
+    lines.append(f'title: "{entry.title}"')
+    lines.append(f"slug: {entry.slug}")
+    lines.append("entry_type: business_kb")
+    lines.append(f"kb_type: {entry.kb_type}")
+    lines.append(f"version: {entry.version}")
+    if tags_yaml:
+        lines.append(f"tags:\n{tags_yaml}")
+    else:
+        lines.append("tags: []")
+    if prods_yaml:
+        lines.append(f"products:\n{prods_yaml}")
+    else:
+        lines.append("products: []")
+    if entry.summary:
+        lines.append(f'summary: "{entry.summary}"')
+    lines.append(f"is_active: {str(entry.is_active).lower()}")
+    if entry.created_at:
+        lines.append(f'created_at: "{entry.created_at.isoformat()}"')
+    lines.append("---")
+    lines.append("")
+    lines.append(entry.content or "")
+    return "\n".join(lines)
+
+
+def _parse_md_to_biz_dict(raw_bytes: bytes, filename: str = "") -> dict:
+    text = raw_bytes.decode("utf-8", errors="replace")
+    post = frontmatter.loads(text)
+    meta = post.metadata
+    body = post.content.strip()
+
+    title = meta.get("title") or (filename.replace(".md", "").replace("-", " ").title()) or "Untitled"
+    slug_val = meta.get("slug") or _generate_slug(str(title))
+    tags_raw = meta.get("tags", [])
+    tags = list(tags_raw) if isinstance(tags_raw, (list, tuple)) else []
+    prods_raw = meta.get("products", [])
+    products = list(prods_raw) if isinstance(prods_raw, (list, tuple)) else []
+
+    return {
+        "title": str(title)[:200],
+        "slug": str(slug_val)[:200],
+        "kb_type": str(meta.get("kb_type", "protocol-standard"))[:100],
+        "version": str(meta.get("version", "1.0.0"))[:50],
+        "tags": tags,
+        "products": products,
+        "summary": str(meta["summary"])[:1000] if meta.get("summary") else None,
+        "content": body or "（内容待补充）",
+        "is_active": bool(meta.get("is_active", True)),
+    }
+
+
+@business_kb_router.get("", response_model=BusinessKbEntryListResponse)
+async def list_business_kb(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    q: Optional[str] = Query(None),
+    kb_type: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    base_filter = or_(BusinessKbEntry.is_system == True, BusinessKbEntry.created_by == current_user.id)
+    query = select(BusinessKbEntry).where(base_filter)
+    if q:
+        like = f"%{q}%"
+        query = query.where(or_(BusinessKbEntry.title.ilike(like), BusinessKbEntry.summary.ilike(like)))
+    if kb_type:
+        query = query.where(BusinessKbEntry.kb_type == kb_type)
+    if is_active is not None:
+        query = query.where(BusinessKbEntry.is_active == is_active)
+
+    total = (await db.execute(select(sql_func.count()).select_from(query.subquery()))).scalar() or 0
+    query = query.order_by(BusinessKbEntry.is_system.desc(), BusinessKbEntry.created_at.desc()).offset(skip).limit(limit)
+    items = (await db.execute(query)).scalars().all()
+    return BusinessKbEntryListResponse(
+        items=[BusinessKbEntryResponse.model_validate(_biz_serialize(e)) for e in items],
+        total=total, skip=skip, limit=limit,
+    )
+
+
+@business_kb_router.post("", response_model=BusinessKbEntryResponse, status_code=201)
+async def create_business_kb(
+    data: BusinessKbEntryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    existing = (await db.execute(select(BusinessKbEntry).where(BusinessKbEntry.slug == data.slug))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"slug '{data.slug}' 已存在")
+    entry = BusinessKbEntry(
+        **{k: v for k, v in data.model_dump().items() if k not in ("tags", "products")},
+        tags=json.dumps(data.tags, ensure_ascii=False),
+        products=json.dumps(data.products, ensure_ascii=False),
+        is_system=False,
+        created_by=current_user.id,
+    )
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+    return BusinessKbEntryResponse.model_validate(_biz_serialize(entry))
+
+
+@business_kb_router.get("/{entry_id}", response_model=BusinessKbEntryResponse)
+async def get_business_kb(
+    entry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    entry = (await db.execute(select(BusinessKbEntry).where(BusinessKbEntry.id == entry_id))).scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="条目不存在")
+    return BusinessKbEntryResponse.model_validate(_biz_serialize(entry))
+
+
+@business_kb_router.put("/{entry_id}", response_model=BusinessKbEntryResponse)
+async def update_business_kb(
+    entry_id: str,
+    data: BusinessKbEntryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    entry = (await db.execute(select(BusinessKbEntry).where(BusinessKbEntry.id == entry_id))).scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="条目不存在")
+    _require_editable(entry, current_user)
+    update_data = data.model_dump(exclude_unset=True)
+    for field, val in update_data.items():
+        if field == "tags":
+            entry.tags = json.dumps(val, ensure_ascii=False)
+        elif field == "products":
+            entry.products = json.dumps(val, ensure_ascii=False)
+        else:
+            setattr(entry, field, val)
+    entry.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(entry)
+    return BusinessKbEntryResponse.model_validate(_biz_serialize(entry))
+
+
+@business_kb_router.delete("/{entry_id}", status_code=204)
+async def delete_business_kb(
+    entry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> None:
+    entry = (await db.execute(select(BusinessKbEntry).where(BusinessKbEntry.id == entry_id))).scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="条目不存在")
+    _require_editable(entry, current_user)
+    await db.delete(entry)
+    await db.commit()
+
+
+@business_kb_router.get("/{entry_id}/export")
+async def export_business_kb_md(
+    entry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    entry = (await db.execute(select(BusinessKbEntry).where(BusinessKbEntry.id == entry_id))).scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="条目不存在")
+    md = _biz_to_markdown(entry)
+    filename = f"{entry.slug}.md"
+    return Response(
+        content=md.encode("utf-8"),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@business_kb_router.post("/export-zip")
+async def export_business_kb_zip(
+    body: ExportZipRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    base_filter = or_(BusinessKbEntry.is_system == True, BusinessKbEntry.created_by == current_user.id)
+    query = select(BusinessKbEntry).where(base_filter)
+    if body.ids:
+        query = query.where(BusinessKbEntry.id.in_(body.ids))
+    items = (await db.execute(query)).scalars().all()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for e in items:
+            zf.writestr(f"{e.slug}.md", _biz_to_markdown(e).encode("utf-8"))
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="business-kb-export.zip"'},
+    )
+
+
+@business_kb_router.post("/import")
+async def import_business_kb_md(
+    file: UploadFile = File(...),
+    overwrite: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    if not file.filename or not file.filename.endswith(".md"):
+        raise HTTPException(status_code=400, detail="只支持 .md 文件")
+    raw = await file.read()
+    if len(raw) > MAX_MD_SIZE:
+        raise HTTPException(status_code=400, detail="文件超过 10MB 限制")
+    try:
+        d = _parse_md_to_biz_dict(raw, file.filename or "")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"解析失败: {exc}")
+
+    existing = (await db.execute(select(BusinessKbEntry).where(BusinessKbEntry.slug == d["slug"]))).scalar_one_or_none()
+    if existing:
+        if not overwrite or existing.is_system:
+            raise HTTPException(status_code=409, detail=f"slug '{d['slug']}' 已存在")
+        _require_editable(existing, current_user)
+        for k, v in d.items():
+            if k == "tags":
+                existing.tags = json.dumps(v, ensure_ascii=False)
+            elif k == "products":
+                existing.products = json.dumps(v, ensure_ascii=False)
+            else:
+                setattr(existing, k, v)
+        existing.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(existing)
+        return BusinessKbEntryResponse.model_validate(_biz_serialize(existing))
+
+    entry = BusinessKbEntry(
+        **{k: v for k, v in d.items() if k not in ("tags", "products")},
+        tags=json.dumps(d["tags"], ensure_ascii=False),
+        products=json.dumps(d["products"], ensure_ascii=False),
+        is_system=False, created_by=current_user.id,
+    )
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+    return BusinessKbEntryResponse.model_validate(_biz_serialize(entry))
+
+
+@business_kb_router.post("/import-zip")
+async def import_business_kb_zip(
+    file: UploadFile = File(...),
+    overwrite: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    raw = await file.read()
+    if len(raw) > MAX_ZIP_SIZE:
+        raise HTTPException(status_code=400, detail="ZIP 超过 100MB 限制")
+    results = []
+    success = skipped = failed = 0
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        md_names = [n for n in zf.namelist() if n.endswith(".md")][:MAX_ZIP_FILES]
+        for name in md_names:
+            try:
+                data_bytes = zf.read(name)
+                d = _parse_md_to_biz_dict(data_bytes, name.split("/")[-1])
+                existing = (await db.execute(
+                    select(BusinessKbEntry).where(BusinessKbEntry.slug == d["slug"])
+                )).scalar_one_or_none()
+                if existing:
+                    if not overwrite or existing.is_system:
+                        skipped += 1
+                        results.append(ImportResultItem(filename=name, status="skipped", slug=d["slug"], reason="已存在"))
+                        continue
+                    for k, v in d.items():
+                        if k == "tags":
+                            existing.tags = json.dumps(v, ensure_ascii=False)
+                        elif k == "products":
+                            existing.products = json.dumps(v, ensure_ascii=False)
+                        else:
+                            setattr(existing, k, v)
+                    existing.updated_at = datetime.now(timezone.utc)
+                    await db.commit()
+                    success += 1
+                    results.append(ImportResultItem(filename=name, status="updated", id=existing.id, slug=existing.slug))
+                else:
+                    entry = BusinessKbEntry(
+                        **{k: v for k, v in d.items() if k not in ("tags", "products")},
+                        tags=json.dumps(d["tags"], ensure_ascii=False),
+                        products=json.dumps(d["products"], ensure_ascii=False),
+                        is_system=False, created_by=current_user.id,
+                    )
+                    db.add(entry)
+                    await db.commit()
+                    await db.refresh(entry)
+                    success += 1
+                    results.append(ImportResultItem(filename=name, status="created", id=entry.id, slug=entry.slug))
+            except Exception as exc:
+                failed += 1
+                results.append(ImportResultItem(filename=name, status="failed", reason=str(exc)))
+    return ImportZipResponse(total=len(md_names), success=success, skipped=skipped, failed=failed, results=results)
+
+
+@business_kb_router.get("/types/options")
+async def get_business_kb_types(
+    current_user: Any = Depends(deps.get_current_user),
+) -> Any:
+    """返回业务知识库类型选项（从配置文件读取）"""
+    from app.services.business_kb_type_service import load_business_kb_types
+    return load_business_kb_types()
 
 
 # ─── 注册子路由 ─────────────────────────────────────────────────────────────
 
 router.include_router(vuln_router)
 router.include_router(attack_router)
+router.include_router(business_kb_router)

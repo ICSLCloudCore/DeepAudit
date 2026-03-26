@@ -1,0 +1,26 @@
+[
+  {
+    "value": "protocol-standard",
+    "label": "协议标准",
+    "description": "行业协议、规范与标准文档",
+    "color": "sky"
+  },
+  {
+    "value": "test-baseline",
+    "label": "测试基线",
+    "description": "安全测试基线与检查项",
+    "color": "emerald"
+  },
+  {
+    "value": "threat-analysis",
+    "label": "威胁分析",
+    "description": "威胁建模与风险分析报告",
+    "color": "orange"
+  },
+  {
+    "value": "framework-analysis",
+    "label": "框架分析",
+    "description": "技术框架安全分析文档",
+    "color": "violet"
+  }
+]
