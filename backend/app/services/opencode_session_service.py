@@ -1425,6 +1425,7 @@ class OpenCodeSessionService:
             project.opencode_port = None
             project.opencode_log_path = None
             project.opencode_started_at = None
+            project.opencode_current_session_id = None
             project.updated_at = datetime.utcnow()
 
             # 清理活跃会话相关

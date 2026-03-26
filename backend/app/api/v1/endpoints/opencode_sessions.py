@@ -290,52 +290,87 @@ async def close_session(
 @router.get("/sessions/{session_id}/stream")
 async def session_stream(
     session_id: str,
-    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """获取会话的流式响应 - 直接从OpenCode Server获取原始消息数据"""
-    result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
-    session = result.scalar_one_or_none()
+    from app.db.session import async_session_factory
 
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    # 首先验证会话存在和权限
+    async with async_session_factory() as db:
+        result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
+        session = result.scalar_one_or_none()
 
-    result = await db.execute(select(Project).where(Project.id == session.project_id))
-    project = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    if project and project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+        result = await db.execute(select(Project).where(Project.id == session.project_id))
+        project = result.scalar_one_or_none()
+
+        if project and project.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
 
     async def event_generator():
         total_num = 0
-        while True:
-            query = (
-                select(OpenCodeMessageContent)
-                .where(and_(OpenCodeMessageContent.session_id == session_id))
-                .order_by(OpenCodeMessageContent.message_index)
-            )
-            result = await db.execute(query)
-            messages = result.scalars().all()
-            for msg in messages[total_num:]:
-                yield {
-                    "event": "message",
-                    "data": json.dumps(
-                        {
-                            "content_type": msg.content_type,
-                            "text_content": msg.text_content,
-                            "message_index": msg.message_index,
-                        }
-                    ),
-                }
-                await asyncio.sleep(0.5)
-            total_num = len(messages)
-            # 检查会话是否结束 不考虑另一边存储状态的时间差
-            await db.refresh(session)
-            if session.status in [OpenCodeSessionStatus.CLOSED, OpenCodeSessionStatus.ERROR]:
-                yield {"event": "done", "data": json.dumps({"content_type": session.status})}
-                break
+        try:
+            while True:
+                # 每次都使用独立的数据库会话
+                async with async_session_factory() as db:
+                    # 重新获取会话状态
+                    result = await db.execute(
+                        select(OpenCodeSession).where(OpenCodeSession.id == session_id)
+                    )
+                    current_session = result.scalar_one_or_none()
 
-            await asyncio.sleep(1)
+                    if not current_session:
+                        break
+
+                    # 获取消息
+                    query = (
+                        select(OpenCodeMessageContent)
+                        .where(and_(OpenCodeMessageContent.session_id == session_id))
+                        .order_by(OpenCodeMessageContent.message_index)
+                    )
+                    result = await db.execute(query)
+                    messages = result.scalars().all()
+
+                    # 发送新消息
+                    for msg in messages[total_num:]:
+                        yield {
+                            "event": "message",
+                            "data": json.dumps(
+                                {
+                                    "content_type": msg.content_type,
+                                    "text_content": msg.text_content,
+                                    "message_index": msg.message_index,
+                                }
+                            ),
+                        }
+                        await asyncio.sleep(0.5)
+
+                    total_num = len(messages)
+
+                    # 检查会话是否结束
+                    if current_session.status in [
+                        OpenCodeSessionStatus.CLOSED,
+                        OpenCodeSessionStatus.ERROR,
+                    ]:
+                        yield {
+                            "event": "done",
+                            "data": json.dumps({"content_type": current_session.status}),
+                        }
+                        break
+
+                # 等待一段时间再检查
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            # 正常处理客户端断开连接的情况
+            print(f"[SSE] Client disconnected from stream for session {session_id}")
+        except Exception as e:
+            # 记录错误但不抛出，避免影响连接池
+            print(f"[SSE] Error in stream for session {session_id}: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     return EventSourceResponse(event_generator())
 
