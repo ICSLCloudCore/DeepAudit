@@ -1007,28 +1007,29 @@ class OpenCodeSessionService:
                 sign = await self.poll_opencode_result_with_updates(
                     project, server_session_id, message_id, db_session_id, db_session_local
                 )
-                print(f"[Opencode] sign: {sign}")
+                print(f"[OpenCode] sign: {sign}")
 
                 result_db = await db_session_local.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
                 )
                 db_session = result_db.scalar_one_or_none()
+                print(f"[OpenCode] db_session: {db_session}")
 
                 # 获取审计任务
                 result_task = await db_session_local.execute(
                     select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == audit_task_id)
                 )
                 audit_task = result_task.scalar_one_or_none()
+                print(f"[OpenCode] audit_task: {audit_task}")
+
 
                 if db_session:
-                    if sign:
-                        db_session.status = OpenCodeSessionStatus.CLOSED
-                    else:
+                    if not sign:
                         db_session.status = OpenCodeSessionStatus.ERROR
                         db_session.response_content += "\nLLM Server response timeout. Please try again or check the server status."
 
-                    db_session.completed_at = datetime.utcnow()
-                    await db_session_local.commit()
+                        db_session.completed_at = datetime.utcnow()
+                        await db_session_local.commit()
 
                     # 更新审计任务状态
                     if audit_task:
