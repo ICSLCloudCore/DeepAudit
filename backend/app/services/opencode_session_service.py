@@ -932,6 +932,9 @@ class OpenCodeSessionService:
 
                         for item in data[record_index:]:
                             info = item.get("info", {})
+                            if info.get("role") == "user":
+                                continue
+
                             if info.get("finish") != None:
                                 for part in item.get("parts", []):
                                     if (part_type := part.get("type")) == "text":
