@@ -311,9 +311,15 @@ async def session_stream(
 
     async def event_generator():
         total_num = 0
-        try:
-            while True:
-                # 每次都使用独立的数据库会话
+        should_continue = True
+
+        while should_continue:
+            # 用于存储从数据库获取的数据
+            current_session_data = None
+            messages_data = []
+
+            try:
+                # 1. 先在数据库会话中获取所有需要的数据
                 async with async_session_factory() as db:
                     # 重新获取会话状态
                     result = await db.execute(
@@ -322,6 +328,7 @@ async def session_stream(
                     current_session = result.scalar_one_or_none()
 
                     if not current_session:
+                        should_continue = False
                         break
 
                     # 获取消息
@@ -333,44 +340,75 @@ async def session_stream(
                     result = await db.execute(query)
                     messages = result.scalars().all()
 
-                    # 发送新消息
-                    for msg in messages[total_num:]:
-                        yield {
-                            "event": "message",
-                            "data": json.dumps(
-                                {
-                                    "content_type": msg.content_type,
-                                    "text_content": msg.text_content,
-                                    "message_index": msg.message_index,
-                                }
-                            ),
+                    # 将数据复制到局部变量，以便在会话外部使用
+                    current_session_data = {"status": current_session.status}
+                    messages_data = [
+                        {
+                            "content_type": msg.content_type,
+                            "text_content": msg.text_content,
+                            "message_index": msg.message_index,
                         }
+                        for msg in messages
+                    ]
+
+                # 2. 现在在数据库会话外部处理数据和yield
+                # 发送新消息
+                for msg in messages_data[total_num:]:
+                    yield {
+                        "event": "message",
+                        "data": json.dumps(msg),
+                    }
+                    try:
                         await asyncio.sleep(0.5)
-
-                    total_num = len(messages)
-
-                    # 检查会话是否结束
-                    if current_session.status in [
-                        OpenCodeSessionStatus.CLOSED,
-                        OpenCodeSessionStatus.ERROR,
-                    ]:
-                        yield {
-                            "event": "done",
-                            "data": json.dumps({"content_type": current_session.status}),
-                        }
+                    except asyncio.CancelledError:
+                        print(
+                            f"[SSE] Client disconnected during message send for session {session_id}"
+                        )
+                        should_continue = False
                         break
 
-                # 等待一段时间再检查
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            # 正常处理客户端断开连接的情况
-            print(f"[SSE] Client disconnected from stream for session {session_id}")
-        except Exception as e:
-            # 记录错误但不抛出，避免影响连接池
-            print(f"[SSE] Error in stream for session {session_id}: {e}")
-            import traceback
+                if not should_continue:
+                    break
 
-            traceback.print_exc()
+                total_num = len(messages_data)
+
+                # 检查会话是否结束
+                if current_session_data and current_session_data["status"] in [
+                    OpenCodeSessionStatus.CLOSED,
+                    OpenCodeSessionStatus.ERROR,
+                ]:
+                    yield {
+                        "event": "done",
+                        "data": json.dumps({"content_type": current_session_data["status"]}),
+                    }
+                    should_continue = False
+                    break
+
+                # 3. 在数据库会话外部等待
+                if should_continue:
+                    try:
+                        await asyncio.sleep(1)
+                    except asyncio.CancelledError:
+                        print(f"[SSE] Client disconnected from stream for session {session_id}")
+                        should_continue = False
+                        break
+
+            except asyncio.CancelledError:
+                print(f"[SSE] Client disconnected from stream for session {session_id}")
+                should_continue = False
+                break
+            except Exception as e:
+                # 记录错误但不抛出，避免影响连接池
+                print(f"[SSE] Error in stream for session {session_id}: {e}")
+                import traceback
+
+                traceback.print_exc()
+                # 出错时等待一下再继续，避免快速重试
+                try:
+                    await asyncio.sleep(2)
+                except asyncio.CancelledError:
+                    should_continue = False
+                    break
 
     return EventSourceResponse(event_generator())
 
