@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { getVulnerabilities, getOpenCodeAuditTask, scanImportVulnerabilities, type AuditVulnerability, type OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";
+import { getVulnerabilities, getOpenCodeAuditTask, scanImportVulnerabilities, type AuditVulnerability, type OpenCodeAuditTask, type PaginatedAuditVulnerabilities } from "@/shared/api/opencodeAuditTasks";
 
 function parseAIExplanation(aiExplanation: string) {
   try {
@@ -52,20 +52,38 @@ function parseAIExplanation(aiExplanation: string) {
 
 const PAGE_SIZE = 20;
 
+type TabType = 'all' | 'critical' | 'high' | 'medium' | 'low';
+
+interface TabState {
+  page: number;
+  total: number;
+  total_pages: number;
+  items: AuditVulnerability[];
+  loaded: boolean;
+}
+
+const initialTabState: TabState = {
+  page: 1,
+  total: 0,
+  total_pages: 0,
+  items: [],
+  loaded: false,
+};
+
 function VulnerabilitiesList({ 
-  vulnerabilities, 
+  task,
   taskId,
+  tabStates,
   activeTab,
   setActiveTab,
-  pagination,
-  onPageChange,
+  onLoadTab,
 }: { 
-  vulnerabilities: AuditVulnerability[], 
+  task: OpenCodeAuditTask | null,
   taskId: string,
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-  pagination: { page: number; total: number; total_pages: number };
-  onPageChange: (page: number) => void;
+  tabStates: Record<TabType, TabState>;
+  activeTab: TabType;
+  setActiveTab: (tab: TabType) => void;
+  onLoadTab: (tab: TabType, page: number) => Promise<void>;
 }) {
   const getSeverityClasses = (severity: string) => {
     const lowerSeverity = severity.toLowerCase();
@@ -89,6 +107,18 @@ function VulnerabilitiesList({
 
   const getTypeIcon = () => {
     return <Shield className="w-4 h-4" />;
+  };
+
+  const getTabCount = (tab: TabType): number => {
+    if (!task) return 0;
+    switch (tab) {
+      case 'all': return task.findings_count || 0;
+      case 'critical': return task.critical_count || 0;
+      case 'high': return task.high_count || 0;
+      case 'medium': return task.medium_count || 0;
+      case 'low': return task.low_count || 0;
+      default: return 0;
+    }
   };
 
   const renderVulnerability = (vuln: AuditVulnerability, index: number) => (
@@ -220,20 +250,21 @@ function VulnerabilitiesList({
   );
 
   const renderPagination = () => {
-    if (pagination.total_pages <= 1) return null;
+    const currentState = tabStates[activeTab];
+    if (currentState.total_pages <= 1) return null;
     
     return (
       <div className="flex items-center justify-between mt-6 cyber-card p-4">
         <div className="text-sm text-muted-foreground font-mono">
-          第 {pagination.page} 页 / 共 {pagination.total_pages} 页，共 {pagination.total} 条
+          第 {currentState.page} 页 / 共 {currentState.total_pages} 页，共 {currentState.total} 条
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             className="cyber-btn-outline"
-            disabled={pagination.page <= 1}
-            onClick={() => onPageChange(pagination.page - 1)}
+            disabled={currentState.page <= 1}
+            onClick={() => onLoadTab(activeTab, currentState.page - 1)}
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
             上一页
@@ -242,8 +273,8 @@ function VulnerabilitiesList({
             variant="outline"
             size="sm"
             className="cyber-btn-outline"
-            disabled={pagination.page >= pagination.total_pages}
-            onClick={() => onPageChange(pagination.page + 1)}
+            disabled={currentState.page >= currentState.total_pages}
+            onClick={() => onLoadTab(activeTab, currentState.page + 1)}
           >
             下一页
             <ChevronRight className="w-4 h-4 ml-1" />
@@ -253,7 +284,8 @@ function VulnerabilitiesList({
     );
   };
 
-  if (pagination.total === 0) {
+  const currentState = tabStates[activeTab];
+  if (currentState.total === 0) {
     return (
       <div className="cyber-card p-16 text-center border-dashed">
         <CheckCircle className="w-16 h-16 text-emerald-600 dark:text-emerald-400 mx-auto mb-4" />
@@ -270,27 +302,27 @@ function VulnerabilitiesList({
 
   return (
     <div className="space-y-4">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)} className="w-full">
         <TabsList className="grid w-full grid-cols-5 bg-muted border border-border p-1 h-auto gap-1 rounded">
           <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs">
-            全部
+            全部 ({getTabCount('all')})
           </TabsTrigger>
           <TabsTrigger value="critical" className="data-[state=active]:bg-rose-500 data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs">
-            致命
+            致命 ({getTabCount('critical')})
           </TabsTrigger>
           <TabsTrigger value="high" className="data-[state=active]:bg-orange-500 data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs">
-            严重
+            严重 ({getTabCount('high')})
           </TabsTrigger>
           <TabsTrigger value="medium" className="data-[state=active]:bg-amber-500 data-[state=active]:text-background font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs">
-            一般
+            一般 ({getTabCount('medium')})
           </TabsTrigger>
           <TabsTrigger value="low" className="data-[state=active]:bg-sky-500 data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs">
-            提示
+            提示 ({getTabCount('low')})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="space-y-4 mt-6">
-          {vulnerabilities.map((vuln, index) => renderVulnerability(vuln, index))}
+          {currentState.items.map((vuln, index) => renderVulnerability(vuln, index))}
         </TabsContent>
       </Tabs>
       {renderPagination()}
@@ -298,16 +330,19 @@ function VulnerabilitiesList({
   );
 }
 
-type TabType = 'all' | 'critical' | 'high' | 'medium' | 'low';
-
 export default function OpenCodeAuditVulnerabilities() {
   const { taskId } = useParams<{ taskId: string }>();
   const [task, setTask] = useState<OpenCodeAuditTask | null>(null);
-  const [vulnerabilities, setVulnerabilities] = useState<AuditVulnerability[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('all');
-  const [pagination, setPagination] = useState({ page: 1, total: 0, total_pages: 0 });
+  const [tabStates, setTabStates] = useState<Record<TabType, TabState>>({
+    all: { ...initialTabState },
+    critical: { ...initialTabState },
+    high: { ...initialTabState },
+    medium: { ...initialTabState },
+    low: { ...initialTabState },
+  });
 
   const getSeverityFilter = (tab: TabType): string | undefined => {
     switch (tab) {
@@ -319,44 +354,64 @@ export default function OpenCodeAuditVulnerabilities() {
     }
   };
 
-  useEffect(() => {
-    if (taskId) {
-      loadVulnerabilities(1);
-    }
-  }, [taskId, activeTab]);
-
-  const loadVulnerabilities = async (page: number = 1) => {
+  const loadTabData = async (tab: TabType, page: number = 1) => {
     if (!taskId) return;
 
     try {
-      setLoading(true);
-      const severity = getSeverityFilter(activeTab);
-      const [taskData, vulnsData] = await Promise.all([
-        getOpenCodeAuditTask(taskId),
-        getVulnerabilities(taskId, { severity, page, page_size: PAGE_SIZE }),
-      ]);
-
-      setTask(taskData);
-      setVulnerabilities(vulnsData.items);
-      setPagination({
-        page: vulnsData.page,
-        total: vulnsData.total,
-        total_pages: vulnsData.total_pages,
+      const severity = getSeverityFilter(tab);
+      const vulnsData: PaginatedAuditVulnerabilities = await getVulnerabilities(taskId, { 
+        severity, 
+        page, 
+        page_size: PAGE_SIZE 
       });
+
+      setTabStates(prev => ({
+        ...prev,
+        [tab]: {
+          page: vulnsData.page,
+          total: vulnsData.total,
+          total_pages: vulnsData.total_pages,
+          items: vulnsData.items,
+          loaded: true,
+        }
+      }));
     } catch (error) {
-      console.error('Failed to load vulnerabilities:', error);
+      console.error('Failed to load tab data:', error);
       toast.error("加载漏洞列表失败");
-    } finally {
-      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (taskId) {
+      const init = async () => {
+        setLoading(true);
+        try {
+          const taskData = await getOpenCodeAuditTask(taskId);
+          setTask(taskData);
+          await loadTabData('all', 1);
+        } catch (error) {
+          console.error('Failed to initialize:', error);
+          toast.error("加载任务数据失败");
+        } finally {
+          setLoading(false);
+        }
+      };
+      init();
+    }
+  }, [taskId]);
+
+  useEffect(() => {
+    if (taskId && !tabStates[activeTab].loaded) {
+      loadTabData(activeTab, 1);
+    }
+  }, [taskId, activeTab]);
 
   const handleTabChange = (newTab: TabType) => {
     setActiveTab(newTab);
   };
 
-  const handlePageChange = (newPage: number) => {
-    loadVulnerabilities(newPage);
+  const handleLoadTab = async (tab: TabType, page: number) => {
+    await loadTabData(tab, page);
   };
 
   const handleScanImport = async () => {
@@ -366,7 +421,22 @@ export default function OpenCodeAuditVulnerabilities() {
       setScanning(true);
       const result = await scanImportVulnerabilities(taskId);
       toast.success(`扫描完成: 导入 ${result.findings_count} 个漏洞`);
-      await loadVulnerabilities();
+      
+      // 重新加载任务数据和所有标签
+      const taskData = await getOpenCodeAuditTask(taskId);
+      setTask(taskData);
+      
+      // 重置所有标签状态
+      setTabStates({
+        all: { ...initialTabState },
+        critical: { ...initialTabState },
+        high: { ...initialTabState },
+        medium: { ...initialTabState },
+        low: { ...initialTabState },
+      });
+      
+      // 重新加载当前标签
+      await loadTabData(activeTab, 1);
     } catch (error) {
       console.error('Failed to scan import vulnerabilities:', error);
       toast.error("扫描导入失败，请确保已调用 skill 导出报告");
@@ -400,7 +470,6 @@ export default function OpenCodeAuditVulnerabilities() {
     }
   };
 
-  // 我们从任务数据获取统计，因为本地只存当前页
   const severityCounts = {
     critical: task?.critical_count || 0,
     high: task?.high_count || 0,
@@ -421,7 +490,7 @@ export default function OpenCodeAuditVulnerabilities() {
 
   if (!task) {
     return (
-      <div className="space-y-6 p-6 cyber-bg-elevated min-h-screen font-mono">
+      <div className="space-y-6 p-6 cyber-bg-elevated min-h-screen font-mono relative">
         <div className="flex items-center space-x-4">
           <Link to="/audit-tasks">
             <Button variant="outline" size="sm" className="cyber-btn-ghost h-10 w-10 p-0">
@@ -481,7 +550,7 @@ export default function OpenCodeAuditVulnerabilities() {
           <div className="flex items-center justify-between">
             <div>
               <p className="stat-label">总漏洞数</p>
-              <p className="stat-value text-rose-400">{pagination.total}</p>
+              <p className="stat-value text-rose-400">{task.findings_count || 0}</p>
             </div>
             <div className="stat-icon text-rose-400">
               <Bug className="w-6 h-6" />
@@ -612,22 +681,22 @@ export default function OpenCodeAuditVulnerabilities() {
       </div>
 
       {/* Vulnerabilities List */}
-      {pagination.total > 0 && taskId && (
+      {task.findings_count > 0 && taskId && (
         <div className="cyber-card p-0 relative z-10">
           <div className="cyber-card-header">
             <Bug className="w-5 h-5 text-amber-400" />
             <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">
-              发现的漏洞 ({pagination.total})
+              发现的漏洞 ({task.findings_count})
             </h3>
           </div>
           <div className="p-6">
             <VulnerabilitiesList 
-              vulnerabilities={vulnerabilities} 
+              task={task}
               taskId={taskId} 
+              tabStates={tabStates}
               activeTab={activeTab}
               setActiveTab={handleTabChange}
-              pagination={pagination}
-              onPageChange={handlePageChange}
+              onLoadTab={handleLoadTab}
             />
           </div>
         </div>

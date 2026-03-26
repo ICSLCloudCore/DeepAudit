@@ -651,7 +651,15 @@ async def list_vulnerabilities(
     base_query = select(AuditVulnerability).where(AuditVulnerability.task_id == task_id)
 
     if severity:
-        base_query = base_query.where(AuditVulnerability.severity == severity)
+        # 支持中英文 severity 过滤
+        severity_map = {
+            "critical": ["critical", "致命"],
+            "high": ["high", "严重"],
+            "medium": ["medium", "一般"],
+            "low": ["low", "提示"],
+        }
+        severities_to_match = severity_map.get(severity, [severity])
+        base_query = base_query.where(AuditVulnerability.severity.in_(severities_to_match))
 
     if status:
         base_query = base_query.where(AuditVulnerability.status == status)
