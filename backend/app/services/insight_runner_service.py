@@ -41,9 +41,10 @@ from app.services.insight_config_service import load_insight_config, save_insigh
 # ─── 运行状态（进程内单例） ────────────────────────────────────────────────────
 
 _insight_running: bool = False
+_insight_abort: bool = False            # 中止标志，设为 True 后各等待循环将退出
 _insight_pid: Optional[int] = None
 _insight_port: Optional[str] = None
-_insight_status: str = "idle"           # idle | running | success | error
+_insight_status: str = "idle"           # idle | running | success | error | aborted
 _insight_last_error: str = ""
 _insight_last_report: str = ""
 _insight_current_step: str = ""         # 当前步骤描述
@@ -90,19 +91,41 @@ def get_insight_status() -> dict[str, Any]:
         "current_step": _insight_current_step,
         "last_error": _insight_last_error,
         "last_report": _insight_last_report,
-        "logs": list(_insight_logs[-50:]),          # 返回最近 50 条日志
-        "messages": list(_insight_messages),        # 返回所有缓存消息
+        "logs": list(_insight_logs[-50:]),
+        "messages": list(_insight_messages),
     }
+
+
+def abort_insight() -> dict[str, Any]:
+    """
+    请求中止当前正在运行的洞察任务。
+    设置 _insight_abort 标志，各等待循环将在下次检查时退出，
+    同时立即 SIGTERM opencode 进程加速退出。
+    """
+    global _insight_abort
+    if not _insight_running:
+        return {"success": False, "message": "当前没有正在运行的洞察任务"}
+    _insight_abort = True
+    _log("⚠️ 收到中止请求，正在中止洞察任务...")
+    # 立即发信号给 opencode 进程加速退出
+    if _insight_pid:
+        try:
+            os.kill(_insight_pid, signal.SIGTERM)
+            _log(f"已发送 SIGTERM 到 opencode 进程 PID={_insight_pid}")
+        except OSError:
+            pass
+    return {"success": True, "message": "中止请求已发送，洞察任务即将停止"}
 
 
 def _reset_state() -> None:
     global _insight_logs, _insight_messages, _insight_current_step
-    global _insight_last_error, _insight_last_report
+    global _insight_last_error, _insight_last_report, _insight_abort
     _insight_logs = []
     _insight_messages = []
     _insight_current_step = ""
     _insight_last_error = ""
     _insight_last_report = ""
+    _insight_abort = False
 
 
 # ─── OpenCode 进程管理 ────────────────────────────────────────────────────────
@@ -264,6 +287,11 @@ async def _wait_for_completion(
     _log(f"[{tag}] 开始轮询，start_index={start_index}")
 
     for poll_count in range(max_polls):
+        # 检查中止标志
+        if _insight_abort:
+            _log(f"[{tag}] 检测到中止请求，停止轮询")
+            return False
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(message_url)
@@ -361,6 +389,11 @@ async def _wait_for_file(
     collected_indices: set = set()
 
     for elapsed in range(timeout_secs):
+        # 检查中止标志
+        if _insight_abort:
+            _log(f"⚠️ [{label}] 检测到中止请求，停止等待文件")
+            return False
+
         if path.exists() and path.stat().st_size > 0:
             _log(f"✓ {label} 已生成（等待 {elapsed}s），大小: {path.stat().st_size} 字节")
             return True
@@ -416,6 +449,11 @@ async def _wait_for_dir_non_empty(
     collected_indices: set = set()
 
     for elapsed in range(timeout_secs):
+        # 检查中止标志
+        if _insight_abort:
+            _log(f"⚠️ [{label}] 检测到中止请求，停止等待目录")
+            return False
+
         if path.exists():
             md_files = list(path.glob("*.md"))
             if md_files:
@@ -800,11 +838,17 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
         )).scalar_one_or_none()
 
         if existing:
-            # 旧版本标记为非最新
+            # 旧版本标记为非最新，同时重命名 slug（追加版本号）以释放唯一约束
+            # 例如：dos-patterns → dos-patterns-v1.0.0
             old_version = existing.version
             new_version = _bump_minor_version(old_version)
+            archived_slug = f"{slug_base}-v{old_version}"
             existing.is_latest = False
+            existing.slug = archived_slug          # 释放 slug_base 以供新版本使用
             db.add(existing)
+
+            # 先 flush 旧版本的 slug 变更，再插入新版本，避免唯一约束冲突
+            await db.flush()
 
             new_id = str(uuid.uuid4())
             new_entry = GoAttackPatternEntry(
@@ -815,18 +859,18 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
                 is_latest=True,
                 parent_id=existing.id,
                 title=e["title"],
-                slug=slug_base,
+                slug=slug_base,                    # 新版本继承规范 slug
                 pattern_type=e["pattern_type"],
                 risk_level=e["risk_level"],
                 tags=json.dumps(e["tags"], ensure_ascii=False),
                 summary=e.get("summary"),
                 content=e["content"],
-                is_system=False,    # 洞察生成的攻击模式允许用户编辑
+                is_system=False,
                 is_active=True,
             )
             db.add(new_entry)
             updated += 1
-            _log(f"更新攻击模式: slug={slug_base!r}, {old_version} → {new_version}")
+            _log(f"更新攻击模式: slug={slug_base!r}, {old_version}(→{archived_slug}) → {new_version}")
         else:
             new_id = str(uuid.uuid4())
             new_entry = GoAttackPatternEntry(
@@ -855,6 +899,7 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
         except Exception as exc:
             await db.rollback()
             _log(f"保存攻击模式失败（已回滚）: {exc}")
+            _log(f"  提示：若为唯一约束错误，请检查 slug 是否冲突")
             return 0, 0
 
     return created, updated
@@ -1046,8 +1091,12 @@ async def run_insight() -> dict[str, Any]:
         err = str(exc)
         _log(f"洞察执行失败: {err}")
         _log(traceback.format_exc())
-        _insight_status = "error"
-        _insight_last_error = err
+        if _insight_abort:
+            _insight_status = "aborted"
+            _insight_last_report = "洞察已被用户中止"
+        else:
+            _insight_status = "error"
+            _insight_last_error = err
         return {"success": False, "message": err, "vuln_count": 0, "attack_count": 0}
 
     finally:
@@ -1055,7 +1104,13 @@ async def run_insight() -> dict[str, Any]:
         if pid:
             _log(f"关闭专用 opencode 进程 PID={pid}")
             _stop_opencode_process(pid)
+        # 如果是主动中止，更新状态
+        if _insight_abort and _insight_status == "running":
+            _insight_status = "aborted"
+            _insight_last_report = "洞察已被用户中止"
+            _log("洞察任务已中止")
         _insight_running = False
         _insight_pid = None
         _insight_port = None
+        _insight_abort = False
         _log(f"===== 洞察任务结束 =====")
