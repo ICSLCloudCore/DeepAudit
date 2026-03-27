@@ -299,16 +299,16 @@ async def update_rule_set(
     if not rule_set:
         raise HTTPException(status_code=404, detail="规则集不存在")
     
-    if rule_set.is_system:
-        # 系统规则集只能修改启用状态
+    if rule_set.is_system and not current_user.is_superuser:
+        # 非管理员：系统规则集只能修改启用状态
         if rule_set_in.is_active is not None:
             rule_set.is_active = rule_set_in.is_active
         else:
-            raise HTTPException(status_code=403, detail="系统规则集不允许修改")
+            raise HTTPException(status_code=403, detail="系统规则集不允许修改，仅管理员可编辑")
+    elif not rule_set.is_system and rule_set.created_by != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="无权修改此规则集")
     else:
-        if rule_set.created_by != current_user.id:
-            raise HTTPException(status_code=403, detail="无权修改此规则集")
-        
+        # 管理员或规则集所有者：允许修改所有字段
         update_data = rule_set_in.dict(exclude_unset=True)
         for field, value in update_data.items():
             if field == "severity_weights" and value is not None:
@@ -381,10 +381,10 @@ async def delete_rule_set(
     if not rule_set:
         raise HTTPException(status_code=404, detail="规则集不存在")
     
-    if rule_set.is_system:
-        raise HTTPException(status_code=403, detail="系统规则集不允许删除")
+    if rule_set.is_system and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="系统规则集不允许删除，仅管理员可删除")
     
-    if rule_set.created_by != current_user.id:
+    if not rule_set.is_system and rule_set.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="无权删除此规则集")
     
     await db.delete(rule_set)
@@ -555,10 +555,10 @@ async def add_rule_to_set(
     if not rule_set:
         raise HTTPException(status_code=404, detail="规则集不存在")
     
-    if rule_set.is_system:
-        raise HTTPException(status_code=403, detail="系统规则集不允许添加规则")
+    if rule_set.is_system and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="系统规则集不允许添加规则，仅管理员可操作")
     
-    if rule_set.created_by != current_user.id:
+    if not rule_set.is_system and rule_set.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="无权修改此规则集")
     
     rule = AuditRule(
@@ -614,10 +614,10 @@ async def update_rule(
     if not rule_set:
         raise HTTPException(status_code=404, detail="规则集不存在")
     
-    if rule_set.is_system:
-        raise HTTPException(status_code=403, detail="系统规则集不允许修改规则")
+    if rule_set.is_system and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="系统规则集不允许修改规则，仅管理员可操作")
     
-    if rule_set.created_by != current_user.id:
+    if not rule_set.is_system and rule_set.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="无权修改此规则集")
     
     result = await db.execute(
@@ -672,10 +672,10 @@ async def delete_rule(
     if not rule_set:
         raise HTTPException(status_code=404, detail="规则集不存在")
     
-    if rule_set.is_system:
-        raise HTTPException(status_code=403, detail="系统规则集不允许删除规则")
+    if rule_set.is_system and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="系统规则集不允许删除规则，仅管理员可操作")
     
-    if rule_set.created_by != current_user.id:
+    if not rule_set.is_system and rule_set.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="无权修改此规则集")
     
     result = await db.execute(
