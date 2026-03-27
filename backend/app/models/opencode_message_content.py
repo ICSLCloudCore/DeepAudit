@@ -31,6 +31,16 @@ class OpenCodeMessageContent(Base):
     message_index = Column(Integer, nullable=False)
     content_type = Column(String, nullable=False)
     text_content = Column(Text, nullable=False)
+    opencode_message_id = Column(
+        String(255), nullable=True, index=True, doc="OpenCode Server 端的消息 ID (msg_xxx)"
+    )
+    audit_task_id = Column(
+        String(36),
+        ForeignKey("opencode_audit_tasks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        doc="关联的审计任务 ID",
+    )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

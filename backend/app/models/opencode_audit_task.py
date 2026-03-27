@@ -52,6 +52,9 @@ class OpenCodeAuditTask(Base):
         String(36), ForeignKey("prompt_templates.id"), nullable=True
     )
     prompt_content = Column(Text, nullable=True)
+    opencode_message_id = Column(
+        String(255), nullable=True, index=True, doc="OpenCode Server 端的消息 ID (msg_xxx)"
+    )
 
     # 任务配置
     audit_config = Column(JSON, nullable=True)

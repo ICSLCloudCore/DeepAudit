@@ -918,6 +918,9 @@ class OpenCodeSessionService:
 
             if message_id:
                 print(f"[OpenCode] Got message_id: {message_id}, starting background poll...")
+                # 保存 message_id 到 audit_task
+                audit_task.opencode_message_id = message_id
+                await self.db.commit()
                 await asyncio.sleep(3)
                 asyncio.create_task(
                     self._background_poll_result(
@@ -956,7 +959,7 @@ class OpenCodeSessionService:
         print(
             f"[OpenCode] Audit started successfully, session ID: {db_session.id}, task ID: {audit_task.id}"
         )
-        return db_session, server_status
+        return db_session, db_session.status
 
     async def poll_opencode_result_with_updates(
         self,
@@ -964,6 +967,7 @@ class OpenCodeSessionService:
         server_session_id: str,
         message_id: Optional[str],
         db_session_id: str,
+        audit_task_id: Optional[str],
         db: AsyncSession,
     ) -> bool:
         """
@@ -1015,6 +1019,8 @@ class OpenCodeSessionService:
                                                 message_index=record_index,
                                                 content_type=OpenCodeMessageContentType.RESPONSE,
                                                 text_content=part.get("text", ""),
+                                                opencode_message_id=message_id,
+                                                audit_task_id=audit_task_id,
                                             )
                                             db.add(message_content)
                                             await db.commit()
@@ -1031,6 +1037,8 @@ class OpenCodeSessionService:
                                                 message_index=record_index,
                                                 content_type=OpenCodeMessageContentType.REASONING,
                                                 text_content=part.get("text", ""),
+                                                opencode_message_id=message_id,
+                                                audit_task_id=audit_task_id,
                                             )
                                             db.add(message_content)
                                             await db.commit()
@@ -1080,7 +1088,12 @@ class OpenCodeSessionService:
                 self.set_current_session_id(db_session_id)
 
                 sign = await self.poll_opencode_result_with_updates(
-                    project, server_session_id, message_id, db_session_id, db_session_local
+                    project,
+                    server_session_id,
+                    message_id,
+                    db_session_id,
+                    audit_task_id,
+                    db_session_local,
                 )
                 print(f"[OpenCode] sign: {sign}")
 
