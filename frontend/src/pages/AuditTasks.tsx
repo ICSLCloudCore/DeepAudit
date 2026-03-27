@@ -736,7 +736,10 @@ export default function AuditTasks() {
             </Button>
           )}
           {activeTab === "agent" && (
-            <Button className="cyber-btn-primary h-10" onClick={() => navigate("/")}>
+            <Button className="cyber-btn-primary h-10" onClick={() => {
+              setDialogDefaultAuditMode("agent");
+              setShowCreateDialog(true);
+            }}>
               <Bot className="w-4 h-4 mr-2" />
               新建Agent审计
             </Button>
