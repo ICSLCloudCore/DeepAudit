@@ -48,6 +48,7 @@ import {
   type AuditRuleSetCreate,
   type AuditRuleCreate,
 } from '@/shared/api/rules';
+import { useAuth } from '@/shared/context/AuthContext';
 
 const CATEGORIES = [
   { value: 'security', label: '安全', icon: Shield, color: 'text-rose-400', bg: 'bg-rose-500/20' },
@@ -81,6 +82,8 @@ const RULE_TYPES = [
 ];
 
 export default function AuditRules() {
+  const { user } = useAuth();
+  const isAdmin = user?.is_superuser === true;
   const [ruleSets, setRuleSets] = useState<AuditRuleSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedSets, setExpandedSets] = useState<Set<string>>(new Set());
@@ -361,12 +364,12 @@ export default function AuditRules() {
                     <Button variant="ghost" size="icon" onClick={() => handleExport(ruleSet)} className="cyber-btn-ghost h-9 w-9">
                       <Download className="w-4 h-4" />
                     </Button>
-                    {!ruleSet.is_system && (
+                    {(!ruleSet.is_system || isAdmin) && (
                       <>
-                        <Button variant="ghost" size="icon" onClick={() => openEditRuleSetDialog(ruleSet)} className="cyber-btn-ghost h-9 w-9">
+                        <Button variant="ghost" size="icon" onClick={() => openEditRuleSetDialog(ruleSet)} className="cyber-btn-ghost h-9 w-9" title={ruleSet.is_system ? '管理员编辑系统规则集' : '编辑'}>
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRuleSet(ruleSet.id)} className="h-9 w-9 hover:bg-rose-500/20 hover:text-rose-400">
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRuleSet(ruleSet.id)} className="h-9 w-9 hover:bg-rose-500/20 hover:text-rose-400" title={ruleSet.is_system ? '管理员删除系统规则集' : '删除'}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </>
@@ -378,8 +381,8 @@ export default function AuditRules() {
               {/* Rules List */}
               {expandedSets.has(ruleSet.id) && (
                 <div className="p-6">
-                  {!ruleSet.is_system && (
-                    <Button variant="outline" size="sm" onClick={() => openAddRuleDialog(ruleSet)} className="mb-4 cyber-btn-outline h-8">
+                  {(!ruleSet.is_system || isAdmin) && (
+                    <Button variant="outline" size="sm" onClick={() => openAddRuleDialog(ruleSet)} className="mb-4 cyber-btn-outline h-8" title={ruleSet.is_system ? '管理员添加规则' : '添加规则'}>
                       <Plus className="w-4 h-4 mr-2" />
                       添加规则
                     </Button>
@@ -413,10 +416,10 @@ export default function AuditRules() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <Switch checked={rule.enabled} onCheckedChange={() => handleToggleRule(ruleSet.id, rule.id)} />
-                                {!ruleSet.is_system && (
+                                {(!ruleSet.is_system || isAdmin) && (
                                   <>
-                                    <Button variant="ghost" size="icon" onClick={() => openEditRuleDialog(ruleSet, rule)} className="cyber-btn-ghost h-8 w-8"><Edit className="w-4 h-4" /></Button>
-                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteRule(ruleSet.id, rule.id)} className="h-8 w-8 hover:bg-rose-500/20 hover:text-rose-400"><Trash2 className="w-4 h-4" /></Button>
+                                    <Button variant="ghost" size="icon" onClick={() => openEditRuleDialog(ruleSet, rule)} className="cyber-btn-ghost h-8 w-8" title={ruleSet.is_system ? '管理员编辑规则' : '编辑'}><Edit className="w-4 h-4" /></Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteRule(ruleSet.id, rule.id)} className="h-8 w-8 hover:bg-rose-500/20 hover:text-rose-400" title={ruleSet.is_system ? '管理员删除规则' : '删除'}><Trash2 className="w-4 h-4" /></Button>
                                   </>
                                 )}
                               </div>

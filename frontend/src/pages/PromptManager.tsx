@@ -43,6 +43,7 @@ import {
   type PromptTemplateCreate,
 } from '@/shared/api/prompts';
 import { TEST_CODE_SAMPLES, TEMPLATE_TEST_CODES } from './prompt-manager/testCodeSamples';
+import { useAuth } from '@/shared/context/AuthContext';
 
 const TEMPLATE_TYPES = [
   { value: 'system', label: '系统提示词' },
@@ -60,6 +61,8 @@ const getTemplateIcon = (type: string) => {
 };
 
 export default function PromptManager() {
+  const { user } = useAuth();
+  const isAdmin = user?.is_superuser === true;
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -323,12 +326,12 @@ export default function PromptManager() {
                       </Button>
                     </div>
                     <div className="flex gap-1">
-                      {!template.is_system && (
+                      {(!template.is_system || isAdmin) && (
                         <>
-                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(template)} className="cyber-btn-ghost h-8 w-8">
+                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(template)} className="cyber-btn-ghost h-8 w-8" title={template.is_system ? '管理员编辑系统模板' : '编辑'}>
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(template.id)} className="h-8 w-8 hover:bg-rose-500/20 hover:text-rose-400">
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(template.id)} className="h-8 w-8 hover:bg-rose-500/20 hover:text-rose-400" title={template.is_system ? '管理员删除系统模板' : '删除'}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </>
@@ -642,8 +645,8 @@ export default function PromptManager() {
               <Play className="w-4 h-4 mr-2" />
               测试
             </Button>
-            {!viewTemplate?.is_system && (
-              <Button variant="outline" onClick={() => { setShowViewDialog(false); if (viewTemplate) openEditDialog(viewTemplate); }} className="cyber-btn-outline">
+            {(!viewTemplate?.is_system || isAdmin) && (
+              <Button variant="outline" onClick={() => { setShowViewDialog(false); if (viewTemplate) openEditDialog(viewTemplate); }} className="cyber-btn-outline" title={viewTemplate?.is_system ? '管理员编辑系统模板' : '编辑'}>
                 <Edit className="w-4 h-4 mr-2" />
                 编辑
               </Button>

@@ -198,23 +198,21 @@ async def update_prompt_template(
     if not template:
         raise HTTPException(status_code=404, detail="模板不存在")
     
-    # 系统模板不允许修改核心内容，只能修改启用状态
-    if template.is_system:
+    if template.is_system and not current_user.is_superuser:
+        # 非管理员：系统模板只允许修改启用状态
         if template_in.is_active is not None:
             template.is_active = template_in.is_active
         else:
-            raise HTTPException(status_code=403, detail="系统模板不允许修改")
+            raise HTTPException(status_code=403, detail="系统模板不允许修改，仅管理员可编辑")
+    elif not template.is_system and template.created_by != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="无权修改此模板")
     else:
-        # 检查权限
-        if template.created_by != current_user.id:
-            raise HTTPException(status_code=403, detail="无权修改此模板")
-        
-        # 更新字段
+        # 管理员或模板所有者：允许修改所有字段
         update_data = template_in.dict(exclude_unset=True)
         for field, value in update_data.items():
             if field == "variables" and value is not None:
                 setattr(template, field, json.dumps(value))
-            elif field != "is_default":  # 不允许用户设置默认
+            elif field != "is_default":
                 setattr(template, field, value)
     
     await db.commit()
@@ -260,10 +258,10 @@ async def delete_prompt_template(
     if not template:
         raise HTTPException(status_code=404, detail="模板不存在")
     
-    if template.is_system:
-        raise HTTPException(status_code=403, detail="系统模板不允许删除")
+    if template.is_system and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="系统模板不允许删除，仅管理员可删除")
     
-    if template.created_by != current_user.id:
+    if not template.is_system and template.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="无权删除此模板")
     
     await db.delete(template)
