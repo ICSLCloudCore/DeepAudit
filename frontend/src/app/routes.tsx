@@ -7,6 +7,8 @@ import AuditTasks from "@/pages/AuditTasks";
 import TaskDetail from "@/pages/TaskDetail";
 import AgentAudit from "@/pages/AgentAudit";
 import OpenCodeAudit from "@/pages/OpenCodeAudit";
+import OpenCodeAuditVulnerabilities from "@/pages/OpenCodeAudit/vulnerabilities";
+import OpenCodeAuditVulnerabilityDetail from "@/pages/OpenCodeAudit/vulnerabilities/detail";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Account from "@/pages/Account";
 import AuditRules from "@/pages/AuditRules";
@@ -47,6 +49,18 @@ const routes: RouteConfig[] = [
     name: "OpenCode审计会话",
     path: "/opencode-audit/:sessionId",
     element: <OpenCodeAudit />,
+    visible: false,
+  },
+  {
+    name: "OpenCode审计漏洞列表",
+    path: "/tasks/opencode/:taskId/vulnerabilities",
+    element: <OpenCodeAuditVulnerabilities />,
+    visible: false,
+  },
+  {
+    name: "OpenCode审计漏洞详情",
+    path: "/tasks/opencode/:taskId/vulnerabilities/:vulnId",
+    element: <OpenCodeAuditVulnerabilityDetail />,
     visible: false,
   },
   {

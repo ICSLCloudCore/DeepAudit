@@ -31,6 +31,9 @@ class Project(Base):
     opencode_log_path = Column(String, nullable=True)  # Path to the log file
     opencode_started_at = Column(DateTime(timezone=True), nullable=True)
     opencode_current_session_id = Column(String, nullable=True)  # Current active session ID
+    opencode_active_session_id = Column(
+        String, nullable=True
+    )  # Active OpenCodeSession ID for server
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

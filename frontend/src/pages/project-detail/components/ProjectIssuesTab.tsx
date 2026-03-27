@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
   analyzing: "分析中",
   needs_review: "待审核",
   duplicate: "重复",
+  true_positive: "是问题",
 };
 
 function getStatusLabel(status?: string): string {
@@ -33,6 +34,7 @@ function getStatusBadgeClass(status?: string): string {
   switch (status) {
     case "resolved":
     case "fixed":
+    case "true_positive":
       return "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
     case "false_positive":
     case "wont_fix":
@@ -50,8 +52,9 @@ export function ProjectIssuesTab(props: {
   latestProblems: LatestProblem[];
   formatDate: (dateString: string) => string;
   onStatusChange?: (problem: LatestProblem, newStatus: string) => void;
+  onOpenStatusConfirm?: (problem: LatestProblem, newStatus: string) => void;
 }) {
-  const { hasAnyTasks, issuesSummary, loading, latestProblems, formatDate, onStatusChange } = props;
+  const { hasAnyTasks, issuesSummary, loading, latestProblems, formatDate, onStatusChange, onOpenStatusConfirm } = props;
 
   return (
     <>
@@ -62,7 +65,7 @@ export function ProjectIssuesTab(props: {
         </div>
         {hasAnyTasks && (
           <p className="text-sm text-muted-foreground font-mono">
-            已完成审计任务：{issuesSummary.completedAuditTasksCount} 次 / Agent审计：{issuesSummary.completedAgentTasksCount} 次
+            已完成审计任务：{issuesSummary.completedAuditTasksCount} 次 / Agent审计：{issuesSummary.completedAgentTasksCount} 次 / OpenCode审计：{(issuesSummary as any).completedOpenCodeTasksCount ?? 0} 次
             {issuesSummary.isLimited ? `（各仅展示最近 ${issuesSummary.maxTasks} 次）` : ""}
             ，共 {latestProblems.length} 条问题/漏洞
           </p>
@@ -104,23 +107,32 @@ export function ProjectIssuesTab(props: {
                           : ""}
                       </span>
                       <span>{issue.category || "-"}</span>
-                      {issue.task_created_at && (
-                        <span className="bg-muted px-2 py-0.5 rounded border border-border">
-                          {issue.kind === "agent" ? "Agent" : "Audit"} {issue.task_id?.slice(0, 8)} ·{" "}
-                          {formatDate(issue.task_created_at)}
-                        </span>
-                      )}
+                       {issue.task_created_at && (
+                         <span className="bg-muted px-2 py-0.5 rounded border border-border">
+                           {issue.kind === "agent" ? "Agent" : issue.kind === "opencode" ? "OpenCode" : "Audit"} {issue.task_id?.slice(0, 8)} ·{" "}
+                           {formatDate(issue.task_created_at)}
+                         </span>
+                       )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Link to={issue.kind === "agent" ? `/agent-audit/${issue.task_id}` : `/tasks/${issue.task_id}`}>
-                    <Button variant="outline" size="sm" className="cyber-btn-outline">
-                      <FileText className="w-4 h-4 mr-2" />
-                      查看任务
-                    </Button>
-                  </Link>
-                  {onStatusChange && (
+                  {issue.kind === "opencode" ? (
+                    <Link to={`/tasks/opencode/${issue.task_id}/vulnerabilities/${issue.id}`}>
+                      <Button variant="outline" size="sm" className="cyber-btn-outline">
+                        <FileText className="w-4 h-4 mr-2" />
+                        查看详情
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link to={issue.kind === "agent" ? `/agent-audit/${issue.task_id}` : `/tasks/${issue.task_id}`}>
+                      <Button variant="outline" size="sm" className="cyber-btn-outline">
+                        <FileText className="w-4 h-4 mr-2" />
+                        查看任务
+                      </Button>
+                    </Link>
+                  )}
+                  {onStatusChange && issue.kind !== "opencode" && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className={`text-xs font-mono border ${getStatusBadgeClass(issue.status)}`}>
@@ -145,6 +157,25 @@ export function ProjectIssuesTab(props: {
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                  )}
+                  {issue.kind === "opencode" && onOpenStatusConfirm && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className={`text-xs font-mono border ${getStatusBadgeClass(issue.status)}`}>
+                          {getStatusLabel(issue.status)}
+                          <ChevronDown className="w-3 h-3 ml-1" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onOpenStatusConfirm(issue, "true_positive")}>是问题</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onOpenStatusConfirm(issue, "false_positive")}>误报</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  {issue.kind === "opencode" && !onOpenStatusConfirm && (
+                    <Badge className={`text-xs font-mono border ${getStatusBadgeClass(issue.status)}`}>
+                      {getStatusLabel(issue.status)}
+                    </Badge>
                   )}
                   <Badge
                     className={`

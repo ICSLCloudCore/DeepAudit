@@ -166,7 +166,7 @@ export function useProjectProblems(params: {
         mapWithConcurrency(limitedAgentTasks, PROJECT_DETAIL_ISSUES_FETCH_CONCURRENCY, async (task) => {
           const findings = await fetchAgentFindings(task.id);
           const enriched: AggregatedAgentFinding[] = (findings || []).map((finding) => ({
-            ...finding,
+            ...(finding as any),
             task_created_at: task.created_at,
             task_completed_at: task.completed_at ?? null,
           }));

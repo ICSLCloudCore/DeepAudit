@@ -32,7 +32,7 @@ import { api } from "@/shared/config/database";
 import type { Project, AuditTask, CreateProjectForm, AuditIssue } from "@/shared/types";
 import type { AgentFinding, AgentTask } from "@/shared/api/agentTasks";
 import { getAgentTasks, updateAgentFinding } from "@/shared/api/agentTasks";
-import { getOpenCodeAuditTasks, type OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";
+import { getOpenCodeAuditTasks, getVulnerabilities, type OpenCodeAuditTask, type AuditVulnerability } from "@/shared/api/opencodeAuditTasks";
 import { apiClient } from "@/shared/api/serverClient";
 import { isRepositoryProject, getSourceTypeLabel, getRepositoryPlatformLabel } from "@/shared/utils/projectUtils";
 import { toast } from "sonner";
@@ -49,7 +49,8 @@ import { ProjectIssuesTab } from "@/pages/project-detail/components/ProjectIssue
 import { ProjectTasksTab } from "@/pages/project-detail/components/ProjectTasksTab";
 import { ProjectStatsCards, type ProjectCombinedStats } from "@/pages/project-detail/components/ProjectStatsCards";
 import { opencodeApi, type StartAuditWithPromptResponse } from "@/shared/api/opencode";
-import { OpenCodeAuditDialog } from "@/components/opencode/OpenCodeAuditDialog";
+import { IssueStatusConfirmDialog } from "@/pages/project-detail/components/IssueStatusConfirmDialog";
+import { updateVulnerability } from "@/shared/api/opencodeAuditTasks";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -61,7 +62,8 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
   const [showTerminalDialog, setShowTerminalDialog] = useState(false);
-  const [showOpenCodeAuditDialog, setShowOpenCodeAuditDialog] = useState(false);
+  const [showStatusConfirm, setShowStatusConfirm] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{ problem: LatestProblem; newStatus: string } | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<CreateProjectForm>({
     name: "",
@@ -75,6 +77,7 @@ export default function ProjectDetail() {
   const [activeTab, setActiveTab] = useState("overview");
   const [latestIssues, setLatestIssues] = useState<AggregatedAuditIssue[]>([]);
   const [latestFindings, setLatestFindings] = useState<AggregatedAgentFinding[]>([]);
+  const [latestOpenCodeVulns, setLatestOpenCodeVulns] = useState<any[]>([]);
   const [loadingIssues, setLoadingIssues] = useState(false);
   const [issuesSummary, setIssuesSummary] = useState<IssuesSummary>({
     completedAuditTasksCount: 0,
@@ -137,10 +140,10 @@ export default function ProjectDetail() {
   }
 
   useEffect(() => {
-    if (activeTab === 'issues' && (auditTasks.length > 0 || agentTasks.length > 0)) {
+    if (activeTab === 'issues' && (auditTasks.length > 0 || agentTasks.length > 0 || openCodeTasks.length > 0)) {
       loadLatestIssues();
     }
-  }, [activeTab, auditTasks, agentTasks]);
+  }, [activeTab, auditTasks, agentTasks, openCodeTasks]);
 
   const loadLatestIssues = async () => {
     const completedAuditTasks = auditTasks
@@ -149,20 +152,26 @@ export default function ProjectDetail() {
     const completedAgentTasks = agentTasks
       .filter((t: AgentTask) => t.status === 'completed')
       .sort((a: AgentTask, b: AgentTask) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const completedOpenCodeTasks = openCodeTasks
+      .filter((t) => t.status === 'completed')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     const limitedAuditTasks = completedAuditTasks.slice(0, ISSUES_MAX_TASKS);
     const limitedAgentTasks = completedAgentTasks.slice(0, ISSUES_MAX_TASKS);
+    const limitedOpenCodeTasks = completedOpenCodeTasks.slice(0, ISSUES_MAX_TASKS);
 
     setIssuesSummary({
       completedAuditTasksCount: completedAuditTasks.length,
       completedAgentTasksCount: completedAgentTasks.length,
+      completedOpenCodeTasksCount: completedOpenCodeTasks.length,
       fetchedAuditTasksCount: limitedAuditTasks.length,
       fetchedAgentTasksCount: limitedAgentTasks.length,
-      isLimited: completedAuditTasks.length > ISSUES_MAX_TASKS || completedAgentTasks.length > ISSUES_MAX_TASKS,
+      fetchedOpenCodeTasksCount: limitedOpenCodeTasks.length,
+      isLimited: completedAuditTasks.length > ISSUES_MAX_TASKS || completedAgentTasks.length > ISSUES_MAX_TASKS || completedOpenCodeTasks.length > ISSUES_MAX_TASKS,
       maxTasks: ISSUES_MAX_TASKS
     });
 
-    if (limitedAuditTasks.length === 0 && limitedAgentTasks.length === 0) {
+    if (limitedAuditTasks.length === 0 && limitedAgentTasks.length === 0 && limitedOpenCodeTasks.length === 0) {
       setLatestIssues([]);
       setLatestFindings([]);
       return;
@@ -170,7 +179,7 @@ export default function ProjectDetail() {
 
       setLoadingIssues(true);
       try {
-      const [issuesResults, findingsResults] = await Promise.all([
+      const [issuesResults, findingsResults, openCodeResults] = await Promise.all([
         mapWithConcurrency(limitedAuditTasks, ISSUES_FETCH_CONCURRENCY, async (task: AuditTask) => {
           const issues = await fetchAuditIssues(task.id);
           const enriched: AggregatedAuditIssue[] = (issues || []).map((issue) => ({
@@ -188,6 +197,15 @@ export default function ProjectDetail() {
             task_completed_at: task.completed_at
           }));
           return enriched;
+        }),
+        mapWithConcurrency(limitedOpenCodeTasks, ISSUES_FETCH_CONCURRENCY, async (task) => {
+          const response = await getVulnerabilities(task.id, { page_size: 1000 });
+          const enriched = (response.items || []).map((vuln) => ({
+            ...vuln,
+            task_created_at: task.created_at,
+            task_completed_at: task.completed_at
+          }));
+          return enriched;
         })
       ]);
 
@@ -197,6 +215,9 @@ export default function ProjectDetail() {
       const flatFindings = findingsResults
         .filter((r: PromiseSettledResult<AggregatedAgentFinding[]>): r is PromiseFulfilledResult<AggregatedAgentFinding[]> => r.status === 'fulfilled')
         .flatMap((r: PromiseFulfilledResult<AggregatedAgentFinding[]>) => r.value);
+      const flatOpenCodeVulns = openCodeResults
+        .filter((r: PromiseSettledResult<any[]>): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+        .flatMap((r: PromiseFulfilledResult<any[]>) => r.value);
 
       const severityRank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
       flatIssues.sort((a: AggregatedAuditIssue, b: AggregatedAuditIssue) => {
@@ -228,6 +249,7 @@ export default function ProjectDetail() {
         return taskCreatedAtB - taskCreatedAtA;
       });
       setLatestFindings(flatFindings);
+      setLatestOpenCodeVulns(flatOpenCodeVulns);
       } catch (error) {
         console.error('Failed to load issues:', error);
         toast.error("加载问题列表失败");
@@ -267,9 +289,9 @@ export default function ProjectDetail() {
 
     const normalizeSeverity = (s: unknown): LatestProblem['severity'] => {
       const v = String(s || '').toLowerCase();
-      if (v === 'critical') return 'critical';
-      if (v === 'high') return 'high';
-      if (v === 'medium') return 'medium';
+      if (v === 'critical' || v === '致命') return 'critical';
+      if (v === 'high' || v === '严重') return 'high';
+      if (v === 'medium' || v === '一般') return 'medium';
       return 'low';
     };
 
@@ -312,14 +334,30 @@ export default function ProjectDetail() {
         description: f.description,
         // 如果后端没给 file_path，尽量从 title 解析出来填到"文件"列
         file_path: f.file_path ?? parsed?.file_path ?? null,
-        line_number: ((f.line_start ?? parsed?.line_start ?? null) as any),
-        line_end: ((f.line_end ?? parsed?.line_end ?? null) as any),
+        line_number: (f.line_start ?? parsed?.line_start ?? null) as any,
+        line_end: (f.line_end ?? parsed?.line_end ?? null) as any,
         category: (f as any).vulnerability_type ?? null,
         status: f.status ?? null,
       };
     });
 
-    const merged = [...audit, ...agent];
+    const opencode: LatestProblem[] = latestOpenCodeVulns.map((vuln: any) => ({
+      kind: 'opencode',
+      id: vuln.id,
+      task_id: vuln.task_id,
+      task_created_at: vuln.task_created_at,
+      created_at: vuln.created_at,
+      severity: normalizeSeverity(vuln.severity),
+      title: vuln.vulnerability_title || '(未命名漏洞)',
+      description: vuln.vulnerability_essence ?? vuln.root_cause ?? null,
+      file_path: vuln.file_path ?? vuln.location ?? null,
+      line_number: vuln.line_start ?? null,
+      line_end: vuln.line_end ?? null,
+      category: vuln.cwe ?? null,
+      status: vuln.status ?? null,
+    }));
+
+    const merged = [...audit, ...agent, ...opencode];
     // 按时间倒序（最新在前），时间相同再按严重程度
     const severityRank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
     merged.sort((a, b) => {
@@ -336,7 +374,7 @@ export default function ProjectDetail() {
       return taskCreatedAtB - taskCreatedAtA;
     });
     return merged;
-  }, [latestIssues, latestFindings]);
+  }, [latestIssues, latestFindings, latestOpenCodeVulns]);
 
   const handleStatusChange = async (problem: LatestProblem, newStatus: string) => {
     try {
@@ -350,6 +388,30 @@ export default function ProjectDetail() {
     } catch (error) {
       console.error("Failed to update status:", error);
       toast.error("状态更新失败");
+    }
+  };
+
+  const handleOpenStatusConfirm = (problem: LatestProblem, newStatus: string) => {
+    setPendingStatusChange({ problem, newStatus });
+    setShowStatusConfirm(true);
+  };
+
+  const handleConfirmStatusChange = async (notes: string) => {
+    if (!pendingStatusChange) return;
+    try {
+      await updateVulnerability(
+        pendingStatusChange.problem.task_id,
+        pendingStatusChange.problem.id,
+        { status: pendingStatusChange.newStatus, notes }
+      );
+      toast.success("状态已更新");
+      await loadLatestIssues();
+    } catch (error) {
+      console.error("Failed to update status:", error);
+      toast.error("状态更新失败");
+    } finally {
+      setShowStatusConfirm(false);
+      setPendingStatusChange(null);
     }
   };
 
@@ -478,15 +540,7 @@ export default function ProjectDetail() {
     setShowCreateTaskDialog(true);
   };
 
-  const handleOpenCodeAudit = () => {
-    setShowOpenCodeAuditDialog(true);
-  };
 
-  const handleStartOpenCodeAudit = (response: StartAuditWithPromptResponse) => {
-    loadProjectData();
-    setShowOpenCodeAuditDialog(false);
-    navigate(`/opencode-audit/${response.session_id}`);
-  };
 
   const handleSaveSettings = async () => {
     if (!id) return;
@@ -624,10 +678,7 @@ export default function ProjectDetail() {
               启动审计
             </Button>
           </div> */}
-          <Button onClick={handleOpenCodeAudit} variant="outline" className="cyber-btn-outline">
-            <Terminal className="w-4 h-4 mr-2" />
-            OpenCode 审计
-          </Button>
+
           <Button variant="outline" onClick={handleOpenSettings} className="cyber-btn-outline">
             <Edit className="w-4 h-4 mr-2" />
             编辑
@@ -890,12 +941,13 @@ export default function ProjectDetail() {
 
         <TabsContent value="issues" className="flex flex-col gap-6 mt-6">
           <ProjectIssuesTab
-            hasAnyTasks={auditTasks.length > 0 || agentTasks.length > 0}
+            hasAnyTasks={auditTasks.length > 0 || agentTasks.length > 0 || openCodeTasks.length > 0}
             issuesSummary={issuesSummary}
             loading={loadingIssues}
             latestProblems={latestProblems}
             formatDate={formatDate}
             onStatusChange={handleStatusChange}
+            onOpenStatusConfirm={handleOpenStatusConfirm}
           />
         </TabsContent>
 
@@ -1060,12 +1112,15 @@ export default function ProjectDetail() {
         taskType="repository"
       />
 
-      {/* OpenCode审计对话框 */}
-      <OpenCodeAuditDialog
-        open={showOpenCodeAuditDialog}
-        projectId={id || ""}
-        onClose={() => setShowOpenCodeAuditDialog(false)}
-        onStart={handleStartOpenCodeAudit}
+
+
+      {/* 状态确认对话框 */}
+      <IssueStatusConfirmDialog
+        open={showStatusConfirm}
+        onOpenChange={setShowStatusConfirm}
+        problemTitle={pendingStatusChange?.problem.title || ""}
+        newStatus={pendingStatusChange?.newStatus || ""}
+        onConfirm={handleConfirmStatusChange}
       />
     </div>
   );

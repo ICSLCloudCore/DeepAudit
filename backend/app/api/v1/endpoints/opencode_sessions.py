@@ -18,6 +18,7 @@ from app.models.opencode_interaction import OpenCodeInteraction
 from app.models.opencode_message_content import OpenCodeMessageContent
 from app.models.prompt_template import PromptTemplate
 from app.models.project import Project
+from app.models.user import User
 from app.api.deps import get_current_user
 from app.schemas.opencode_session import (
     OpenCodeSessionCreate,
@@ -31,8 +32,10 @@ from app.schemas.opencode_session import (
     AvailablePromptItem,
     OpenCodeInteractionResponse,
     OpenCodeInteractionListResponse,
+    OpenCodeServerStatus,
 )
 from app.services.opencode_session_service import OpenCodeSessionService
+from app.models.opencode_audit_task import OpenCodeAuditTaskStatus
 
 router = APIRouter()
 
@@ -287,59 +290,125 @@ async def close_session(
 @router.get("/sessions/{session_id}/stream")
 async def session_stream(
     session_id: str,
-    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """获取会话的流式响应 - 直接从OpenCode Server获取原始消息数据"""
-    result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
-    session = result.scalar_one_or_none()
+    from app.db.session import async_session_factory
 
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    # 首先验证会话存在和权限
+    async with async_session_factory() as db:
+        result = await db.execute(select(OpenCodeSession).where(OpenCodeSession.id == session_id))
+        session = result.scalar_one_or_none()
 
-    result = await db.execute(select(Project).where(Project.id == session.project_id))
-    project = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    if project and project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+        result = await db.execute(select(Project).where(Project.id == session.project_id))
+        project = result.scalar_one_or_none()
+
+        if project and project.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
 
     async def event_generator():
         total_num = 0
-        while True:
-            query = (
-                select(OpenCodeMessageContent)
-                .where(
-                    and_(
-                        OpenCodeMessageContent.session_id == session_id
-                    )
-                )
-                .order_by(OpenCodeMessageContent.message_index)
-            )
-            result = await db.execute(query)
-            messages = result.scalars().all()
-            for msg in messages[total_num:]:
-                yield {
-                    "event": "message",
-                    "data": json.dumps({
-                        "content_type": msg.content_type,
-                        "text_content": msg.text_content,
-                        "message_index": msg.message_index
-                    })
-                }
-                await asyncio.sleep(0.5)
-            total_num = len(messages)
-            # 检查会话是否结束 不考虑另一边存储状态的时间差
-            await db.refresh(session)
-            if session.status in [OpenCodeSessionStatus.CLOSED, OpenCodeSessionStatus.ERROR]:
-                yield {
-                    "event": "done",
-                    "data": json.dumps({
-                        "content_type": session.status
-                    })
-                }
-                break
+        should_continue = True
 
-            await asyncio.sleep(1)
+        while should_continue:
+            # 用于存储从数据库获取的数据
+            current_session_data = None
+            messages_data = []
+
+            try:
+                # 1. 先在数据库会话中获取所有需要的数据
+                async with async_session_factory() as db:
+                    # 重新获取会话状态
+                    result = await db.execute(
+                        select(OpenCodeSession).where(OpenCodeSession.id == session_id)
+                    )
+                    current_session = result.scalar_one_or_none()
+
+                    if not current_session:
+                        should_continue = False
+                        break
+
+                    # 获取消息
+                    query = (
+                        select(OpenCodeMessageContent)
+                        .where(and_(OpenCodeMessageContent.session_id == session_id))
+                        .order_by(OpenCodeMessageContent.message_index)
+                    )
+                    result = await db.execute(query)
+                    messages = result.scalars().all()
+
+                    # 将数据复制到局部变量，以便在会话外部使用
+                    current_session_data = {"status": current_session.status}
+                    messages_data = [
+                        {
+                            "content_type": msg.content_type,
+                            "text_content": msg.text_content,
+                            "message_index": msg.message_index,
+                        }
+                        for msg in messages
+                    ]
+
+                # 2. 现在在数据库会话外部处理数据和yield
+                # 发送新消息
+                for msg in messages_data[total_num:]:
+                    yield {
+                        "event": "message",
+                        "data": json.dumps(msg),
+                    }
+                    try:
+                        await asyncio.sleep(0.5)
+                    except asyncio.CancelledError:
+                        print(
+                            f"[SSE] Client disconnected during message send for session {session_id}"
+                        )
+                        should_continue = False
+                        break
+
+                if not should_continue:
+                    break
+
+                total_num = len(messages_data)
+
+                # 检查会话是否结束
+                if current_session_data and current_session_data["status"] in [
+                    OpenCodeSessionStatus.CLOSED,
+                    OpenCodeSessionStatus.ERROR,
+                ]:
+                    yield {
+                        "event": "done",
+                        "data": json.dumps({"content_type": current_session_data["status"]}),
+                    }
+                    should_continue = False
+                    break
+
+                # 3. 在数据库会话外部等待
+                if should_continue:
+                    try:
+                        await asyncio.sleep(1)
+                    except asyncio.CancelledError:
+                        print(f"[SSE] Client disconnected from stream for session {session_id}")
+                        should_continue = False
+                        break
+
+            except asyncio.CancelledError:
+                print(f"[SSE] Client disconnected from stream for session {session_id}")
+                should_continue = False
+                break
+            except Exception as e:
+                # 记录错误但不抛出，避免影响连接池
+                print(f"[SSE] Error in stream for session {session_id}: {e}")
+                import traceback
+
+                traceback.print_exc()
+                # 出错时等待一下再继续，避免快速重试
+                try:
+                    await asyncio.sleep(2)
+                except asyncio.CancelledError:
+                    should_continue = False
+                    break
 
     return EventSourceResponse(event_generator())
 
@@ -505,3 +574,95 @@ async def get_session_interactions(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_id}/start")
+async def start_opencode(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Start opencode serve for a project (using new implementation)"""
+    # Get project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check permissions
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+
+    service = OpenCodeSessionService(db)
+
+    # Check if already running
+    server_status = await service.check_opencode_server_status(project)
+    if server_status == OpenCodeServerStatus.RUNNING:
+        return {
+            "success": True,
+            "message": "OpenCode serve is already running",
+            "pid": project.opencode_pid,
+            "port": project.opencode_port,
+        }
+
+    # Start server
+    if server_status == OpenCodeServerStatus.STOPPED or server_status == OpenCodeServerStatus.ERROR:
+        # 使用 create_full_opencode_session 创建完整会话（包含所有逻辑）
+        db_session, server_status = await service.create_full_opencode_session(
+            project_id,
+            project,
+            current_user,
+            prompt_template_id=None,
+            prompt_content=None,
+        )
+
+        if server_status == OpenCodeServerStatus.RUNNING:
+            return {
+                "success": True,
+                "message": "OpenCode serve started successfully",
+                "pid": project.opencode_pid,
+                "port": project.opencode_port,
+                "session_id": db_session.id,
+            }
+        elif server_status == OpenCodeServerStatus.STARTING:
+            return {
+                "success": True,
+                "message": "OpenCode serve is starting",
+                "session_id": db_session.id,
+            }
+        else:
+            # Update session status to error
+            db_session.status = OpenCodeSessionStatus.ERROR
+            await db.commit()
+            raise HTTPException(status_code=500, detail="Failed to start OpenCode serve")
+
+    return {"success": True, "message": "OpenCode serve status: " + server_status}
+
+
+@router.post("/projects/{project_id}/stop")
+async def stop_opencode(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Stop opencode serve for a project (using new implementation)"""
+    # Get project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check permissions
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+
+    service = OpenCodeSessionService(db)
+    success = await service.stop_opencode_server(project)
+
+    if success:
+        return {"success": True, "message": "OpenCode serve stopped"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to stop OpenCode serve")
