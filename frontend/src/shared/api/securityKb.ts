@@ -371,7 +371,7 @@ export interface InsightMessage {
 
 export interface InsightRunStatus {
   running: boolean;
-  status: 'idle' | 'running' | 'success' | 'error';
+  status: 'idle' | 'running' | 'success' | 'error' | 'aborted';
   pid: number | null;
   port: string | null;
   current_step: string;
@@ -400,6 +400,11 @@ export async function runInsightNow(): Promise<{ success: boolean; message: stri
 
 export async function getInsightRunStatus(): Promise<InsightRunStatus> {
   const response = await apiClient.get('/security-kb/insight/status');
+  return response.data;
+}
+
+export async function abortInsightRun(): Promise<{ success: boolean; message: string }> {
+  const response = await apiClient.post('/security-kb/insight/abort');
   return response.data;
 }
 

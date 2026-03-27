@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
   Loader2, Settings2, Rss, Clock, ToggleLeft, ToggleRight,
-  CheckCircle2, CircleDashed, Calendar, RefreshCw, Play,
+  CheckCircle2, CircleDashed, Calendar, RefreshCw, Play, Square,
   FolderOpen, AlertTriangle, CheckCircle, Terminal, MessageSquare,
   ChevronDown, ChevronUp,
 } from 'lucide-react';
@@ -32,6 +32,7 @@ import {
   updateInsightConfig,
   runInsightNow,
   getInsightRunStatus,
+  abortInsightRun,
 } from '@/shared/api/securityKb';
 
 interface Props {
@@ -51,6 +52,7 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const [aborting, setAborting] = useState(false);
 
   const [enabled, setEnabled] = useState(false);
   const [intervalHours, setIntervalHours] = useState(24);
@@ -198,6 +200,22 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
     } catch {
       toast.error('启动洞察失败');
       setRunning(false);
+    }
+  };
+
+  const handleAbort = async () => {
+    setAborting(true);
+    try {
+      const res = await abortInsightRun();
+      if (res.success) {
+        toast.success(res.message);
+      } else {
+        toast.error(res.message);
+      }
+    } catch {
+      toast.error('中止请求发送失败');
+    } finally {
+      setAborting(false);
     }
   };
 
@@ -451,19 +469,36 @@ export default function InsightConfigDialog({ open, onClose, onSaved }: Props) {
 
         {/* Footer */}
         <DialogFooter className="flex-shrink-0 flex items-center justify-between gap-3 px-6 py-4 bg-muted border-t border-border">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleRunNow}
-            disabled={running || loading || saving}
-            className="cyber-btn-outline gap-2"
-          >
-            {running
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <Play className="w-4 h-4" />
-            }
-            {running ? '洞察中...' : '立即执行洞察'}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleRunNow}
+              disabled={running || loading || saving}
+              className="cyber-btn-outline gap-2"
+            >
+              {running
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Play className="w-4 h-4" />
+              }
+              {running ? '洞察中...' : '立即执行洞察'}
+            </Button>
+            {running && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleAbort}
+                disabled={aborting}
+                className="gap-2 border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500/60"
+              >
+                {aborting
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Square className="w-4 h-4" />
+                }
+                {aborting ? '中止中...' : '中止洞察'}
+              </Button>
+            )}
+          </div>
           <div className="flex gap-3">
             <Button type="button" variant="outline" onClick={() => { stopPolling(); onClose(); }} disabled={saving} className="cyber-btn-outline">
               取消
@@ -500,15 +535,19 @@ function InsightStatusPanel({ runStatus }: { runStatus: InsightRunStatus }) {
     ? 'border-primary/40 bg-primary/5'
     : runStatus.status === 'error'
       ? 'border-red-500/40 bg-red-500/5'
-      : runStatus.status === 'success'
-        ? 'border-emerald-500/40 bg-emerald-500/5'
-        : '';
+      : runStatus.status === 'aborted'
+        ? 'border-yellow-500/40 bg-yellow-500/5'
+        : runStatus.status === 'success'
+          ? 'border-emerald-500/40 bg-emerald-500/5'
+          : '';
 
   const statusIcon = runStatus.running
     ? <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
     : runStatus.status === 'error'
       ? <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-      : <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />;
+      : runStatus.status === 'aborted'
+        ? <Square className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+        : <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />;
 
   return (
     <div className="space-y-2">
@@ -520,6 +559,7 @@ function InsightStatusPanel({ runStatus }: { runStatus: InsightRunStatus }) {
             <p className="text-xs font-mono font-bold text-foreground">
               {runStatus.running ? runStatus.current_step || '洞察进行中...' :
                runStatus.status === 'error' ? '洞察失败' :
+               runStatus.status === 'aborted' ? '洞察已中止' :
                runStatus.status === 'success' ? '洞察完成' : ''}
             </p>
             {runStatus.pid && runStatus.running && (

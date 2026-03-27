@@ -1058,6 +1058,15 @@ async def get_insight_run_status(
     return get_insight_status()
 
 
+@router.post("/insight/abort")
+async def abort_insight_run(
+    current_user: Any = Depends(deps.get_current_user),
+) -> Any:
+    """中止当前正在运行的洞察任务"""
+    from app.services.insight_runner_service import abort_insight
+    return abort_insight()
+
+
 # ─── 业务知识库路由 ──────────────────────────────────────────────────────────
 
 business_kb_router = APIRouter(prefix="/business-kb")
