@@ -800,11 +800,17 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
         )).scalar_one_or_none()
 
         if existing:
-            # 旧版本标记为非最新
+            # 旧版本标记为非最新，同时重命名 slug（追加版本号）以释放唯一约束
+            # 例如：dos-patterns → dos-patterns-v1.0.0
             old_version = existing.version
             new_version = _bump_minor_version(old_version)
+            archived_slug = f"{slug_base}-v{old_version}"
             existing.is_latest = False
+            existing.slug = archived_slug          # 释放 slug_base 以供新版本使用
             db.add(existing)
+
+            # 先 flush 旧版本的 slug 变更，再插入新版本，避免唯一约束冲突
+            await db.flush()
 
             new_id = str(uuid.uuid4())
             new_entry = GoAttackPatternEntry(
@@ -815,18 +821,18 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
                 is_latest=True,
                 parent_id=existing.id,
                 title=e["title"],
-                slug=slug_base,
+                slug=slug_base,                    # 新版本继承规范 slug
                 pattern_type=e["pattern_type"],
                 risk_level=e["risk_level"],
                 tags=json.dumps(e["tags"], ensure_ascii=False),
                 summary=e.get("summary"),
                 content=e["content"],
-                is_system=False,    # 洞察生成的攻击模式允许用户编辑
+                is_system=False,
                 is_active=True,
             )
             db.add(new_entry)
             updated += 1
-            _log(f"更新攻击模式: slug={slug_base!r}, {old_version} → {new_version}")
+            _log(f"更新攻击模式: slug={slug_base!r}, {old_version}(→{archived_slug}) → {new_version}")
         else:
             new_id = str(uuid.uuid4())
             new_entry = GoAttackPatternEntry(
@@ -855,6 +861,7 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
         except Exception as exc:
             await db.rollback()
             _log(f"保存攻击模式失败（已回滚）: {exc}")
+            _log(f"  提示：若为唯一约束错误，请检查 slug 是否冲突")
             return 0, 0
 
     return created, updated
