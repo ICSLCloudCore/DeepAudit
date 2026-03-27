@@ -885,17 +885,22 @@ class OpenCodeSessionService:
             prompt_template_id, prompt_content, variables
         )
 
+        print(f"[OpenCode] final prompt: {final_prompt_content}")
+
         # 检查是否有活跃的 OpenCodeSession
         db_session = await self.get_active_session(project)
         server_session_id = None
+        server_status = OpenCodeServerStatus.RUNNING
 
         if db_session:
             # 复用现有 session
             print(f"[OpenCode] Reusing existing active session: {db_session.id}")
             server_session_id = db_session.opencode_server_session_id
+            # 检查 server 状态
+            server_status = await self.check_opencode_server_status(project)
         else:
             # 创建新的完整 OpenCodeSession（包含 server session）
-            db_session, _ = await self.create_full_opencode_session(
+            db_session, server_status = await self.create_full_opencode_session(
                 project_id, project, current_user, prompt_template_id, final_prompt_content
             )
             server_session_id = db_session.opencode_server_session_id
@@ -959,7 +964,7 @@ class OpenCodeSessionService:
         print(
             f"[OpenCode] Audit started successfully, session ID: {db_session.id}, task ID: {audit_task.id}"
         )
-        return db_session, OpenCodeServerStatus.RUNNING
+        return db_session, server_status
 
     async def poll_opencode_result_with_updates(
         self,
