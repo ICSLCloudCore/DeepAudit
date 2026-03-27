@@ -982,7 +982,7 @@ class OpenCodeSessionService:
         print(f"[OpenCode] Polling for session: {server_session_id}")
         print(f"[OpenCode] Polling for message_id: {message_id}")
 
-        max_polls = 3600  # 1 hour with 1s interval
+        max_polls = 10800  # 3 hour with 1s interval
         poll_interval = 1
         record_index = 1
         same_time = 1
