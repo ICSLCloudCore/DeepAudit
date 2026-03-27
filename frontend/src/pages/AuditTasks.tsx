@@ -57,6 +57,7 @@ export default function AuditTasks() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [dialogDefaultAuditMode, setDialogDefaultAuditMode] = useState<"fast" | "agent" | "opencode">("opencode");
   const [cancellingTaskId, setCancellingTaskId] = useState<string | null>(null);
   const [showTerminal, setShowTerminal] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
@@ -726,7 +727,10 @@ export default function AuditTasks() {
             />
           </div>
           {activeTab === "regular" && (
-            <Button className="cyber-btn-primary h-10" onClick={() => setShowCreateDialog(true)}>
+            <Button className="cyber-btn-primary h-10" onClick={() => {
+              setDialogDefaultAuditMode("fast");
+              setShowCreateDialog(true);
+            }}>
               <Plus className="w-4 h-4 mr-2" />
               新建任务
             </Button>
@@ -735,6 +739,15 @@ export default function AuditTasks() {
             <Button className="cyber-btn-primary h-10" onClick={() => navigate("/")}>
               <Bot className="w-4 h-4 mr-2" />
               新建Agent审计
+            </Button>
+          )}
+          {activeTab === "opencode" && (
+            <Button className="cyber-btn-primary h-10" onClick={() => {
+              setDialogDefaultAuditMode("opencode");
+              setShowCreateDialog(true);
+            }}>
+              <Code2 className="w-4 h-4 mr-2" />
+              新建OpenCode审计
             </Button>
           )}
           <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
@@ -1282,6 +1295,7 @@ export default function AuditTasks() {
         onOpenChange={setShowCreateDialog}
         onTaskCreated={loadTasks}
         onFastScanStarted={handleFastScanStarted}
+        defaultAuditMode={dialogDefaultAuditMode}
       />
 
       {/* Terminal Progress Dialog for Fast Scan */}

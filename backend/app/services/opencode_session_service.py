@@ -959,7 +959,7 @@ class OpenCodeSessionService:
         print(
             f"[OpenCode] Audit started successfully, session ID: {db_session.id}, task ID: {audit_task.id}"
         )
-        return db_session, db_session.status
+        return db_session, OpenCodeServerStatus.RUNNING
 
     async def poll_opencode_result_with_updates(
         self,

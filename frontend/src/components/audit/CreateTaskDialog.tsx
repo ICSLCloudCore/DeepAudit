@@ -81,6 +81,7 @@ interface CreateTaskDialogProps {
   onTaskCreated: () => void;
   onFastScanStarted?: (taskId: string) => void;
   preselectedProjectId?: string;
+  defaultAuditMode?: AuditMode;
 }
 
 const DEFAULT_EXCLUDES = [
@@ -97,6 +98,7 @@ export default function CreateTaskDialog({
   onTaskCreated,
   onFastScanStarted,
   preselectedProjectId,
+  defaultAuditMode = "opencode",
 }: CreateTaskDialogProps) {
   const navigate = useNavigate();
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -111,7 +113,7 @@ export default function CreateTaskDialog({
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const [auditMode, setAuditMode] = useState<AuditMode>("opencode");
+  const [auditMode, setAuditMode] = useState<AuditMode>(defaultAuditMode);
 
   const [ruleSets, setRuleSets] = useState<AuditRuleSet[]>([]);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
@@ -225,6 +227,13 @@ export default function CreateTaskDialog({
 
     loadBranches();
   }, [selectedProjectId, projects]);
+
+  // 当对话框打开时，重置 auditMode
+  useEffect(() => {
+    if (open) {
+      setAuditMode(defaultAuditMode);
+    }
+  }, [open, defaultAuditMode]);
 
   const filteredProjects = useMemo(() => {
     if (!searchTerm) return projects;

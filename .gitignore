@@ -193,3 +193,4 @@ backend/data/vector_db/
 backend/uv.lock
 __init__.py
 backend/uploads
+frontend/src/pages/OpenCodeAudit/nul
