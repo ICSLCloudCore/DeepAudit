@@ -974,8 +974,7 @@ class OpenCodeSessionService:
         server_session_id: str,
         message_id: Optional[str],
         db_session_id: str,
-        audit_task_id: Optional[str],
-        db: AsyncSession,
+        audit_task_id: Optional[str]
     ) -> bool:
         """
         轮询OpenCode服务器获取结果
@@ -995,6 +994,25 @@ class OpenCodeSessionService:
 
         url = self.get_opencode_server_url(project)
         message_url = f"{url}/session/{server_session_id}/message"
+
+        async def save_data_to_database(msg_index: int, msg_type: str, msg_content: str) -> None:
+            async with AsyncSessionLocal() as db_session_local:
+                try:
+                    message_content = OpenCodeMessageContent(
+                        session_id=db_session_id,
+                        message_index=msg_index,
+                        content_type=msg_type,
+                        text_content=msg_content,
+                        opencode_message_id=message_id,
+                        audit_task_id=audit_task_id,
+                    )
+                    db_session_local.add(message_content)
+                    await db_session_local.commit()
+                except Exception as e:
+                    logger.info(
+                        f"[OpenCode] Failed to save response content: {e}"
+                    )
+                    await db_session_local.rollback()
 
         for poll_count in range(max_polls):
             try:
@@ -1019,41 +1037,9 @@ class OpenCodeSessionService:
                                 for part in item.get("parts", []):
                                     part_sum += 1
                                     if (part_type := part.get("type")) == "text":
-                                        # Save to database
-                                        try:
-                                            message_content = OpenCodeMessageContent(
-                                                session_id=db_session_id,
-                                                message_index=record_index,
-                                                content_type=OpenCodeMessageContentType.RESPONSE,
-                                                text_content=part.get("text", ""),
-                                                opencode_message_id=message_id,
-                                                audit_task_id=audit_task_id,
-                                            )
-                                            db.add(message_content)
-                                            await db.commit()
-                                        except Exception as e:
-                                            logger.info(
-                                                f"[OpenCode] Failed to save response content: {e}"
-                                            )
-                                            await db.rollback()
+                                        await save_data_to_database(record_index, OpenCodeMessageContentType.RESPONSE, part.get("text", ""))
                                     elif part_type == "reasoning":
-                                        # Save to database
-                                        try:
-                                            message_content = OpenCodeMessageContent(
-                                                session_id=db_session_id,
-                                                message_index=record_index,
-                                                content_type=OpenCodeMessageContentType.REASONING,
-                                                text_content=part.get("text", ""),
-                                                opencode_message_id=message_id,
-                                                audit_task_id=audit_task_id,
-                                            )
-                                            db.add(message_content)
-                                            await db.commit()
-                                        except Exception as e:
-                                            logger.info(
-                                                f"[OpenCode] Failed to save reasoning content: {e}"
-                                            )
-                                            await db.rollback()
+                                        await save_data_to_database(record_index, OpenCodeMessageContentType.REASONING, part.get("text", ""))
                                 if part_sum == 2:
                                     return True
                                 # 索引往前推
@@ -1099,8 +1085,7 @@ class OpenCodeSessionService:
                     server_session_id,
                     message_id,
                     db_session_id,
-                    audit_task_id,
-                    db_session_local,
+                    audit_task_id
                 )
                 logger.info(f"[OpenCode] sign: {sign}")
 
