@@ -10,7 +10,7 @@ from sqlalchemy import select, and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import asyncio
-import httpx
+from loguru import logger
 
 from app.db.session import get_db
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
@@ -361,7 +361,7 @@ async def session_stream(
                     try:
                         await asyncio.sleep(0.5)
                     except asyncio.CancelledError:
-                        print(
+                        logger.error(
                             f"[SSE] Client disconnected during message send for session {session_id}"
                         )
                         should_continue = False
@@ -389,17 +389,17 @@ async def session_stream(
                     try:
                         await asyncio.sleep(1)
                     except asyncio.CancelledError:
-                        print(f"[SSE] Client disconnected from stream for session {session_id}")
+                        logger.error(f"[SSE] Client disconnected from stream for session {session_id}")
                         should_continue = False
                         break
 
             except asyncio.CancelledError:
-                print(f"[SSE] Client disconnected from stream for session {session_id}")
+                logger.error(f"[SSE] Client disconnected from stream for session {session_id}")
                 should_continue = False
                 break
             except Exception as e:
                 # 记录错误但不抛出，避免影响连接池
-                print(f"[SSE] Error in stream for session {session_id}: {e}")
+                logger.error(f"[SSE] Error in stream for session {session_id}: {e}")
                 import traceback
 
                 traceback.print_exc()
