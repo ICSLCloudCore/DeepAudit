@@ -16,6 +16,8 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
+
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +39,7 @@ from app.db.session import AsyncSessionLocal
 def ensure_dir_exists(path: str):
     """确保目录存在"""
     os.makedirs(path, exist_ok=True)
-    print(f"[OpenCode] Ensured directory exists: {path}")
+    logger.info(f"[OpenCode] Ensured directory exists: {path}")
 
 
 async def log_opencode_interaction_to_db(
@@ -78,7 +80,7 @@ async def log_opencode_interaction_to_db(
         await db.refresh(interaction)
         return interaction
     except Exception as e:
-        print(f"[OpenCode] Failed to log interaction to DB: {e}")
+        logger.info(f"[OpenCode] Failed to log interaction to DB: {e}")
         await db.rollback()
         return None
 
@@ -87,7 +89,7 @@ def log_opencode_interaction(direction: str, endpoint: str, data: Any = None):
     """记录OpenCode Server交互日志"""
     timestamp = datetime.utcnow().isoformat()
     log_entry = {"timestamp": timestamp, "direction": direction, "endpoint": endpoint, "data": data}
-    print(
+    logger.info(
         f"[OpenCode] {direction.upper()} {endpoint}: {json.dumps(data, default=str) if data else 'None'}"
     )
 
@@ -130,8 +132,8 @@ class OpenCodeSessionService:
             response_time = datetime.utcnow()
             duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
-            print(f"[OpenCode] Response status: {response.status_code}")
-            print(f"[OpenCode] Response content: {response.text[:500]}")
+            logger.info(f"[OpenCode] Response status: {response.status_code}")
+            logger.info(f"[OpenCode] Response content: {response.text[:500]}")
 
             if self._current_session_id:
                 if response.status_code in [200, 202, 204]:
@@ -194,8 +196,8 @@ class OpenCodeSessionService:
             return response, None
 
         except Exception as e:
-            print(f"[OpenCode] Request exception: {e}")
-            print(f"[OpenCode] Request traceback: {traceback.format_exc()}")
+            logger.info(f"[OpenCode] Request exception: {e}")
+            logger.info(f"[OpenCode] Request traceback: {traceback.format_exc()}")
 
             log_opencode_interaction("error", endpoint, {"error": str(e)})
 
@@ -225,17 +227,17 @@ class OpenCodeSessionService:
         """获取OpenCode Server的URL"""
         if project.opencode_port:
             url = f"http://127.0.0.1:{project.opencode_port}"
-            print(f"[OpenCode] Using OpenCode Server URL: {url}")
+            logger.info(f"[OpenCode] Using OpenCode Server URL: {url}")
             return url
         url = "http://127.0.0.1:4096"
-        print(f"[OpenCode] Using default OpenCode Server URL: {url}")
+        logger.info(f"[OpenCode] Using default OpenCode Server URL: {url}")
         return url
 
     async def check_opencode_server_health(
         self, project: Project, db_session_id: Optional[str] = None
     ) -> bool:
         """检查OpenCode Server健康状态"""
-        print(f"[OpenCode] Checking OpenCode Server health...")
+        logger.info(f"[OpenCode] Checking OpenCode Server health...")
         request_time = datetime.utcnow()
         try:
             url = self.get_opencode_server_url(project)
@@ -265,7 +267,7 @@ class OpenCodeSessionService:
                         )
 
                     is_healthy = data.get("healthy", False)
-                    print(f"[OpenCode] Server healthy: {is_healthy}")
+                    logger.info(f"[OpenCode] Server healthy: {is_healthy}")
                     return is_healthy
                 else:
                     log_opencode_interaction(
@@ -290,7 +292,7 @@ class OpenCodeSessionService:
 
                     return False
         except Exception as e:
-            print(f"[OpenCode] Health check exception: {e}")
+            logger.info(f"[OpenCode] Health check exception: {e}")
 
             if db_session_id:
                 response_time = datetime.utcnow()
@@ -317,32 +319,32 @@ class OpenCodeSessionService:
         """
         检查OpenCode服务器状态
         """
-        print(f"[OpenCode] Checking server status for project {project.id}")
-        print(f"[OpenCode] Current opencode_pid: {project.opencode_pid}")
-        print(f"[OpenCode] Current opencode_port: {project.opencode_port}")
+        logger.info(f"[OpenCode] Checking server status for project {project.id}")
+        logger.info(f"[OpenCode] Current opencode_pid: {project.opencode_pid}")
+        logger.info(f"[OpenCode] Current opencode_port: {project.opencode_port}")
 
         if not project.opencode_pid:
-            print(f"[OpenCode] No PID found, server is stopped")
+            logger.info(f"[OpenCode] No PID found, server is stopped")
             return OpenCodeServerStatus.STOPPED
 
         try:
             is_healthy = await self.check_opencode_server_health(project)
             if is_healthy:
-                print(f"[OpenCode] PID {project.opencode_pid} is running and healthy")
+                logger.info(f"[OpenCode] PID {project.opencode_pid} is running and healthy")
                 return OpenCodeServerStatus.RUNNING
             else:
-                print(f"[OpenCode] PID {project.opencode_pid} is running but not responding")
+                logger.info(f"[OpenCode] PID {project.opencode_pid} is running but not responding")
                 return OpenCodeServerStatus.ERROR
 
         except ValueError as e:
-            print(f"[OpenCode] Invalid PID format: {e}")
+            logger.info(f"[OpenCode] Invalid PID format: {e}")
             return OpenCodeServerStatus.ERROR
         except OSError as e:
-            print(f"[OpenCode] PID {project.opencode_pid} is not running: {e}")
+            logger.info(f"[OpenCode] PID {project.opencode_pid} is not running: {e}")
             return OpenCodeServerStatus.STOPPED
         except Exception as e:
-            print(f"[OpenCode] Error checking server status: {e}")
-            print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+            logger.info(f"[OpenCode] Error checking server status: {e}")
+            logger.info(f"[OpenCode] Error traceback: {traceback.format_exc()}")
             return OpenCodeServerStatus.ERROR
 
     async def get_active_session(self, project: Project) -> Optional[OpenCodeSession]:
@@ -369,16 +371,16 @@ class OpenCodeSessionService:
     async def start_opencode_server(
         self, project: Project, current_user_id: str, opencode_session_id: str
     ) -> OpenCodeServerStatus:
-        print("[OpenCode] run start_opencode_server")
+        logger.info("[OpenCode] run start_opencode_server")
 
         """
         启动OpenCode服务器 - 获取真实PID
         """
-        print(f"[OpenCode] Starting OpenCode server for project {project.id}")
-        print(f"[OpenCode] Project source type: {project.source_type}")
-        print(f"[OpenCode] Platform: {sys.platform}")
+        logger.info(f"[OpenCode] Starting OpenCode server for project {project.id}")
+        logger.info(f"[OpenCode] Project source type: {project.source_type}")
+        logger.info(f"[OpenCode] Platform: {sys.platform}")
 
-        print(f"[OpenCode] opencode_session_id: {opencode_session_id}")
+        logger.info(f"[OpenCode] opencode_session_id: {opencode_session_id}")
 
         # 确保 opencode_session_id 有值
         if not opencode_session_id:
@@ -387,7 +389,7 @@ class OpenCodeSessionService:
         try:
             # 使用 opencode_session_id 作为目录名
             session_id = opencode_session_id
-            print(f"[OpenCode] Session ID: {session_id}")
+            logger.info(f"[OpenCode] Session ID: {session_id}")
 
             project_path = None
             extract_dir = (
@@ -395,15 +397,15 @@ class OpenCodeSessionService:
                 if sys.platform != "win32"
                 else Path(f"C:/temp/{session_id}")
             )
-            print(f"[OpenCode] Extract directory: {extract_dir}")
+            logger.info(f"[OpenCode] Extract directory: {extract_dir}")
             extract_dir.mkdir(parents=True, exist_ok=True)
 
             if project.source_type == "repository":
                 repo_url = project.repository_url
                 branch = project.default_branch or "main"
-                print(f"[OpenCode] Repository URL: {repo_url}, branch: {branch}")
+                logger.info(f"[OpenCode] Repository URL: {repo_url}, branch: {branch}")
                 if repo_url:
-                    print(f"[OpenCode] Cloning repository (using subprocess directly)...")
+                    logger.info(f"[OpenCode] Cloning repository (using subprocess directly)...")
                     try:
                         clone_process = subprocess.Popen(
                             [
@@ -420,41 +422,41 @@ class OpenCodeSessionService:
                             stderr=subprocess.PIPE,
                         )
                         clone_stdout, clone_stderr = clone_process.communicate(timeout=300)
-                        print(f"[OpenCode] Clone return code: {clone_process.returncode}")
+                        logger.info(f"[OpenCode] Clone return code: {clone_process.returncode}")
                         if clone_process.returncode == 0:
                             project_path = str(extract_dir)
-                            print(f"[OpenCode] Successfully cloned to: {project_path}")
+                            logger.info(f"[OpenCode] Successfully cloned to: {project_path}")
                         else:
-                            print(
+                            logger.info(
                                 f"[OpenCode] Clone failed: {clone_stderr.decode() if clone_stderr else 'Unknown error'}"
                             )
                     except subprocess.TimeoutExpired:
-                        print(f"[OpenCode] Clone timed out")
+                        logger.info(f"[OpenCode] Clone timed out")
                         clone_process.kill()
 
             elif project.source_type == "zip":
-                print(f"[OpenCode] Handling ZIP source type")
+                logger.info(f"[OpenCode] Handling ZIP source type")
                 try:
                     from app.core.config import settings
 
                     zip_file_path = Path(settings.ZIP_STORAGE_PATH) / f"{project.id}.zip"
-                    print(f"[OpenCode] ZIP file path: {zip_file_path}")
+                    logger.info(f"[OpenCode] ZIP file path: {zip_file_path}")
                     if zip_file_path.exists():
-                        print(f"[OpenCode] ZIP file exists, extracting...")
+                        logger.info(f"[OpenCode] ZIP file exists, extracting...")
                         import zipfile
 
                         with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
                             zip_ref.extractall(extract_dir)
                         project_path = str(extract_dir)
-                        print(f"[OpenCode] Successfully extracted ZIP to: {project_path}")
+                        logger.info(f"[OpenCode] Successfully extracted ZIP to: {project_path}")
                     else:
-                        print(f"[OpenCode] ZIP file does not exist: {zip_file_path}")
+                        logger.info(f"[OpenCode] ZIP file does not exist: {zip_file_path}")
                 except Exception as e:
-                    print(f"[OpenCode] Error handling ZIP: {e}")
-                    print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+                    logger.info(f"[OpenCode] Error handling ZIP: {e}")
+                    logger.info(f"[OpenCode] Error traceback: {traceback.format_exc()}")
 
             if not project_path:
-                print(f"[OpenCode] No project path found, using temporary directory")
+                logger.info(f"[OpenCode] No project path found, using temporary directory")
                 project_path = (
                     f"/tmp/opencode_project_{project.id}"
                     if sys.platform != "win32"
@@ -462,24 +464,24 @@ class OpenCodeSessionService:
                 )
                 ensure_dir_exists(project_path)
 
-            print(f"[OpenCode] Final project path: {project_path}")
+            logger.info(f"[OpenCode] Final project path: {project_path}")
 
             log_dir = f"/tmp/opencode_logs" if sys.platform != "win32" else "C:/temp/opencode_logs"
             ensure_dir_exists(log_dir)
 
             random_id = str(uuid.uuid4())[:8]
             log_path = os.path.join(log_dir, f"{random_id}.log")
-            print(f"[OpenCode] Log path: {log_path}")
+            logger.info(f"[OpenCode] Log path: {log_path}")
 
-            print(f"[OpenCode] Preparing to start opencode serve...")
+            logger.info(f"[OpenCode] Preparing to start opencode serve...")
 
             original_cwd = os.getcwd()
-            print(f"[OpenCode] Original working directory: {original_cwd}")
+            logger.info(f"[OpenCode] Original working directory: {original_cwd}")
 
-            print(f"[OpenCode] Changing to project directory: {project_path}")
+            logger.info(f"[OpenCode] Changing to project directory: {project_path}")
             os.chdir(project_path)
 
-            print(f"[OpenCode] Starting opencode serve with subprocess.Popen...")
+            logger.info(f"[OpenCode] Starting opencode serve with subprocess.Popen...")
 
             log_file = open(log_path, "w")
 
@@ -494,21 +496,21 @@ class OpenCodeSessionService:
                 )
                 pid = str(proc.pid)
             except Exception as e:
-                print(f"[OpenCode] Failed to start opencode serve: {e}")
+                logger.info(f"[OpenCode] Failed to start opencode serve: {e}")
                 import traceback
 
                 traceback.print_exc()
                 return OpenCodeServerStatus.ERROR
 
-            print(f"[OpenCode] Started opencode serve with PID: {pid}")
+            logger.info(f"[OpenCode] Started opencode serve with PID: {pid}")
 
             os.chdir(original_cwd)
-            print(f"[OpenCode] Restored original working directory: {original_cwd}")
+            logger.info(f"[OpenCode] Restored original working directory: {original_cwd}")
 
-            print(f"[OpenCode] Waiting for server to start...")
+            logger.info(f"[OpenCode] Waiting for server to start...")
             await asyncio.sleep(3)
 
-            print(f"[OpenCode] Reading log file to find port...")
+            logger.info(f"[OpenCode] Reading log file to find port...")
             port = None
             max_attempts = 20
             for attempt in range(max_attempts):
@@ -516,45 +518,45 @@ class OpenCodeSessionService:
                     try:
                         with open(log_path, "r") as f:
                             log_content = f.read()
-                            print(
+                            logger.info(
                                 f"[OpenCode] Log content (attempt {attempt + 1}): {log_content[:500]}"
                             )
                             port_match = re.search(r"http://127\.0\.0\.1:(\d+)", log_content)
                             if port_match:
                                 port = port_match.group(1)
-                                print(f"[OpenCode] Found port: {port}")
+                                logger.info(f"[OpenCode] Found port: {port}")
                                 break
                     except Exception as e:
-                        print(f"[OpenCode] Error reading log: {e}")
+                        logger.info(f"[OpenCode] Error reading log: {e}")
                 else:
-                    print(f"[OpenCode] Log file does not exist yet: {log_path}")
+                    logger.info(f"[OpenCode] Log file does not exist yet: {log_path}")
                 await asyncio.sleep(1)
 
             if not port:
-                print(f"[OpenCode] Could not find port in log file after {max_attempts} attempts")
+                logger.info(f"[OpenCode] Could not find port in log file after {max_attempts} attempts")
 
-            print(f"[OpenCode] Updating project with opencode info...")
+            logger.info(f"[OpenCode] Updating project with opencode info...")
             project.opencode_pid = str(pid)
             project.opencode_port = port
             project.opencode_log_path = log_path
             project.opencode_started_at = datetime.utcnow()
             await self.db.commit()
 
-            print(f"[OpenCode] Successfully started opencode serve: PID={pid}, Port={port}")
+            logger.info(f"[OpenCode] Successfully started opencode serve: PID={pid}, Port={port}")
             return OpenCodeServerStatus.RUNNING
 
         except Exception as e:
-            print(f"[OpenCode] Failed to start OpenCode server: {e}")
-            print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+            logger.info(f"[OpenCode] Failed to start OpenCode server: {e}")
+            logger.info(f"[OpenCode] Error traceback: {traceback.format_exc()}")
             return OpenCodeServerStatus.ERROR
 
     async def create_opencode_server_session(self, project: Project) -> Optional[str]:
         """
         在OpenCode服务器上创建会话 - 真实API调用
         """
-        print(f"[OpenCode] ========================================")
-        print(f"[OpenCode] STARTING CREATE OPENDCODE SESSION")
-        print(f"[OpenCode] ========================================")
+        logger.info(f"[OpenCode] ========================================")
+        logger.info(f"[OpenCode] STARTING CREATE OPENDCODE SESSION")
+        logger.info(f"[OpenCode] ========================================")
 
         try:
             url = self.get_opencode_server_url(project)
@@ -569,14 +571,14 @@ class OpenCodeSessionService:
                     data = response.json()
                     server_session_id = data.get("id")
 
-                    print(f"[OpenCode] Created server session.")
+                    logger.info(f"[OpenCode] Created server session.")
                     return server_session_id
                 else:
-                    print(f"[OpenCode] Failed to create session: {response.status_code}")
+                    logger.info(f"[OpenCode] Failed to create session: {response.status_code}")
                     return None
 
         except Exception as e:
-            print(f"[OpenCode] Failed to create OpenCode server session: {e}")
+            logger.info(f"[OpenCode] Failed to create OpenCode server session: {e}")
             return None
 
     def generate_message_id(self) -> str:
@@ -587,7 +589,7 @@ class OpenCodeSessionService:
         alphabet = string.ascii_letters + string.digits
         random_part = "".join(secrets.choice(alphabet) for _ in range(26))
         message_id = f"msg_{random_part}"
-        print(f"[OpenCode] Generated message ID: {message_id}")
+        logger.info(f"[OpenCode] Generated message ID: {message_id}")
         return message_id
 
     async def send_prompt_to_opencode(
@@ -596,10 +598,10 @@ class OpenCodeSessionService:
         """
         发送提示词到OpenCode服务器 - 使用新的prompt_async API，返回message_id
         """
-        print(f"[OpenCode] ========================================")
-        print(f"[OpenCode] STARTING SEND PROMPT (ASYNC)")
-        print(f"[OpenCode] ========================================")
-        print(f"[OpenCode] Using server_session_id: {server_session_id}")
+        logger.info(f"[OpenCode] ========================================")
+        logger.info(f"[OpenCode] STARTING SEND PROMPT (ASYNC)")
+        logger.info(f"[OpenCode] ========================================")
+        logger.info(f"[OpenCode] Using server_session_id: {server_session_id}")
 
         try:
             url = self.get_opencode_server_url(project)
@@ -617,14 +619,14 @@ class OpenCodeSessionService:
                 response = await client.post(prompt_async_url, json=request_data)
 
                 if response.status_code in [200, 202, 204]:
-                    print(f"[OpenCode] Prompt sent successfully.")
+                    logger.info(f"[OpenCode] Prompt sent successfully.")
                     return message_id
                 else:
-                    print(f"[OpenCode] Failed to send prompt: {response.status_code}")
+                    logger.info(f"[OpenCode] Failed to send prompt: {response.status_code}")
                     return None
 
         except Exception as e:
-            print(f"[OpenCode] Failed to send prompt to OpenCode: {e}")
+            logger.info(f"[OpenCode] Failed to send prompt to OpenCode: {e}")
             return None
 
     async def get_prompt_content(
@@ -662,7 +664,7 @@ class OpenCodeSessionService:
         """
         创建OpenCode会话
         """
-        print(f"[OpenCode] Creating OpenCode session for project {project_id}")
+        logger.info(f"[OpenCode] Creating OpenCode session for project {project_id}")
 
         session = OpenCodeSession(
             project_id=project_id,
@@ -676,7 +678,7 @@ class OpenCodeSessionService:
         await self.db.commit()
         await self.db.refresh(session)
 
-        print(f"[OpenCode] OpenCode db_session_id created: {session.id}")
+        logger.info(f"[OpenCode] OpenCode db_session_id created: {session.id}")
         return session
 
     async def create_full_opencode_session(
@@ -700,7 +702,7 @@ class OpenCodeSessionService:
         Returns:
             tuple: (OpenCodeSession对象, final_server_status)
         """
-        print(f"[OpenCode] Creating full OpenCode session for project {project_id}")
+        logger.info(f"[OpenCode] Creating full OpenCode session for project {project_id}")
 
         # 1. 先创建数据库记录（用于获取 session.id 来启动 server）
         session = OpenCodeSession(
@@ -731,7 +733,7 @@ class OpenCodeSessionService:
 
         # 3. 如果 server 是 STARTING，等待它变成 RUNNING
         if server_status == OpenCodeServerStatus.STARTING:
-            print(f"[OpenCode] Server is STARTING, waiting for RUNNING...")
+            logger.info(f"[OpenCode] Server is STARTING, waiting for RUNNING...")
             max_wait_seconds = 30
             poll_interval = 1
 
@@ -740,7 +742,7 @@ class OpenCodeSessionService:
                 server_status = await self.check_opencode_server_status(project)
 
                 if server_status == OpenCodeServerStatus.RUNNING:
-                    print(f"[OpenCode] Server is now RUNNING after {wait_count + 1} seconds")
+                    logger.info(f"[OpenCode] Server is now RUNNING after {wait_count + 1} seconds")
                     break
                 elif server_status == OpenCodeServerStatus.ERROR:
                     raise RuntimeError("Server entered ERROR state while starting")
@@ -752,7 +754,7 @@ class OpenCodeSessionService:
         server_session_id = await self.create_opencode_server_session(project)
 
         if not server_session_id:
-            print(f"[OpenCode] Error: Failed to create server session")
+            logger.info(f"[OpenCode] Error: Failed to create server session")
             raise RuntimeError("Failed to create OpenCode server session")
 
         # 5. 更新数据库，保存 server_session_id和active_session_id
@@ -763,7 +765,7 @@ class OpenCodeSessionService:
         await self.db.commit()
         await self.db.refresh(session)
 
-        print(f"[OpenCode] Full session created, server_session_id: {server_session_id}")
+        logger.info(f"[OpenCode] Full session created, server_session_id: {server_session_id}")
         return session, server_status
 
     async def _check_running_tasks(
@@ -805,7 +807,7 @@ class OpenCodeSessionService:
         """
         创建OpenCode审计任务
         """
-        print(f"[OpenCode] Creating OpenCode audit task for project {project_id}")
+        logger.info(f"[OpenCode] Creating OpenCode audit task for project {project_id}")
 
         # 如果有关联的 session，检查是否已有运行中的任务
         if db_session_id and not is_just_start_server:
@@ -856,7 +858,7 @@ class OpenCodeSessionService:
         await self.db.commit()
         await self.db.refresh(audit_task)
 
-        print(f"[OpenCode] OpenCode audit task created: {audit_task.id}")
+        logger.info(f"[OpenCode] OpenCode audit task created: {audit_task.id}")
         return audit_task
 
     async def start_audit_with_prompt(
@@ -870,10 +872,10 @@ class OpenCodeSessionService:
         """
         启动带提示词的OpenCode审计
         """
-        print(f"[OpenCode] ========================================")
-        print(f"[OpenCode] STARTING AUDIT WITH PROMPT")
-        print(f"[OpenCode] ========================================")
-        print(f"[OpenCode] Starting audit with prompt for project {project_id}")
+        logger.info(f"[OpenCode] ========================================")
+        logger.info(f"[OpenCode] STARTING AUDIT WITH PROMPT")
+        logger.info(f"[OpenCode] ========================================")
+        logger.info(f"[OpenCode] Starting audit with prompt for project {project_id}")
 
         result = await self.db.execute(select(Project).where(Project.id == project_id))
         project = result.scalar_one_or_none()
@@ -885,7 +887,7 @@ class OpenCodeSessionService:
             prompt_template_id, prompt_content, variables
         )
 
-        print(f"[OpenCode] final prompt: {final_prompt_content}")
+        logger.info(f"[OpenCode] final prompt: {final_prompt_content}")
 
         # 检查是否有活跃的 OpenCodeSession
         db_session = await self.get_active_session(project)
@@ -894,7 +896,7 @@ class OpenCodeSessionService:
 
         if db_session:
             # 复用现有 session
-            print(f"[OpenCode] Reusing existing active session: {db_session.id}")
+            logger.info(f"[OpenCode] Reusing existing active session: {db_session.id}")
             server_session_id = db_session.opencode_server_session_id
             # 检查 server 状态
             server_status = await self.check_opencode_server_status(project)
@@ -922,7 +924,7 @@ class OpenCodeSessionService:
             )
 
             if message_id:
-                print(f"[OpenCode] Got message_id: {message_id}, starting background poll...")
+                logger.info(f"[OpenCode] Got message_id: {message_id}, starting background poll...")
                 # 保存 message_id 到 audit_task
                 audit_task.opencode_message_id = message_id
                 await self.db.commit()
@@ -938,14 +940,14 @@ class OpenCodeSessionService:
                     )
                 )
             else:
-                print(f"[OpenCode] Failed to get message_id, skipping background poll")
+                logger.info(f"[OpenCode] Failed to get message_id, skipping background poll")
                 # 更新任务状态为失败
                 audit_task.status = OpenCodeAuditTaskStatus.FAILED
                 audit_task.error_message = "Failed to send prompt to OpenCode server"
                 audit_task.completed_at = datetime.utcnow()
                 await self.db.commit()
         else:
-            print(f"[OpenCode] Failed to get server_session_id, skipping prompt sending")
+            logger.info(f"[OpenCode] Failed to get server_session_id, skipping prompt sending")
             # 更新任务状态为失败
             audit_task.status = OpenCodeAuditTaskStatus.FAILED
             audit_task.error_message = "Failed to create OpenCode server session"
@@ -961,7 +963,7 @@ class OpenCodeSessionService:
         project.opencode_current_session_id = db_session.id
         await self.db.commit()
 
-        print(
+        logger.info(
             f"[OpenCode] Audit started successfully, session ID: {db_session.id}, task ID: {audit_task.id}"
         )
         return db_session, server_status
@@ -978,9 +980,9 @@ class OpenCodeSessionService:
         """
         轮询OpenCode服务器获取结果
         """
-        print(f"[OpenCode] Polling OpenCode Server for result (with updates)...")
-        print(f"[OpenCode] Polling for session: {server_session_id}")
-        print(f"[OpenCode] Polling for message_id: {message_id}")
+        logger.info(f"[OpenCode] Polling OpenCode Server for result (with updates)...")
+        logger.info(f"[OpenCode] Polling for session: {server_session_id}")
+        logger.info(f"[OpenCode] Polling for message_id: {message_id}")
 
         max_polls = 10800  # 3 hour with 1s interval
         poll_interval = 1
@@ -988,7 +990,7 @@ class OpenCodeSessionService:
         same_time = 1
 
         if not message_id:
-            print(f"[OpenCode] No message_id provided, cannot poll")
+            logger.info(f"[OpenCode] No message_id provided, cannot poll")
             return "Error: No message ID provided"
 
         url = self.get_opencode_server_url(project)
@@ -1030,7 +1032,7 @@ class OpenCodeSessionService:
                                             db.add(message_content)
                                             await db.commit()
                                         except Exception as e:
-                                            print(
+                                            logger.info(
                                                 f"[OpenCode] Failed to save response content: {e}"
                                             )
                                             await db.rollback()
@@ -1048,7 +1050,7 @@ class OpenCodeSessionService:
                                             db.add(message_content)
                                             await db.commit()
                                         except Exception as e:
-                                            print(
+                                            logger.info(
                                                 f"[OpenCode] Failed to save reasoning content: {e}"
                                             )
                                             await db.rollback()
@@ -1059,10 +1061,10 @@ class OpenCodeSessionService:
                 await asyncio.sleep(poll_interval)
 
             except Exception as e:
-                print(f"[OpenCode] Poll attempt {poll_count + 1} failed: {e}")
+                logger.info(f"[OpenCode] Poll attempt {poll_count + 1} failed: {e}")
                 await asyncio.sleep(poll_interval)
 
-        print(f"[OpenCode] Polling timed out after {max_polls} attempts")
+        logger.info(f"[OpenCode] Polling timed out after {max_polls} attempts")
         return False
 
     async def _background_poll_result(
@@ -1077,10 +1079,10 @@ class OpenCodeSessionService:
         """
         后台轮询结果任务 - 使用独立的数据库会话
         """
-        print(f"[OpenCode] Starting background poll for session {db_session_id}")
-        print(f"[OpenCode] Background poll - audit_task_id: {audit_task_id}")
-        print(f"[OpenCode] Background poll - server_session_id: {server_session_id}")
-        print(f"[OpenCode] Background poll - message_id: {message_id}")
+        logger.info(f"[OpenCode] Starting background poll for session {db_session_id}")
+        logger.info(f"[OpenCode] Background poll - audit_task_id: {audit_task_id}")
+        logger.info(f"[OpenCode] Background poll - server_session_id: {server_session_id}")
+        logger.info(f"[OpenCode] Background poll - message_id: {message_id}")
 
         try:
             async with AsyncSessionLocal() as db_session_local:
@@ -1100,20 +1102,20 @@ class OpenCodeSessionService:
                     audit_task_id,
                     db_session_local,
                 )
-                print(f"[OpenCode] sign: {sign}")
+                logger.info(f"[OpenCode] sign: {sign}")
 
                 result_db = await db_session_local.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == db_session_id)
                 )
                 db_session = result_db.scalar_one_or_none()
-                print(f"[OpenCode] db_session: {db_session}")
+                logger.info(f"[OpenCode] db_session: {db_session}")
 
                 # 获取审计任务
                 result_task = await db_session_local.execute(
                     select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == audit_task_id)
                 )
                 audit_task = result_task.scalar_one_or_none()
-                print(f"[OpenCode] audit_task: {audit_task}")
+                logger.info(f"[OpenCode] audit_task: {audit_task}")
 
                 if db_session:
                     if not sign:
@@ -1136,9 +1138,9 @@ class OpenCodeSessionService:
                                     audit_task.id,
                                     project_id,
                                 )
-                                print(f"[OpenCode] Auto import completed for task {audit_task.id}")
+                                logger.info(f"[OpenCode] Auto import completed for task {audit_task.id}")
                             except Exception as e:
-                                print(f"[OpenCode] Auto import error: {e}")
+                                logger.info(f"[OpenCode] Auto import error: {e}")
                         else:
                             audit_task.status = OpenCodeAuditTaskStatus.FAILED
                             audit_task.error_message = "LLM Server response timeout"
@@ -1147,9 +1149,9 @@ class OpenCodeSessionService:
                         audit_task.completed_at = datetime.utcnow()
                         await db_session_local.commit()
 
-                    print(f"[OpenCode] Background poll completed with status: {db_session.status}")
+                    logger.info(f"[OpenCode] Background poll completed with status: {db_session.status}")
         except Exception as e:
-            print(f"[OpenCode] Background poll failed: {e}")
+            logger.info(f"[OpenCode] Background poll failed: {e}")
 
             try:
                 async with AsyncSessionLocal() as db_session_local:
@@ -1263,7 +1265,7 @@ class OpenCodeSessionService:
         import traceback
         from pathlib import Path
 
-        print(f"[OpenCode] Auto importing vulnerabilities for task {audit_task_id}")
+        logger.info(f"[OpenCode] Auto importing vulnerabilities for task {audit_task_id}")
 
         try:
             # 查找项目路径
@@ -1271,7 +1273,7 @@ class OpenCodeSessionService:
             project = result_project.scalar_one_or_none()
 
             if not project:
-                print(f"[OpenCode] Project not found for auto import: {project_id}")
+                logger.info(f"[OpenCode] Project not found for auto import: {project_id}")
                 return
 
             # 查找审计任务，获取 opencode_session_id
@@ -1281,22 +1283,22 @@ class OpenCodeSessionService:
             audit_task = result_task.scalar_one_or_none()
 
             if not audit_task:
-                print(f"[OpenCode] Audit task not found for auto import: {audit_task_id}")
+                logger.info(f"[OpenCode] Audit task not found for auto import: {audit_task_id}")
                 return
 
             opencode_session_id = audit_task.opencode_session_id
             if not opencode_session_id:
-                print(f"[OpenCode] No opencode_session_id found for audit task: {audit_task_id}")
+                logger.info(f"[OpenCode] No opencode_session_id found for audit task: {audit_task_id}")
                 return
 
             # 构建可能的报告路径
             possible_paths = []
 
             # 打印调试信息
-            print(f"[OpenCode] Project ID: {project.id}")
-            print(f"[OpenCode] Project source_type: {project.source_type}")
-            print(f"[OpenCode] Task ID: {audit_task_id}")
-            print(f"[OpenCode] OpenCode Session ID: {opencode_session_id}")
+            logger.info(f"[OpenCode] Project ID: {project.id}")
+            logger.info(f"[OpenCode] Project source_type: {project.source_type}")
+            logger.info(f"[OpenCode] Task ID: {audit_task_id}")
+            logger.info(f"[OpenCode] OpenCode Session ID: {opencode_session_id}")
 
             # 1. 尝试 opencode_session_id 相关的路径（最优先，因为项目就在这个目录下）
             possible_paths.extend(
@@ -1366,25 +1368,25 @@ class OpenCodeSessionService:
             )
 
             # 打印所有检查的路径（无论是否存在）
-            print(f"[OpenCode] ===== Auto Import Debug Info =====")
-            print(f"[OpenCode] Checking {len(possible_paths)} paths:")
+            logger.info(f"[OpenCode] ===== Auto Import Debug Info =====")
+            logger.info(f"[OpenCode] Checking {len(possible_paths)} paths:")
             for i, p in enumerate(possible_paths, 1):
                 exists = "EXISTS" if p.exists() else "NOT EXISTS"
-                print(f"[OpenCode] {i}. {p} [{exists}]")
-            print(f"[OpenCode] ===== End of paths =====")
+                logger.info(f"[OpenCode] {i}. {p} [{exists}]")
+            logger.info(f"[OpenCode] ===== End of paths =====")
 
             # 查找所有可能的JSON报告文件
             report_files = []
             for reports_dir in possible_paths:
                 if reports_dir.exists() and reports_dir.is_dir():
-                    print(f"[OpenCode] Found directory: {reports_dir}")
+                    logger.info(f"[OpenCode] Found directory: {reports_dir}")
                     for json_file in reports_dir.rglob("*.json"):
                         report_files.append(json_file)
-                        print(f"[OpenCode] Found JSON file: {json_file}")
+                        logger.info(f"[OpenCode] Found JSON file: {json_file}")
 
             # 如果找到报告文件，尝试导入
             if report_files:
-                print(f"[OpenCode] Found {len(report_files)} potential report files")
+                logger.info(f"[OpenCode] Found {len(report_files)} potential report files")
 
                 # 尝试导入最近的报告文件
                 for report_file in report_files[:3]:
@@ -1394,7 +1396,7 @@ class OpenCodeSessionService:
 
                         if "vulnerabilities" in report_data:
                             vulnerabilities = report_data["vulnerabilities"]
-                            print(
+                            logger.info(
                                 f"[OpenCode] Found {len(vulnerabilities)} vulnerabilities in {report_file}"
                             )
 
@@ -1413,7 +1415,7 @@ class OpenCodeSessionService:
                                     existing_vuln = result.scalar_one_or_none()
 
                                     if existing_vuln:
-                                        print(
+                                        logger.info(
                                             f"[OpenCode] Vulnerability {current_vuln_id} already exists, skipping"
                                         )
                                         continue
@@ -1465,7 +1467,7 @@ class OpenCodeSessionService:
                                     db.add(vuln)
                                     imported_count += 1
                                 except Exception as e:
-                                    print(f"[OpenCode] Failed to import vulnerability: {e}")
+                                    logger.info(f"[OpenCode] Failed to import vulnerability: {e}")
                                     import traceback
 
                                     traceback.print_exc()
@@ -1499,28 +1501,28 @@ class OpenCodeSessionService:
                                         + severity_summary.get("info", 0)
                                     )
                                     await db.commit()
-                                print(
+                                logger.info(
                                     f"[OpenCode] Successfully auto imported {imported_count} vulnerabilities"
                                 )
                                 return
                     except Exception as e:
-                        print(f"[OpenCode] Failed to read report file {report_file}: {e}")
+                        logger.info(f"[OpenCode] Failed to read report file {report_file}: {e}")
                         continue
             else:
-                print(f"[OpenCode] No report files found for auto import")
+                logger.info(f"[OpenCode] No report files found for auto import")
 
         except Exception as e:
-            print(f"[OpenCode] Auto import vulnerabilities failed: {e}")
-            print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+            logger.info(f"[OpenCode] Auto import vulnerabilities failed: {e}")
+            logger.info(f"[OpenCode] Error traceback: {traceback.format_exc()}")
 
     async def stop_opencode_server(self, project: Project) -> bool:
         """
         停止OpenCode服务器
         """
-        print(f"[OpenCode] Stopping OpenCode server for project {project.id}")
+        logger.info(f"[OpenCode] Stopping OpenCode server for project {project.id}")
 
         if not project.opencode_pid:
-            print(f"[OpenCode] No PID found, server is already stopped")
+            logger.info(f"[OpenCode] No PID found, server is already stopped")
             return True
 
         try:
@@ -1528,12 +1530,12 @@ class OpenCodeSessionService:
             import signal
 
             pid_int = int(project.opencode_pid)
-            print(f"[OpenCode] Attempting to stop PID {pid_int}")
+            logger.info(f"[OpenCode] Attempting to stop PID {pid_int}")
 
             # 尝试优雅停止
             try:
                 os.kill(pid_int, signal.SIGTERM)
-                print(f"[OpenCode] Sent SIGTERM to PID {pid_int}")
+                logger.info(f"[OpenCode] Sent SIGTERM to PID {pid_int}")
 
                 # 等待一段时间检查是否停止
                 await asyncio.sleep(1)
@@ -1542,12 +1544,12 @@ class OpenCodeSessionService:
                 try:
                     os.kill(pid_int, 0)
                     # 还在运行，强制杀死
-                    print(f"[OpenCode] PID {pid_int} still running, sending SIGKILL")
+                    logger.info(f"[OpenCode] PID {pid_int} still running, sending SIGKILL")
                     os.kill(pid_int, signal.SIGKILL)
                 except OSError:
-                    print(f"[OpenCode] PID {pid_int} successfully stopped")
+                    logger.info(f"[OpenCode] PID {pid_int} successfully stopped")
             except OSError as e:
-                print(f"[OpenCode] PID {pid_int} already stopped: {e}")
+                logger.info(f"[OpenCode] PID {pid_int} already stopped: {e}")
 
             # 重置项目字段
             project.opencode_pid = None
@@ -1570,7 +1572,7 @@ class OpenCodeSessionService:
                     import shutil
 
                     shutil.rmtree(session_dir)
-                    print(f"[OpenCode] Cleaned up session directory: {session_dir}")
+                    logger.info(f"[OpenCode] Cleaned up session directory: {session_dir}")
 
                 # 2. 更新 OpenCodeSession 状态为 CLOSED
                 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
@@ -1587,13 +1589,13 @@ class OpenCodeSessionService:
                 project.opencode_active_session_id = None
 
             await self.db.commit()
-            print(f"[OpenCode] Server stopped and project fields reset")
+            logger.info(f"[OpenCode] Server stopped and project fields reset")
             return True
 
         except ValueError as e:
-            print(f"[OpenCode] Invalid PID format: {e}")
+            logger.info(f"[OpenCode] Invalid PID format: {e}")
             return False
         except Exception as e:
-            print(f"[OpenCode] Error stopping server: {e}")
-            print(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+            logger.info(f"[OpenCode] Error stopping server: {e}")
+            logger.info(f"[OpenCode] Error traceback: {traceback.format_exc()}")
             return False
