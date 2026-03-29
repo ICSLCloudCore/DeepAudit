@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
 
+from app.utils.log import logger
 from app.core.config import settings
 
 
@@ -62,7 +63,7 @@ async def save_project_zip(project_id: str, file_path: str, original_filename: s
     with open(meta_path, 'w') as f:
         json.dump(meta, f)
     
-    print(f"✓ ZIP文件已保存: {project_id} ({file_size / 1024 / 1024:.2f} MB)")
+    logger.info(f"✓ ZIP文件已保存: {project_id} ({file_size / 1024 / 1024:.2f} MB)")
     
     return meta
 
@@ -123,7 +124,7 @@ async def delete_project_zip(project_id: str) -> bool:
     if zip_path.exists():
         os.remove(zip_path)
         deleted = True
-        print(f"✓ 已删除ZIP文件: {project_id}")
+        logger.info(f"✓ 已删除ZIP文件: {project_id}")
     
     if meta_path.exists():
         os.remove(meta_path)

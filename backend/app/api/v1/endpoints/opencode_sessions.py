@@ -10,7 +10,7 @@ from sqlalchemy import select, and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import asyncio
-from loguru import logger
+from app.utils.log import logger
 
 from app.db.session import get_db
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus

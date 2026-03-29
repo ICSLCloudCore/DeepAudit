@@ -7,8 +7,8 @@ import httpx
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from urllib.parse import urlparse, quote
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.utils.log import logger
 from app.utils.repo_utils import parse_repository_url
 from app.models.audit import AuditTask, AuditIssue
 from app.models.project import Project
@@ -87,7 +87,7 @@ class TaskControlManager:
     def cancel_task(self, task_id: str):
         """取消任务"""
         self._cancelled_tasks.add(task_id)
-        print(f"🛑 任务 {task_id} 已标记为取消")
+        logger.info(f"🛑 任务 {task_id} 已标记为取消")
     
     def is_cancelled(self, task_id: str) -> bool:
         """检查任务是否被取消"""
@@ -163,7 +163,7 @@ async def fetch_file_content(url: str, headers: Dict[str, str] = None) -> Option
             if response.status_code == 200:
                 return response.text
         except Exception as e:
-            print(f"获取文件内容失败: {url}, 错误: {e}")
+            logger.error(f"获取文件内容失败: {url}, 错误: {e}")
     return None
 
 
@@ -343,9 +343,9 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                 except:
                     pass
 
-            print(f"🚀 开始扫描仓库: {repo_url}, 分支: {branch}, 类型: {repo_type}, 来源: {source_type}")
+            logger.info(f"🚀 开始扫描仓库: {repo_url}, 分支: {branch}, 类型: {repo_type}, 来源: {source_type}")
             if task_exclude_patterns:
-                print(f"📋 排除模式: {task_exclude_patterns}")
+                logger.info(f"📋 排除模式: {task_exclude_patterns}")
 
             # 3. 获取文件列表
             # 从用户配置中读取 GitHub/GitLab Token（优先使用用户配置，然后使用系统配置）
@@ -374,7 +374,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                 if not ssh_private_key:
                     raise Exception("仓库使用SSH URL，但未配置SSH密钥。请先生成并配置SSH密钥。")
 
-                print(f"🔐 使用SSH方式访问仓库: {repo_url}")
+                logger.info(f"🔐 使用SSH方式访问仓库: {repo_url}")
                 try:
                     files_with_content = GitSSHOperations.get_repo_files_via_ssh(
                         repo_url, ssh_private_key, branch, task_exclude_patterns
@@ -382,7 +382,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                     # 转换为统一格式
                     files = [{'path': f['path'], 'content': f['content']} for f in files_with_content]
                     actual_branch = branch
-                    print(f"✅ 通过SSH成功获取 {len(files)} 个文件")
+                    logger.info(f"✅ 通过SSH成功获取 {len(files)} 个文件")
                 except Exception as e:
                     raise Exception(f"SSH方式获取仓库文件失败: {str(e)}")
             else:
@@ -400,7 +400,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
 
                 for try_branch in branches_to_try:
                     try:
-                        print(f"🔄 尝试获取分支 {try_branch} 的文件列表...")
+                        logger.info(f"🔄 尝试获取分支 {try_branch} 的文件列表...")
                         if repo_type == "github":
                             files = await get_github_files(repo_url, try_branch, github_token, task_exclude_patterns)
                         elif repo_type == "gitlab":
@@ -416,11 +416,11 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                         if files:
                             actual_branch = try_branch
                             if try_branch != branch:
-                                print(f"⚠️ 分支 {branch} 不存在或无法访问，已降级到分支 {try_branch}")
+                                logger.error(f"⚠️ 分支 {branch} 不存在或无法访问，已降级到分支 {try_branch}")
                             break
                     except Exception as e:
                         last_error = str(e)
-                        print(f"⚠️ 获取分支 {try_branch} 失败: {last_error[:100]}")
+                        logger.error(f"⚠️ 获取分支 {try_branch} 失败: {last_error[:100]}")
                         continue
 
                 if not files:
@@ -434,7 +434,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                             error_msg = f"获取文件失败: {last_error[:100]}"
                     raise Exception(error_msg)
 
-            print(f"✅ 成功获取分支 {actual_branch} 的文件列表")
+            logger.info(f"✅ 成功获取分支 {actual_branch} 的文件列表")
 
             # 获取分析配置（优先使用用户配置）
             analysis_config = get_analysis_config(user_config)
@@ -445,7 +445,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
             # 如果指定了特定文件，则只分析这些文件
             target_files = (user_config or {}).get('scan_config', {}).get('file_paths', [])
             if target_files:
-                print(f"🎯 指定分析 {len(target_files)} 个文件")
+                logger.info(f"🎯 指定分析 {len(target_files)} 个文件")
                 files = [f for f in files if f['path'] in target_files]
             elif max_analyze_files > 0:
                 files = files[:max_analyze_files]
@@ -453,7 +453,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
             task.total_files = len(files)
             await db.commit()
 
-            print(f"📊 获取到 {len(files)} 个文件，开始分析 (最大文件数: {max_analyze_files}, 请求间隔: {llm_gap_ms}ms)")
+            logger.info(f"📊 获取到 {len(files)} 个文件，开始分析 (最大文件数: {max_analyze_files}, 请求间隔: {llm_gap_ms}ms)")
 
             # 4. 分析文件
             total_issues = 0
@@ -468,7 +468,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
             for file_info in files:
                 # 检查是否取消
                 if task_control.is_cancelled(task_id):
-                    print(f"🛑 任务 {task_id} 已被用户取消")
+                    logger.info(f"🛑 任务 {task_id} 已被用户取消")
                     task.status = "cancelled"
                     task.completed_at = datetime.now(timezone.utc)
                     await db.commit()
@@ -477,7 +477,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
 
                 # 检查连续失败次数
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    print(f"❌ 任务 {task_id}: 连续失败 {consecutive_failures} 次，停止分析")
+                    logger.error(f"❌ 任务 {task_id}: 连续失败 {consecutive_failures} 次，停止分析")
                     raise Exception(f"连续失败 {consecutive_failures} 次，可能是 LLM API 服务异常")
 
                 try:
@@ -486,7 +486,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                     if is_ssh_url:
                         # SSH方式已经包含了文件内容
                         content = file_info.get('content', '')
-                        print(f"📥 正在处理SSH文件: {file_info['path']}")
+                        logger.info(f"📥 正在处理SSH文件: {file_info['path']}")
                     else:
                         headers = {}
                         # 使用提取的 token 或用户配置的 token
@@ -505,16 +505,16 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                             if github_token:
                                 headers["Authorization"] = f"Bearer {github_token}"
                         
-                        print(f"📥 正在获取文件: {file_info['path']}")
+                        logger.info(f"📥 正在获取文件: {file_info['path']}")
                         content = await fetch_file_content(file_info["url"], headers)
 
                     if not content or not content.strip():
-                        print(f"⚠️ 文件内容为空，跳过: {file_info['path']}")
+                        logger.info(f"⚠️ 文件内容为空，跳过: {file_info['path']}")
                         skipped_files += 1
                         continue
                     
                     if len(content) > settings.MAX_FILE_SIZE_BYTES:
-                        print(f"⚠️ 文件太大，跳过: {file_info['path']}")
+                        logger.info(f"⚠️ 文件太大，跳过: {file_info['path']}")
                         skipped_files += 1
                         continue
                     
@@ -522,7 +522,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                     total_lines = len(file_lines) + 1
                     language = get_language_from_path(file_info["path"])
                     
-                    print(f"🤖 正在调用 LLM 分析: {file_info['path']} ({language}, {len(content)} bytes)")
+                    logger.info(f"🤖 正在调用 LLM 分析: {file_info['path']} ({language}, {len(content)} bytes)")
                     # LLM分析 - 支持规则集和提示词模板
                     scan_config = (user_config or {}).get('scan_config', {})
                     rule_set_id = scan_config.get('rule_set_id')
@@ -537,11 +537,11 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                         )
                     else:
                         analysis = await llm_service.analyze_code(content, language)
-                    print(f"✅ LLM 分析完成: {file_info['path']}")
+                    logger.info(f"✅ LLM 分析完成: {file_info['path']}")
                     
                     # 再次检查是否取消（LLM分析后）
                     if task_control.is_cancelled(task_id):
-                        print(f"🛑 任务 {task_id} 在LLM分析后被取消")
+                        logger.info(f"🛑 任务 {task_id} 在LLM分析后被取消")
                         task.status = "cancelled"
                         task.completed_at = datetime.now(timezone.utc)
                         await db.commit()
@@ -596,7 +596,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                     task.issues_count = total_issues
                     await db.commit()
                     
-                    print(f"📈 任务 {task_id}: 进度 {scanned_files}/{len(files)} ({int(scanned_files/len(files)*100)}%)")
+                    logger.info(f"📈 任务 {task_id}: 进度 {scanned_files}/{len(files)} ({int(scanned_files/len(files)*100)}%)")
                     
                     # 请求间隔
                     await asyncio.sleep(llm_gap_ms / 1000)
@@ -606,9 +606,9 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                     consecutive_failures += 1
                     # 打印详细错误信息
                     import traceback
-                    print(f"❌ 分析文件失败 ({file_info['path']}): {file_error}")
-                    print(f"   错误类型: {type(file_error).__name__}")
-                    print(f"   详细信息: {traceback.format_exc()}")
+                    logger.error(f"❌ 分析文件失败 ({file_info['path']}): {file_error}")
+                    logger.error(f"   错误类型: {type(file_error).__name__}")
+                    logger.error(f"   详细信息: {traceback.format_exc()}")
                     await asyncio.sleep(llm_gap_ms / 1000)
 
             # 5. 完成任务
@@ -624,7 +624,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                 task.issues_count = 0
                 task.quality_score = 100.0
                 await db.commit()
-                print(f"⚠️ 任务 {task_id} 完成: 所有 {len(files)} 个文件均为空或被跳过，无需分析")
+                logger.info(f"⚠️ 任务 {task_id} 完成: 所有 {len(files)} 个文件均为空或被跳过，无需分析")
             # 如果有文件需要分析但全部失败（LLM调用失败），标记为失败
             elif len(files) > 0 and scanned_files == 0 and failed_files > 0:
                 task.status = "failed"
@@ -634,7 +634,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                 task.issues_count = 0
                 task.quality_score = 0
                 await db.commit()
-                print(f"❌ 任务 {task_id} 失败: {failed_files} 个文件分析失败，请检查 LLM API 配置")
+                logger.info(f"❌ 任务 {task_id} 失败: {failed_files} 个文件分析失败，请检查 LLM API 配置")
             else:
                 task.status = "completed"
                 task.completed_at = datetime.now(timezone.utc)
@@ -643,11 +643,11 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                 task.issues_count = total_issues
                 task.quality_score = avg_quality_score
                 await db.commit()
-                print(f"✅ 任务 {task_id} 完成: 扫描 {scanned_files} 个文件, 发现 {total_issues} 个问题, 质量分 {avg_quality_score:.1f}")
+                logger.info(f"✅ 任务 {task_id} 完成: 扫描 {scanned_files} 个文件, 发现 {total_issues} 个问题, 质量分 {avg_quality_score:.1f}")
             task_control.cleanup_task(task_id)
 
         except Exception as e:
-            print(f"❌ 扫描失败: {e}")
+            logger.error(f"❌ 扫描失败: {e}")
             task.status = "failed"
             task.completed_at = datetime.now(timezone.utc)
             await db.commit()

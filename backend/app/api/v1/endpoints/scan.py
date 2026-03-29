@@ -13,6 +13,7 @@ import zipfile
 import asyncio
 
 from app.api import deps
+from app.utils.log import logger
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.audit import AuditTask, AuditIssue
 from app.models.user import User
@@ -104,7 +105,7 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
             if target_files:
                 # 统一目标文件路径的分隔符，确保匹配一致性
                 normalized_targets = {normalize_path(p) for p in target_files}
-                print(f"🎯 ZIP任务: 指定分析 {len(normalized_targets)} 个文件")
+                logger.info(f"🎯 ZIP任务: 指定分析 {len(normalized_targets)} 个文件")
                 files_to_scan = [f for f in files_to_scan if f['path'] in normalized_targets]
             elif max_analyze_files > 0:
                 files_to_scan = files_to_scan[:max_analyze_files]
@@ -112,7 +113,7 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
             task.total_files = len(files_to_scan)
             await db.commit()
 
-            print(f"📊 ZIP任务 {task_id}: 找到 {len(files_to_scan)} 个文件 (最大文件数: {max_analyze_files}, 请求间隔: {llm_gap_ms}ms)")
+            logger.info(f"📊 ZIP任务 {task_id}: 找到 {len(files_to_scan)} 个文件 (最大文件数: {max_analyze_files}, 请求间隔: {llm_gap_ms}ms)")
 
             total_issues = 0
             total_lines = 0
@@ -123,7 +124,7 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
             for file_info in files_to_scan:
                 # 检查是否取消
                 if task_control.is_cancelled(task_id):
-                    print(f"🛑 ZIP任务 {task_id} 已被取消")
+                    logger.info(f"🛑 ZIP任务 {task_id} 已被取消")
                     task.status = "cancelled"
                     task.completed_at = datetime.now(timezone.utc)
                     await db.commit()
@@ -180,14 +181,14 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
                     task.issues_count = total_issues
                     await db.commit()
                     
-                    print(f"📈 ZIP任务 {task_id}: 进度 {scanned_files}/{len(files_to_scan)}")
+                    logger.info(f"📈 ZIP任务 {task_id}: 进度 {scanned_files}/{len(files_to_scan)}")
                     
                     # 请求间隔
                     await asyncio.sleep(llm_gap_ms / 1000)
 
                 except Exception as file_error:
                     failed_files += 1
-                    print(f"❌ ZIP任务分析文件失败 ({file_info['path']}): {file_error}")
+                    logger.info(f"❌ ZIP任务分析文件失败 ({file_info['path']}): {file_error}")
                     await asyncio.sleep(llm_gap_ms / 1000)
 
             # 完成任务
@@ -202,7 +203,7 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
                 task.issues_count = 0
                 task.quality_score = 0
                 await db.commit()
-                print(f"❌ ZIP任务 {task_id} 失败: 所有 {len(files_to_scan)} 个文件分析均失败，请检查 LLM API 配置")
+                logger.info(f"❌ ZIP任务 {task_id} 失败: 所有 {len(files_to_scan)} 个文件分析均失败，请检查 LLM API 配置")
             else:
                 task.status = "completed"
                 task.completed_at = datetime.now(timezone.utc)
@@ -211,11 +212,11 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
                 task.issues_count = total_issues
                 task.quality_score = avg_quality_score
                 await db.commit()
-                print(f"✅ ZIP任务 {task_id} 完成: 扫描 {scanned_files} 个文件, 发现 {total_issues} 个问题")
+                logger.info(f"✅ ZIP任务 {task_id} 完成: 扫描 {scanned_files} 个文件, 发现 {total_issues} 个问题")
             task_control.cleanup_task(task_id)
             
         except Exception as e:
-            print(f"❌ ZIP扫描失败: {e}")
+            logger.info(f"❌ ZIP扫描失败: {e}")
             task.status = "failed"
             task.completed_at = datetime.now(timezone.utc)
             await db.commit()
@@ -459,7 +460,7 @@ async def instant_analysis(
     except Exception as e:
         # 分析失败，返回错误信息
         error_msg = str(e)
-        print(f"❌ 即时分析失败: {error_msg}")
+        logger.error(f"❌ 即时分析失败: {error_msg}")
         raise HTTPException(
             status_code=500, 
             detail=f"代码分析失败: {error_msg}"

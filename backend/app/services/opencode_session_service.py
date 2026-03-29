@@ -17,7 +17,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
 
-from loguru import logger
+from app.utils.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 import json
 
 from app.api import deps
+from app.utils.log import logger
 from app.db.session import get_db
 from app.models.user_config import UserConfig
 from app.models.user import User
@@ -169,7 +170,7 @@ async def get_my_config(
     default_config = get_default_config()
     
     if not config:
-        print(f"[Config] 用户 {current_user.id} 没有保存的配置，返回默认配置")
+        logger.info(f"[Config] 用户 {current_user.id} 没有保存的配置，返回默认配置")
         # 返回系统默认配置
         return UserConfigResponse(
             id="",
@@ -187,10 +188,10 @@ async def get_my_config(
     user_llm_config = decrypt_config(user_llm_config, SENSITIVE_LLM_FIELDS)
     user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
     
-    print(f"[Config] 用户 {current_user.id} 的保存配置:")
-    print(f"  - llmProvider: {user_llm_config.get('llmProvider')}")
-    print(f"  - llmApiKey: {'***' + user_llm_config.get('llmApiKey', '')[-4:] if user_llm_config.get('llmApiKey') else '(空)'}")
-    print(f"  - llmModel: {user_llm_config.get('llmModel')}")
+    logger.info(f"[Config] 用户 {current_user.id} 的保存配置:")
+    logger.info(f"  - llmProvider: {user_llm_config.get('llmProvider')}")
+    logger.info(f"  - llmApiKey: {'***' + user_llm_config.get('llmApiKey', '')[-4:] if user_llm_config.get('llmApiKey') else '(空)'}")
+    logger.info(f"  - llmModel: {user_llm_config.get('llmModel')}")
     
     merged_llm_config = {**default_config["llmConfig"], **user_llm_config}
     merged_other_config = {**default_config["otherConfig"], **user_other_config}
@@ -416,7 +417,7 @@ async def test_llm_connection(
             "max_tokens": test_max_tokens,
         }
 
-        print(f"[LLM Test] 开始测试: provider={provider.value}, model={model}, base_url={base_url}, temperature={test_temperature}, timeout={test_timeout}s, max_tokens={test_max_tokens}")
+        logger.info(f"[LLM Test] 开始测试: provider={provider.value}, model={model}, base_url={base_url}, temperature={test_temperature}, timeout={test_timeout}s, max_tokens={test_max_tokens}")
 
         # 创建配置
         config = LLMConfig(
@@ -452,7 +453,7 @@ async def test_llm_connection(
             max_tokens=test_max_tokens,
         )
 
-        print(f"[LLM Test] 发送测试请求...")
+        logger.info(f"[LLM Test] 发送测试请求...")
         response = await adapter.complete(test_request)
 
         elapsed_time = time.time() - start_time
@@ -462,7 +463,7 @@ async def test_llm_connection(
         if not response or not response.content:
             debug_info["error_type"] = "empty_response"
             debug_info["raw_response"] = str(response) if response else None
-            print(f"[LLM Test] 空响应: {response}")
+            logger.info(f"[LLM Test] 空响应: {response}")
             return LLMTestResponse(
                 success=False,
                 message="LLM 返回空响应，请检查 API Key 和配置",
@@ -476,7 +477,7 @@ async def test_llm_connection(
             "total_tokens": getattr(response, 'total_tokens', None),
         }
 
-        print(f"[LLM Test] 成功! 响应: {response.content[:50]}... 耗时: {elapsed_time:.2f}s")
+        logger.info(f"[LLM Test] 成功! 响应: {response.content[:50]}... 耗时: {elapsed_time:.2f}s")
 
         return LLMTestResponse(
             success=True,
@@ -502,8 +503,8 @@ async def test_llm_connection(
         if hasattr(e, 'status_code') and e.status_code:
             debug_info["status_code"] = e.status_code
 
-        print(f"[LLM Test] 失败: {error_type}: {error_msg}")
-        print(f"[LLM Test] Traceback:\n{traceback.format_exc()}")
+        logger.error(f"[LLM Test] 失败: {error_type}: {error_msg}")
+        logger.error(f"[LLM Test] Traceback:\n{traceback.format_exc()}")
 
         # 提供更友好的错误信息
         friendly_message = error_msg
