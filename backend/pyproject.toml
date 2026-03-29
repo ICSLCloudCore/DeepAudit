@@ -2,7 +2,7 @@
 name = "deepaudit-backend"
 version = "3.0.4"
 description = "DeepAudit Backend API - AI-Powered Code Security Audit Platform"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
