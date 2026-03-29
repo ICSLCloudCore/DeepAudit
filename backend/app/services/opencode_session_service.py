@@ -14,7 +14,7 @@ import json
 import traceback
 import logging
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.utils.log import logger
@@ -87,7 +87,7 @@ async def log_opencode_interaction_to_db(
 
 def log_opencode_interaction(direction: str, endpoint: str, data: Any = None):
     """记录OpenCode Server交互日志"""
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
     log_entry = {"timestamp": timestamp, "direction": direction, "endpoint": endpoint, "data": data}
     logger.info(
         f"[OpenCode] {direction.upper()} {endpoint}: {json.dumps(data, default=str) if data else 'None'}"
@@ -116,7 +116,7 @@ class OpenCodeSessionService:
         """
         包装OpenCode Server请求，自动记录交互到数据库
         """
-        request_time = datetime.utcnow()
+        request_time = datetime.now(timezone.utc)
 
         try:
             log_opencode_interaction("request", endpoint, json_data)
@@ -129,7 +129,7 @@ class OpenCodeSessionService:
                 else:
                     raise ValueError(f"Unsupported HTTP method: {method}")
 
-            response_time = datetime.utcnow()
+            response_time = datetime.now(timezone.utc)
             duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
             logger.info(f"[OpenCode] Response status: {response.status_code}")
@@ -201,7 +201,7 @@ class OpenCodeSessionService:
 
             log_opencode_interaction("error", endpoint, {"error": str(e)})
 
-            response_time = datetime.utcnow()
+            response_time = datetime.now(timezone.utc)
             duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
             if self._current_session_id:
@@ -238,14 +238,14 @@ class OpenCodeSessionService:
     ) -> bool:
         """检查OpenCode Server健康状态"""
         logger.info(f"[OpenCode] Checking OpenCode Server health...")
-        request_time = datetime.utcnow()
+        request_time = datetime.now(timezone.utc)
         try:
             url = self.get_opencode_server_url(project)
             health_url = f"{url}/global/health"
 
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(health_url)
-                response_time = datetime.utcnow()
+                response_time = datetime.now(timezone.utc)
                 duration_ms = int((response_time - request_time).total_seconds() * 1000)
 
                 if response.status_code == 200:
@@ -295,7 +295,7 @@ class OpenCodeSessionService:
             logger.info(f"[OpenCode] Health check exception: {e}")
 
             if db_session_id:
-                response_time = datetime.utcnow()
+                response_time = datetime.now(timezone.utc)
                 duration_ms = int((response_time - request_time).total_seconds() * 1000)
                 await log_opencode_interaction_to_db(
                     self.db,
@@ -539,7 +539,7 @@ class OpenCodeSessionService:
             project.opencode_pid = str(pid)
             project.opencode_port = port
             project.opencode_log_path = log_path
-            project.opencode_started_at = datetime.utcnow()
+            project.opencode_started_at = datetime.now(timezone.utc)
             await self.db.commit()
 
             logger.info(f"[OpenCode] Successfully started opencode serve: PID={pid}, Port={port}")
@@ -850,8 +850,8 @@ class OpenCodeSessionService:
             current_step="Starting OpenCode server"
             if is_just_start_server
             else "Initializing audit",
-            started_at=datetime.utcnow(),
-            completed_at=datetime.utcnow() if is_just_start_server else None,
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc) if is_just_start_server else None,
         )
 
         self.db.add(audit_task)
@@ -944,18 +944,18 @@ class OpenCodeSessionService:
                 # 更新任务状态为失败
                 audit_task.status = OpenCodeAuditTaskStatus.FAILED
                 audit_task.error_message = "Failed to send prompt to OpenCode server"
-                audit_task.completed_at = datetime.utcnow()
+                audit_task.completed_at = datetime.now(timezone.utc)
                 await self.db.commit()
         else:
             logger.info(f"[OpenCode] Failed to get server_session_id, skipping prompt sending")
             # 更新任务状态为失败
             audit_task.status = OpenCodeAuditTaskStatus.FAILED
             audit_task.error_message = "Failed to create OpenCode server session"
-            audit_task.completed_at = datetime.utcnow()
+            audit_task.completed_at = datetime.now(timezone.utc)
             await self.db.commit()
 
         db_session.status = OpenCodeSessionStatus.ACTIVE
-        db_session.started_at = datetime.utcnow()
+        db_session.started_at = datetime.now(timezone.utc)
         db_session.opencode_server_session_id = server_session_id
         await self.db.commit()
         await self.db.refresh(db_session)
@@ -1108,7 +1108,7 @@ class OpenCodeSessionService:
                         db_session.status = OpenCodeSessionStatus.ERROR
                         db_session.response_content += "\nLLM Server response timeout. Please try again or check the server status."
 
-                        db_session.completed_at = datetime.utcnow()
+                        db_session.completed_at = datetime.now(timezone.utc)
                         await db_session_local.commit()
 
                     # 更新审计任务状态
@@ -1132,7 +1132,7 @@ class OpenCodeSessionService:
                             audit_task.error_message = "LLM Server response timeout"
                             audit_task.current_step = "Failed"
 
-                        audit_task.completed_at = datetime.utcnow()
+                        audit_task.completed_at = datetime.now(timezone.utc)
                         await db_session_local.commit()
 
                     logger.info(f"[OpenCode] Background poll completed with status: {db_session.status}")
@@ -1159,7 +1159,7 @@ class OpenCodeSessionService:
                         audit_task.status = OpenCodeAuditTaskStatus.FAILED
                         audit_task.error_message = str(e)
                         audit_task.current_step = "Failed"
-                        audit_task.completed_at = datetime.utcnow()
+                        audit_task.completed_at = datetime.now(timezone.utc)
                         await db_session_local.commit()
             except Exception:
                 pass
@@ -1543,7 +1543,7 @@ class OpenCodeSessionService:
             project.opencode_log_path = None
             project.opencode_started_at = None
             project.opencode_current_session_id = None
-            project.updated_at = datetime.utcnow()
+            project.updated_at = datetime.now(timezone.utc)
 
             # 清理活跃会话相关
             if project.opencode_active_session_id:
@@ -1569,7 +1569,7 @@ class OpenCodeSessionService:
                 session = result.scalar_one_or_none()
                 if session:
                     session.status = OpenCodeSessionStatus.CLOSED
-                    session.completed_at = datetime.utcnow()
+                    session.completed_at = datetime.now(timezone.utc)
 
                 # 3. 清除 project 的活跃会话引用
                 project.opencode_active_session_id = None

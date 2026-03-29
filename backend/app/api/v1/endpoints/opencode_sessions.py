@@ -2,16 +2,16 @@
 OpenCode会话管理 API 端点
 """
 
-import json
-from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import select, and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
-import asyncio
-from app.utils.log import logger
 
+import json
+import asyncio
+from datetime import datetime, timezone
+
+from app.utils.log import logger
 from app.db.session import get_db
 from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
 from app.models.opencode_interaction import OpenCodeInteraction
@@ -276,7 +276,7 @@ async def close_session(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     session.status = OpenCodeSessionStatus.CLOSED
-    session.completed_at = datetime.utcnow()
+    session.completed_at = datetime.now(timezone.utc)
 
     await db.commit()
 

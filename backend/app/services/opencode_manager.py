@@ -5,11 +5,11 @@ OpenCode Auto Manager - Manages OpenCode processes for audit tasks
 import asyncio
 import uuid
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import TaskExecution, OpenCodeStatus, AgentTask
+from app.models import TaskExecution, OpenCodeStatus
 
 
 class OpenCodeAutoManager:
@@ -77,7 +77,7 @@ class OpenCodeAutoManager:
 
             # Update status to running
             execution.opencode_status = OpenCodeStatus.RUNNING
-            execution.started_at = datetime.utcnow()
+            execution.started_at = datetime.now(timezone.utc)
             execution.process_info = {
                 "pid": 12345,
                 "status": "healthy",
@@ -131,7 +131,7 @@ class OpenCodeAutoManager:
 
         # Update status to completed
         execution.opencode_status = OpenCodeStatus.COMPLETED
-        execution.completed_at = datetime.utcnow()
+        execution.completed_at = datetime.now(timezone.utc)
 
         # Remove from cache
         if execution.opencode_process_id in self._process_cache:
