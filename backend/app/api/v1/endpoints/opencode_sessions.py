@@ -347,6 +347,7 @@ async def session_stream(
                             "content_type": msg.content_type,
                             "text_content": msg.text_content,
                             "message_index": msg.message_index,
+                            "time": msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
                         }
                         for msg in messages
                     ]
@@ -379,7 +380,9 @@ async def session_stream(
                 ]:
                     yield {
                         "event": "done",
-                        "data": json.dumps({"content_type": current_session_data["status"]}),
+                        "data": json.dumps({
+                            "content_type": current_session_data["status"],
+                            "time": msg.created_at.strftime("%Y-%m-%d %H:%M:%S")}),
                     }
                     should_continue = False
                     break

@@ -99,26 +99,27 @@ function OpenCodeAuditPageContent() {
       eventSourceRef.current = eventSource;
 
       eventSource.addEventListener('message', (event) => {
-        const data = JSON.parse(event.data);
-        const { content_type, text_content } = data;
-        // 为每条消息创建新的日志卡片
+        const { content_type, text_content, time } = JSON.parse(event.data);
         addLog({
           type: content_type === 'response' ? 'response' : 
                 content_type === 'reasoning' ? 'progress' : 'info',
           title: "",
           content: text_content,
-          isStreaming: false
+          isStreaming: false,
+          time,
         });
       });
 
       eventSource.addEventListener('done', async (event) => {
         // Refresh session status
         await loadSession();
-        const { content_type } = JSON.parse(event.data);
+        const { content_type, time } = JSON.parse(event.data);
         addLog({
           type: content_type === 'closed' ? 'status' : 'error',
           title: "",
-          content: "Audit Completed."
+          content: "Audit Completed.",
+          isStreaming: false,
+          time,
         });
         setFirstRun(false);
       });

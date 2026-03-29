@@ -161,7 +161,7 @@ export function useOpenCodeAuditState() {
     dispatch({ type: 'SET_LOGS', payload: logs });
   }, []);
 
-  const addLog = useCallback((log: Omit<LogItem, 'id' | 'time'>): string => {
+  const addLog = useCallback((log: Omit<LogItem, 'id' | 'time'> & { time?: string }): string => {
     const newLog = createLogItem(log);
     dispatch({ type: 'ADD_LOG', payload: newLog });
     return newLog.id;

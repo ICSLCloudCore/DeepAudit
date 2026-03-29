@@ -61,7 +61,7 @@ export interface OpenCodeAuditState {
 export type OpenCodeAuditAction =
   | { type: 'SET_SESSION'; payload: OpenCodeSession }
   | { type: 'SET_LOGS'; payload: LogItem[] }
-  | { type: 'ADD_LOG'; payload: Omit<LogItem, 'id' | 'time'> & { id?: string } }
+  | { type: 'ADD_LOG'; payload: Omit<LogItem, 'id' | 'time'> & { id?: string; time?: string } }
   | { type: 'UPDATE_LOG'; payload: { id: string; updates: Partial<LogItem> } }
   | { type: 'REMOVE_LOG'; payload: string }
   | { type: 'SET_LOADING'; payload: boolean }
