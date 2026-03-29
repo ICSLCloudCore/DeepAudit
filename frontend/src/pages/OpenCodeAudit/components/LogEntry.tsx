@@ -7,6 +7,8 @@ import { ChevronDown, ChevronUp, Zap, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { LOG_TYPE_CONFIG } from "../constants";
 import type { LogEntryProps } from "../types";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const LOG_TYPE_LABELS: Record<string, string> = {
   prompt: 'PROMPT',
@@ -117,7 +119,7 @@ export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: L
                   </button>
                 </div>
                 <pre className="p-4 text-sm font-mono text-foreground/85 max-h-64 overflow-y-auto custom-scrollbar whitespace-pre-wrap break-words">
-                  {item.content}
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
                 </pre>
               </div>
             </div>
