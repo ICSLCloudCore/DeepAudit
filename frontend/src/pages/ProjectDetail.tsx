@@ -872,11 +872,11 @@ export default function ProjectDetail() {
                     let badgeLabel = "";
                     let badgeClass = "";
                     if (t.kind === 'opencode') {
-                      taskLabel = (t.task as any).name || "OpenCode 审计";
+                      taskLabel = (t.task as any).project?.name || (t.task as any).name || "OpenCode 审计";
                       badgeLabel = "OPENCODE";
                       badgeClass = "cyber-badge-warning";
                     } else if (t.kind === 'agent') {
-                      taskLabel = "Agent 审计";
+                      taskLabel = (t.task as any).name || "Agent 审计";
                       badgeLabel = "AGENT";
                       badgeClass = "cyber-badge-info";
                     } else {
