@@ -14,7 +14,8 @@ import json
 import traceback
 import logging
 import zipfile
-from typing import Optional, Dict, Any
+import math
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -93,6 +94,38 @@ def log_opencode_interaction(direction: str, endpoint: str, data: Any = None):
     logger.info(
         f"[OpenCode] {direction.upper()} {endpoint}: {json.dumps(data, default=str) if data else 'None'}"
     )
+
+
+def _calculate_security_score(findings: List[Dict]) -> float:
+    """
+    计算质量评分 - 使用混合法（累计扣分 + 指数衰减）
+    分数趋近于0但永远不等于0
+    """
+    if not findings:
+        return 100.0
+
+    # 定义每个严重程度的基础扣分值
+    base_deductions = {
+        "critical": 30,
+        "high": 20,
+        "medium": 12,
+        "low": 5,
+        "info": 2,
+    }
+
+    # 第一步：计算累计扣分（按严重程度）
+    total_deduction = 0
+    for f in findings:
+        if isinstance(f, dict):
+            sev = f.get("severity", "low")
+            total_deduction += base_deductions.get(sev, 5)
+
+    # 第二步：使用指数衰减让分数趋近于0但永远不等于0
+    # k = 1.0（衰减系数）
+    k = 1.0
+    score = 100.0 * math.exp(-k * total_deduction / 100.0)
+
+    return float(score)
 
 
 class OpenCodeSessionService:
@@ -1594,6 +1627,16 @@ class OpenCodeSessionService:
                                         + severity_summary.get("low", 0)
                                         + severity_summary.get("info", 0)
                                     )
+                                     
+                                    # 收集漏洞列表用于计算分数
+                                    findings_list = []
+                                    for vuln_data in vulnerabilities:
+                                        findings_list.append({
+                                            "severity": vuln_data.get("severity", "low")
+                                        })
+                                     
+                                    # 计算质量评分
+                                    task.quality_score = _calculate_security_score(findings_list)
                                     await db.commit()
                                 logger.info(
                                     f"[OpenCode] Successfully auto imported {imported_count} vulnerabilities"
