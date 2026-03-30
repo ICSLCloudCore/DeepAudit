@@ -7,12 +7,18 @@ export class CodeAnalysisEngine {
     return [...SUPPORTED_LANGUAGES];
   }
 
-  static async analyzeCode(code: string, language: string, promptTemplateId?: string): Promise<CodeAnalysisResult> {
+  static async analyzeCode(
+    code: string,
+    language: string = "auto",
+    promptTemplateId?: string,
+    customPrompt?: string
+  ): Promise<CodeAnalysisResult> {
     try {
       const response = await apiClient.post('/scan/instant', { 
         code, 
         language,
         prompt_template_id: promptTemplateId || undefined,
+        custom_prompt: customPrompt || undefined,
       });
       return response.data;
     } catch (error: any) {
