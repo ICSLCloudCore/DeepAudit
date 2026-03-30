@@ -5,7 +5,9 @@ DeepAudit OpenCode 审计任务 API
 import json
 import os
 from typing import Any, List, Optional, Dict
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -804,3 +806,230 @@ async def update_vulnerability_status(
         "status": vuln.status,
         "manual_confirmation_status": vuln.manual_confirmation_status,
     }
+
+
+# ============ 报告下载相关 API Endpoints ============
+
+
+@router.get("/{task_id}/export-report-md")
+async def export_report_md(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    导出 Markdown 格式的审计报告
+    """
+    from app.utils.log import logger
+
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    project_result = await db.execute(select(Project).where(Project.id == task.project_id))
+    project = project_result.scalar_one_or_none()
+
+    # 使用服务层的公共方法查找报告文件
+    service = OpenCodeSessionService(db)
+    report_files = service.find_report_files(
+        opencode_session_id=task.opencode_session_id,
+        project_id=task.project_id,
+        project_source_type=project.source_type if project else None,
+        extension=".md",
+    )
+
+    if not report_files:
+        raise HTTPException(status_code=404, detail="未找到 Markdown 报告文件")
+
+    latest_file = report_files[0]
+    logger.info(f"[OpenCode Report Download] Serving MD file: {latest_file}")
+
+    filename = f"opencode-audit-report-{task_id[:8]}.md"
+    return FileResponse(path=str(latest_file), media_type="text/markdown", filename=filename)
+
+
+@router.get("/{task_id}/export-report-json")
+async def export_report_json(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    导出 JSON 格式的审计报告
+    """
+    from app.utils.log import logger
+
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    project_result = await db.execute(select(Project).where(Project.id == task.project_id))
+    project = project_result.scalar_one_or_none()
+
+    # 使用服务层的公共方法查找报告文件
+    service = OpenCodeSessionService(db)
+    report_files = service.find_report_files(
+        opencode_session_id=task.opencode_session_id,
+        project_id=task.project_id,
+        project_source_type=project.source_type if project else None,
+        extension=".json",
+    )
+
+    if not report_files:
+        raise HTTPException(status_code=404, detail="未找到 JSON 报告文件")
+
+    latest_file = report_files[0]
+    logger.info(f"[OpenCode Report Download] Serving JSON file: {latest_file}")
+
+    filename = f"opencode-audit-report-{task_id[:8]}.json"
+    return FileResponse(path=str(latest_file), media_type="application/json", filename=filename)
+
+    if project_source_type == "zip":
+        possible_paths.extend(
+            [
+                Path(f"/tmp/opencode_project_{project_id}") / "reports",
+                Path(f"C:/temp/opencode_project_{project_id}") / "reports",
+            ]
+        )
+    elif project_source_type == "repository":
+        possible_paths.extend(
+            [
+                Path(f"/tmp/{project_id}") / "reports",
+                Path(f"C:/temp/{project_id}") / "reports",
+            ]
+        )
+
+    if opencode_session_id:
+        possible_paths.extend(
+            [
+                Path(f"/tmp/opencode_{opencode_session_id}") / "reports",
+                Path(f"C:/temp/opencode_{opencode_session_id}") / "reports",
+            ]
+        )
+
+    home_dir = Path.home()
+    possible_paths.extend(
+        [
+            home_dir / "DeepAudit" / "reports",
+            home_dir / "Documents" / "DeepAudit" / "reports",
+            home_dir / "opencode" / "reports",
+        ]
+    )
+
+    current_dir = Path.cwd()
+    possible_paths.extend(
+        [
+            current_dir / "reports",
+            current_dir / "docs" / "example",
+        ]
+    )
+
+    possible_paths.extend(
+        [
+            Path("/tmp/opencode_project") / "reports",
+            Path("/tmp/opencode_workspace") / "reports",
+            Path("C:/temp/opencode_project") / "reports",
+            Path("C:/temp/opencode_workspace") / "reports",
+        ]
+    )
+
+    report_files = []
+    for reports_dir in possible_paths:
+        if reports_dir.exists() and reports_dir.is_dir():
+            logger.info(f"[OpenCode Report Download] Found directory: {reports_dir}")
+            for file in reports_dir.rglob(f"*{extension}"):
+                report_files.append(file)
+                logger.info(f"[OpenCode Report Download] Found {extension} file: {file}")
+
+    report_files.sort(key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True)
+    return report_files
+
+
+@router.get("/{task_id}/export-report-md")
+async def export_report_md(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    导出 Markdown 格式的审计报告
+    """
+    from app.utils.log import logger
+
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    project_result = await db.execute(select(Project).where(Project.id == task.project_id))
+    project = project_result.scalar_one_or_none()
+
+    report_files = _find_report_files(
+        opencode_session_id=task.opencode_session_id,
+        project_id=task.project_id,
+        project_source_type=project.source_type if project else None,
+        extension=".md",
+    )
+
+    if not report_files:
+        raise HTTPException(status_code=404, detail="未找到 Markdown 报告文件")
+
+    latest_file = report_files[0]
+    logger.info(f"[OpenCode Report Download] Serving MD file: {latest_file}")
+
+    filename = f"opencode-audit-report-{task_id[:8]}.md"
+    return FileResponse(path=str(latest_file), media_type="text/markdown", filename=filename)
+
+
+@router.get("/{task_id}/export-report-json")
+async def export_report_json(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    导出 JSON 格式的审计报告
+    """
+    from app.utils.log import logger
+
+    task_result = await db.execute(
+        select(OpenCodeAuditTask).where(
+            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
+        )
+    )
+    task = task_result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    project_result = await db.execute(select(Project).where(Project.id == task.project_id))
+    project = project_result.scalar_one_or_none()
+
+    report_files = _find_report_files(
+        opencode_session_id=task.opencode_session_id,
+        project_id=task.project_id,
+        project_source_type=project.source_type if project else None,
+        extension=".json",
+    )
+
+    if not report_files:
+        raise HTTPException(status_code=404, detail="未找到 JSON 报告文件")
+
+    latest_file = report_files[0]
+    logger.info(f"[OpenCode Report Download] Serving JSON file: {latest_file}")
+
+    filename = f"opencode-audit-report-{task_id[:8]}.json"
+    return FileResponse(path=str(latest_file), media_type="application/json", filename=filename)

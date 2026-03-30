@@ -6,10 +6,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Terminal, Loader2, ArrowDown, Sparkle, FileText } from "lucide-react";
+import { Terminal, Loader2, ArrowDown, Sparkle, FileText, FileJson } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { exportOpenCodeToMD, exportOpenCodeToJSON } from "@/features/reports/services/reportExport";
 
 import { SplashScreen, Header, LogEntry, StatsPanel, MessageList } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
@@ -33,6 +34,8 @@ function OpenCodeAuditPageContent() {
   const [statusVerb, setStatusVerb] = useState(ACTION_VERBS[0]);
   const [statusDots, setStatusDots] = useState(0);
   const [firstRun, setFirstRun] = useState(true);
+  const [exportingMD, setExportingMD] = useState(false);
+  const [exportingJSON, setExportingJSON] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -162,6 +165,42 @@ function OpenCodeAuditPageContent() {
       toast.info("Starting OpenCode audit...");
     } else {
       toast.error("Project ID not found");
+    }
+  };
+
+  const handleExportMD = async () => {
+    const taskId = session?.id || session?.task_id || sessionId;
+    if (!taskId) {
+      toast.error("任务 ID 不存在");
+      return;
+    }
+    setExportingMD(true);
+    try {
+      await exportOpenCodeToMD(taskId);
+      toast.success("Markdown 报告已导出");
+    } catch (error) {
+      console.error("导出失败:", error);
+      toast.error("导出失败，请重试");
+    } finally {
+      setExportingMD(false);
+    }
+  };
+
+  const handleExportJSON = async () => {
+    const taskId = session?.id || session?.task_id || sessionId;
+    if (!taskId) {
+      toast.error("任务 ID 不存在");
+      return;
+    }
+    setExportingJSON(true);
+    try {
+      await exportOpenCodeToJSON(taskId);
+      toast.success("JSON 报告已导出");
+    } catch (error) {
+      console.error("导出失败:", error);
+      toast.error("导出失败，请重试");
+    } finally {
+      setExportingJSON(false);
     }
   };
 
@@ -299,7 +338,7 @@ function OpenCodeAuditPageContent() {
           
           {/* 查看问题按钮 - 仅在任务完成时显示 */}
           {session && isComplete && (
-            <div className="flex-shrink-0 p-4 border-t border-border">
+            <div className="flex-shrink-0 p-4 border-t border-border space-y-3">
               <Button
                 className="w-full gap-2"
                 onClick={() => {
@@ -312,6 +351,34 @@ function OpenCodeAuditPageContent() {
               >
                 <FileText className="w-4 h-4" />
                 查看问题
+              </Button>
+              
+              <Button
+                className="w-full gap-2"
+                variant="secondary"
+                onClick={handleExportMD}
+                disabled={exportingMD}
+              >
+                {exportingMD ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileText className="w-4 h-4" />
+                )}
+                导出 Markdown 报告
+              </Button>
+              
+              <Button
+                className="w-full gap-2"
+                variant="secondary"
+                onClick={handleExportJSON}
+                disabled={exportingJSON}
+              >
+                {exportingJSON ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileJson className="w-4 h-4" />
+                )}
+                导出 JSON 报告
               </Button>
             </div>
           )}

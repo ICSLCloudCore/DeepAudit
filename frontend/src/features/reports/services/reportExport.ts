@@ -1,5 +1,6 @@
 import type { AuditTask, AuditIssue, CodeAnalysisResult } from "@/shared/types";
 import { api } from "@/shared/config/database";
+import { exportReportMD, exportReportJSON } from "@/shared/api/opencodeAuditTasks";
 
 // 导出 JSON 格式报告
 export async function exportToJSON(task: AuditTask, issues: AuditIssue[]) {
@@ -119,12 +120,34 @@ export function exportInstantToJSON(
 
 // 通用下载函数
 function downloadBlob(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// 导出 OpenCode 审计任务 Markdown 报告
+export async function exportOpenCodeToMD(taskId: string) {
+  try {
+    const blob = await exportReportMD(taskId);
+    downloadBlob(blob, `opencode-audit-report-${taskId.slice(0, 8)}.md`);
+  } catch (error) {
+    console.error('Failed to export OpenCode MD report:', error);
+    throw new Error('Markdown 报告导出失败，请稍后重试');
+  }
+}
+
+// 导出 OpenCode 审计任务 JSON 报告
+export async function exportOpenCodeToJSON(taskId: string) {
+  try {
+    const blob = await exportReportJSON(taskId);
+    downloadBlob(blob, `opencode-audit-report-${taskId.slice(0, 8)}.json`);
+  } catch (error) {
+    console.error('Failed to export OpenCode JSON report:', error);
+    throw new Error('JSON 报告导出失败，请稍后重试');
+  }
 }

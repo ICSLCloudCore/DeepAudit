@@ -1380,6 +1380,119 @@ class OpenCodeSessionService:
 
         return templates, total
 
+    def _build_possible_report_paths(
+        self,
+        opencode_session_id: Optional[str],
+        project_id: str,
+        project_source_type: Optional[str] = None,
+    ) -> List[Path]:
+        """
+        构建可能的报告路径列表（公共方法，供 auto_import_vulnerabilities 和报告下载使用）
+        """
+        from pathlib import Path
+
+        possible_paths = []
+
+        if opencode_session_id:
+            possible_paths.extend(
+                [
+                    Path(f"/tmp/{opencode_session_id}") / "reports",
+                    Path(f"C:/temp/{opencode_session_id}") / "reports",
+                    Path(f"/tmp/{opencode_session_id}"),
+                    Path(f"C:/temp/{opencode_session_id}"),
+                ]
+            )
+
+        if project_source_type == "zip":
+            from app.core.config import settings
+
+            zip_path = Path(settings.ZIP_STORAGE_PATH) / f"{project_id}.zip"
+            if zip_path.exists():
+                possible_paths.extend(
+                    [
+                        Path(f"/tmp/opencode_project_{project_id}") / "reports",
+                        Path(f"C:/temp/opencode_project_{project_id}") / "reports",
+                    ]
+                )
+        elif project_source_type == "repository":
+            possible_paths.extend(
+                [
+                    Path(f"/tmp/{project_id}") / "reports",
+                    Path(f"C:/temp/{project_id}") / "reports",
+                ]
+            )
+
+        if opencode_session_id:
+            possible_paths.extend(
+                [
+                    Path(f"/tmp/opencode_{opencode_session_id}") / "reports",
+                    Path(f"C:/temp/opencode_{opencode_session_id}") / "reports",
+                ]
+            )
+
+        home_dir = Path.home()
+        possible_paths.extend(
+            [
+                home_dir / "DeepAudit" / "reports",
+                home_dir / "Documents" / "DeepAudit" / "reports",
+                home_dir / "opencode" / "reports",
+            ]
+        )
+
+        current_dir = Path.cwd()
+        possible_paths.extend(
+            [
+                current_dir / "reports",
+                current_dir / "docs" / "example",
+            ]
+        )
+
+        possible_paths.extend(
+            [
+                Path("/tmp/opencode_project") / "reports",
+                Path("/tmp/opencode_workspace") / "reports",
+                Path("C:/temp/opencode_project") / "reports",
+                Path("C:/temp/opencode_workspace") / "reports",
+            ]
+        )
+
+        return possible_paths
+
+    def find_report_files(
+        self,
+        opencode_session_id: Optional[str],
+        project_id: str,
+        project_source_type: Optional[str] = None,
+        extension: str = ".json",
+    ) -> List[Path]:
+        """
+        查找指定扩展名的报告文件（公共方法）
+        返回按修改时间排序的文件列表（最新的在前）
+        """
+        from pathlib import Path
+
+        possible_paths = self._build_possible_report_paths(
+            opencode_session_id, project_id, project_source_type
+        )
+
+        logger.info(f"[OpenCode] ===== Find Report Files Debug Info =====")
+        logger.info(f"[OpenCode] Checking {len(possible_paths)} paths for {extension} files:")
+        for i, p in enumerate(possible_paths, 1):
+            exists = "EXISTS" if p.exists() else "NOT EXISTS"
+            logger.info(f"[OpenCode] {i}. {p} [{exists}]")
+        logger.info(f"[OpenCode] ===== End of paths =====")
+
+        report_files = []
+        for reports_dir in possible_paths:
+            if reports_dir.exists() and reports_dir.is_dir():
+                logger.info(f"[OpenCode] Found directory: {reports_dir}")
+                for file in reports_dir.rglob(f"*{extension}"):
+                    report_files.append(file)
+                    logger.info(f"[OpenCode] Found {extension} file: {file}")
+
+        report_files.sort(key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True)
+        return report_files
+
     async def auto_import_vulnerabilities(
         self,
         db: AsyncSession,
@@ -1388,7 +1501,6 @@ class OpenCodeSessionService:
     ):
         """自动导入审计报告中的漏洞"""
         import traceback
-        from pathlib import Path
 
         logger.info(f"[OpenCode] Auto importing vulnerabilities for task {audit_task_id}")
 
@@ -1418,98 +1530,19 @@ class OpenCodeSessionService:
                 )
                 return
 
-            # 构建可能的报告路径
-            possible_paths = []
-
             # 打印调试信息
             logger.info(f"[OpenCode] Project ID: {project.id}")
             logger.info(f"[OpenCode] Project source_type: {project.source_type}")
             logger.info(f"[OpenCode] Task ID: {audit_task_id}")
             logger.info(f"[OpenCode] OpenCode Session ID: {opencode_session_id}")
 
-            # 1. 尝试 opencode_session_id 相关的路径（最优先，因为项目就在这个目录下）
-            possible_paths.extend(
-                [
-                    Path(f"/tmp/{opencode_session_id}") / "reports",
-                    Path(f"C:/temp/{opencode_session_id}") / "reports",
-                    Path(f"/tmp/{opencode_session_id}"),
-                    Path(f"C:/temp/{opencode_session_id}"),
-                ]
+            # 使用公共方法查找 JSON 报告文件
+            report_files = self.find_report_files(
+                opencode_session_id=opencode_session_id,
+                project_id=project_id,
+                project_source_type=project.source_type,
+                extension=".json",
             )
-
-            # 2. 尝试项目目录下的reports目录
-            if project.source_type == "zip":
-                from app.core.config import settings
-
-                zip_path = Path(settings.ZIP_STORAGE_PATH) / f"{project.id}.zip"
-                if zip_path.exists():
-                    possible_paths.extend(
-                        [
-                            Path(f"/tmp/opencode_project_{project.id}") / "reports",
-                            Path(f"C:/temp/opencode_project_{project.id}") / "reports",
-                        ]
-                    )
-            elif project.source_type == "repository":
-                possible_paths.extend(
-                    [
-                        Path(f"/tmp/{project.id}") / "reports",
-                        Path(f"C:/temp/{project.id}") / "reports",
-                    ]
-                )
-
-            # 3. 尝试其他可能的 opencode_session_id 相关路径
-            possible_paths.extend(
-                [
-                    Path(f"/tmp/opencode_{opencode_session_id}") / "reports",
-                    Path(f"C:/temp/opencode_{opencode_session_id}") / "reports",
-                ]
-            )
-
-            # 4. 尝试用户主目录下的DeepAudit reports目录
-            home_dir = Path.home()
-            possible_paths.extend(
-                [
-                    home_dir / "DeepAudit" / "reports",
-                    home_dir / "Documents" / "DeepAudit" / "reports",
-                    home_dir / "opencode" / "reports",
-                ]
-            )
-
-            # 5. 尝试当前工作目录下的reports目录
-            current_dir = Path.cwd()
-            possible_paths.extend(
-                [
-                    current_dir / "reports",
-                    current_dir / "docs" / "example",
-                ]
-            )
-
-            # 6. 尝试常见的 OpenCode 工作目录
-            possible_paths.extend(
-                [
-                    Path("/tmp/opencode_project") / "reports",
-                    Path("/tmp/opencode_workspace") / "reports",
-                    Path("C:/temp/opencode_project") / "reports",
-                    Path("C:/temp/opencode_workspace") / "reports",
-                ]
-            )
-
-            # 打印所有检查的路径（无论是否存在）
-            logger.info(f"[OpenCode] ===== Auto Import Debug Info =====")
-            logger.info(f"[OpenCode] Checking {len(possible_paths)} paths:")
-            for i, p in enumerate(possible_paths, 1):
-                exists = "EXISTS" if p.exists() else "NOT EXISTS"
-                logger.info(f"[OpenCode] {i}. {p} [{exists}]")
-            logger.info(f"[OpenCode] ===== End of paths =====")
-
-            # 查找所有可能的JSON报告文件
-            report_files = []
-            for reports_dir in possible_paths:
-                if reports_dir.exists() and reports_dir.is_dir():
-                    logger.info(f"[OpenCode] Found directory: {reports_dir}")
-                    for json_file in reports_dir.rglob("*.json"):
-                        report_files.append(json_file)
-                        logger.info(f"[OpenCode] Found JSON file: {json_file}")
 
             # 如果找到报告文件，尝试导入
             if report_files:
@@ -1627,14 +1660,14 @@ class OpenCodeSessionService:
                                         + severity_summary.get("low", 0)
                                         + severity_summary.get("info", 0)
                                     )
-                                     
+
                                     # 收集漏洞列表用于计算分数
                                     findings_list = []
                                     for vuln_data in vulnerabilities:
-                                        findings_list.append({
-                                            "severity": vuln_data.get("severity", "low")
-                                        })
-                                     
+                                        findings_list.append(
+                                            {"severity": vuln_data.get("severity", "low")}
+                                        )
+
                                     # 计算质量评分
                                     task.quality_score = _calculate_security_score(findings_list)
                                     await db.commit()

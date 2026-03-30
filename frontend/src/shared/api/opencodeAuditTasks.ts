@@ -296,3 +296,23 @@ export async function updateVulnerability(
   const response = await apiClient.patch(`/opencode-audit-tasks/${taskId}/vulnerabilities/${vulnId}`, data);
   return response.data;
 }
+
+/**
+ * 导出 Markdown 格式报告
+ */
+export async function exportReportMD(taskId: string): Promise<Blob> {
+  const response = await apiClient.get(`/opencode-audit-tasks/${taskId}/export-report-md`, {
+    responseType: 'blob'
+  });
+  return response.data;
+}
+
+/**
+ * 导出 JSON 格式报告
+ */
+export async function exportReportJSON(taskId: string): Promise<Blob> {
+  const response = await apiClient.get(`/opencode-audit-tasks/${taskId}/export-report-json`, {
+    responseType: 'blob'
+  });
+  return response.data;
+}
