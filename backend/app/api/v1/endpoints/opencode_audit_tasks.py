@@ -302,8 +302,13 @@ async def update_opencode_audit_task(
         task.description = task_data.description
 
     await db.commit()
-    await db.refresh(task)
-    return task
+    # 重新查询以确保关联的项目数据被正确加载
+    result = await db.execute(
+        select(OpenCodeAuditTask)
+        .options(selectinload(OpenCodeAuditTask.project))
+        .where(OpenCodeAuditTask.id == task_id)
+    )
+    return result.scalars().first()
 
 
 @router.patch("/{task_id}/status", response_model=OpenCodeAuditTaskResponse)
@@ -359,8 +364,13 @@ async def update_opencode_audit_task_status(
         task.low_count = status_data.low_count
 
     await db.commit()
-    await db.refresh(task)
-    return task
+    # 重新查询以确保关联的项目数据被正确加载
+    result = await db.execute(
+        select(OpenCodeAuditTask)
+        .options(selectinload(OpenCodeAuditTask.project))
+        .where(OpenCodeAuditTask.id == task_id)
+    )
+    return result.scalars().first()
 
 
 @router.post("/{task_id}/cancel")

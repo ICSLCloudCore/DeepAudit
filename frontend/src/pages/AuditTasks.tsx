@@ -1142,7 +1142,7 @@ export default function AuditTasks() {
                       </div>
                       <div>
                         <h3 className="font-bold text-xl text-foreground uppercase tracking-wide">
-                          {task.name || 'OpenCode审计任务'}
+                          {task.project?.name || task.name || 'OpenCode审计任务'}
                         </h3>
                         <p className="text-sm text-muted-foreground font-mono">
                           {task.current_step || task.task_type}
