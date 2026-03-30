@@ -60,10 +60,10 @@ export function ProjectTasksTab(props: {
             let taskTypeLabel = "";
             let taskBadgeLabel = "";
             if (isOpenCodeTask) {
-              taskTypeLabel = task.name || "OpenCode 审计任务";
+              taskTypeLabel = task.project?.name || task.name || "OpenCode 审计任务";
               taskBadgeLabel = "OPENCODE";
             } else if (isAgentTask) {
-              taskTypeLabel = "Agent 审计任务";
+              taskTypeLabel = task.name || "Agent 审计任务";
               taskBadgeLabel = "AGENT";
             } else {
               taskTypeLabel = (task as AuditTask).task_type === "repository" ? "审计任务" : "即时分析任务";
