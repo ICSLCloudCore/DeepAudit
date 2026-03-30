@@ -11,20 +11,25 @@ import os
 import sys
 import base64
 
+from app.utils.log import logger
+
 # macOS Homebrew compatibility fix
-if sys.platform == 'darwin':
-    os.environ['DYLD_FALLBACK_LIBRARY_PATH'] = '/opt/homebrew/lib:' + os.environ.get('DYLD_FALLBACK_LIBRARY_PATH', '')
+if sys.platform == "darwin":
+    os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = "/opt/homebrew/lib:" + os.environ.get(
+        "DYLD_FALLBACK_LIBRARY_PATH", ""
+    )
 
 from weasyprint import HTML, CSS
 from weasyprint.text.fonts import FontConfiguration
 from jinja2 import Template
+
 
 class ReportGenerator:
     """
     基于 HTML/CSS 的专业 PDF 报告生成器
     风格：严谨、高密度、企业级审计报告风格
     """
-    
+
     # --- HTML 模板 ---
     _TEMPLATE = """
     <!DOCTYPE html>
@@ -375,7 +380,7 @@ class ReportGenerator:
     </body>
     </html>
     """
-    
+
     @classmethod
     def _get_logo_base64(cls) -> str:
         """读取并编码 Logo 图片"""
@@ -384,17 +389,19 @@ class ReportGenerator:
             # 尝试多个可能的路径
             possible_paths = [
                 # Docker 容器内路径
-                os.path.join(current_dir, '../../static/images/logo_nobg.png'),
+                os.path.join(current_dir, "../../static/images/logo_nobg.png"),
                 # 本地开发路径
-                os.path.abspath(os.path.join(current_dir, '../../../frontend/public/images/logo_nobg.png')),
+                os.path.abspath(
+                    os.path.join(current_dir, "../../../frontend/public/images/logo_nobg.png")
+                ),
             ]
-            
+
             for logo_path in possible_paths:
                 if os.path.exists(logo_path):
                     with open(logo_path, "rb") as image_file:
-                        return base64.b64encode(image_file.read()).decode('utf-8')
+                        return base64.b64encode(image_file.read()).decode("utf-8")
         except Exception as e:
-            print(f"Error loading logo: {e}")
+            logger.error(f"Error loading logo: {e}")
             return ""
         return ""
 
@@ -408,44 +415,39 @@ class ReportGenerator:
     @classmethod
     def _process_issues(cls, issues: List[Dict]) -> List[Dict]:
         processed = []
-        order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
-        sorted_issues = sorted(issues, key=lambda x: order.get(x.get('severity', 'low'), 4))
+        order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        sorted_issues = sorted(issues, key=lambda x: order.get(x.get("severity", "low"), 4))
 
-        sev_labels = {
-            'critical': 'CRITICAL',
-            'high': 'HIGH',
-            'medium': 'MEDIUM',
-            'low': 'LOW'
-        }
+        sev_labels = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
 
         for i in sorted_issues:
             item = i.copy()
-            item['severity'] = item.get('severity', 'low')
-            item['severity_label'] = sev_labels.get(item['severity'], 'UNKNOWN')
-            item['line'] = item.get('line_number') or item.get('line')
+            item["severity"] = item.get("severity", "low")
+            item["severity_label"] = sev_labels.get(item["severity"], "UNKNOWN")
+            item["line"] = item.get("line_number") or item.get("line")
 
             # 确保代码片段存在 (处理可能的字段名差异)
-            code = item.get('code_snippet') or item.get('code') or item.get('context')
+            code = item.get("code_snippet") or item.get("code") or item.get("context")
             if isinstance(code, list):
-                code = '\n'.join(code)
-            item['code_snippet'] = cls._escape_html(code) if code else None
+                code = "\n".join(code)
+            item["code_snippet"] = cls._escape_html(code) if code else None
 
             # 确保 description 不为 None
-            desc = item.get('description')
-            if not desc or desc == 'None':
-                desc = item.get('title', '')  # 如果没有描述，使用标题
-            item['description'] = cls._escape_html(desc)
+            desc = item.get("description")
+            if not desc or desc == "None":
+                desc = item.get("title", "")  # 如果没有描述，使用标题
+            item["description"] = cls._escape_html(desc)
 
             # 确保 suggestion 不为 None
-            suggestion = item.get('suggestion')
-            if suggestion == 'None' or suggestion is None:
-                item['suggestion'] = None
+            suggestion = item.get("suggestion")
+            if suggestion == "None" or suggestion is None:
+                item["suggestion"] = None
             else:
-                item['suggestion'] = cls._escape_html(suggestion)
+                item["suggestion"] = cls._escape_html(suggestion)
 
             # 转义标题和文件路径
-            item['title'] = cls._escape_html(item.get('title', ''))
-            item['file_path'] = cls._escape_html(item.get('file_path'))
+            item["title"] = cls._escape_html(item.get("title", ""))
+            item["file_path"] = cls._escape_html(item.get("file_path"))
 
             processed.append(item)
         return processed
@@ -453,54 +455,54 @@ class ReportGenerator:
     @classmethod
     def _render_pdf(cls, context: Dict[str, Any]) -> bytes:
         # 注入 Logo
-        context['logo_b64'] = cls._get_logo_base64()
-        
+        context["logo_b64"] = cls._get_logo_base64()
+
         template = Template(cls._TEMPLATE)
         html_content = template.render(**context)
         font_config = FontConfiguration()
         pdf_file = io.BytesIO()
         HTML(string=html_content).write_pdf(
-            pdf_file,
-            font_config=font_config,
-            presentational_hints=True
+            pdf_file, font_config=font_config, presentational_hints=True
         )
         pdf_file.seek(0)
         return pdf_file.getvalue()
 
     @classmethod
     def generate_instant_report(cls, result: Dict[str, Any], language: str, time: float) -> bytes:
-        score = result.get('quality_score', 0)
-        issues = result.get('issues', [])
-        
+        score = result.get("quality_score", 0)
+        issues = result.get("issues", [])
+
         context = {
-            'title': '代码审计报告',
-            'subtitle': f'即时分析 | 语言: {language.capitalize()}',
-            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'report_id': f"INST-{int(datetime.now().timestamp())}",
-            'score': score,
-            'stats': [
-                ('问题总数', len(issues)),
-                ('耗时', f"{time:.2f}s"),
+            "title": "代码审计报告",
+            "subtitle": f"即时分析 | 语言: {language.capitalize()}",
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "report_id": f"INST-{int(datetime.now().timestamp())}",
+            "score": score,
+            "stats": [
+                ("问题总数", len(issues)),
+                ("耗时", f"{time:.2f}s"),
             ],
-            'issues': cls._process_issues(issues)
+            "issues": cls._process_issues(issues),
         }
         return cls._render_pdf(context)
 
     @classmethod
-    def generate_task_report(cls, task: Dict[str, Any], issues: List[Dict[str, Any]], project: str = "项目") -> bytes:
-        score = task.get('quality_score', 0)
-        
+    def generate_task_report(
+        cls, task: Dict[str, Any], issues: List[Dict[str, Any]], project: str = "项目"
+    ) -> bytes:
+        score = task.get("quality_score", 0)
+
         context = {
-            'title': '项目代码审计报告',
-            'subtitle': f"项目: {project} | 分支: {task.get('branch_name', 'default')}",
-            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'report_id': f"TASK-{task.get('id', '')[:8]}",
-            'score': score,
-            'stats': [
-                ('扫描文件', task.get('scanned_files', 0)),
-                ('代码行数', f"{task.get('total_lines', 0):,}"),
-                ('问题总数', len(issues))
+            "title": "项目代码审计报告",
+            "subtitle": f"项目: {project} | 分支: {task.get('branch_name', 'default')}",
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "report_id": f"TASK-{task.get('id', '')[:8]}",
+            "score": score,
+            "stats": [
+                ("扫描文件", task.get("scanned_files", 0)),
+                ("代码行数", f"{task.get('total_lines', 0):,}"),
+                ("问题总数", len(issues)),
             ],
-            'issues': cls._process_issues(issues)
+            "issues": cls._process_issues(issues),
         }
         return cls._render_pdf(context)

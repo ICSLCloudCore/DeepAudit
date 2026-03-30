@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import TaskExecution, OpenCodeStatus
+from app.utils.log import logger
 
 
 class OpenCodeAutoManager:
@@ -96,7 +97,7 @@ class OpenCodeAutoManager:
             }
 
         except Exception as e:
-            print(f"Error initializing OpenCode process: {e}")
+            logger.error(f"Error initializing OpenCode process: {e}")
 
     async def get_process_status(self, task_id: str) -> Optional[TaskExecution]:
         """

@@ -14,18 +14,19 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.services.insight_config_service import load_insight_config
+from app.utils.log import logger
 
 _scheduler_task: Optional[asyncio.Task] = None
 
 
 async def _scheduler_loop() -> None:
     """主调度循环，每 60 秒检查一次。"""
-    print("[InsightScheduler] 调度器已启动")
+    logger.info("[InsightScheduler] 调度器已启动")
     while True:
         try:
             await _check_and_run()
         except Exception as e:
-            print(f"[InsightScheduler] 检查异常: {e}")
+            logger.error(f"[InsightScheduler] 检查异常: {e}")
         await asyncio.sleep(60)
 
 
@@ -66,7 +67,7 @@ async def _check_and_run() -> None:
                 should_run = True
 
     if should_run:
-        print(f"[InsightScheduler] 触发洞察执行（interval_hours={interval_hours}）")
+        logger.info(f"[InsightScheduler] 触发洞察执行（interval_hours={interval_hours}）")
         asyncio.create_task(run_insight())
 
 
@@ -74,7 +75,7 @@ def start_scheduler() -> None:
     """在 FastAPI lifespan 中调用，启动后台调度任务。"""
     global _scheduler_task
     _scheduler_task = asyncio.create_task(_scheduler_loop())
-    print("[InsightScheduler] 调度任务已创建")
+    logger.info("[InsightScheduler] 调度任务已创建")
 
 
 def stop_scheduler() -> None:
@@ -82,4 +83,4 @@ def stop_scheduler() -> None:
     global _scheduler_task
     if _scheduler_task and not _scheduler_task.done():
         _scheduler_task.cancel()
-        print("[InsightScheduler] 调度任务已取消")
+        logger.info("[InsightScheduler] 调度任务已取消")

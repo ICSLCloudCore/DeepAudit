@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
+from app.utils.log import logger
 
 # ─── 默认配置 ────────────────────────────────────────────────────────────────
 
@@ -20,14 +21,26 @@ INSIGHT_CONFIG_PATH: Path = Path(
 
 # 可选洞察源（label + value，可扩展）
 INSIGHT_SOURCE_OPTIONS = [
-    {"value": "github",        "label": "GitHub Advisory",     "description": "GitHub Security Advisory Database"},
-    {"value": "nvd",           "label": "NVD (CVE)",           "description": "美国国家漏洞数据库"},
-    {"value": "osv",           "label": "OSV",                 "description": "Open Source Vulnerabilities"},
-    {"value": "codehub",       "label": "CodeHub",             "description": "华为云 CodeHub 安全公告"},
-    {"value": "tech_blog",     "label": "技术博客",             "description": "安全技术博客聚合（先知、FreeBuf 等）"},
-    {"value": "go_vuln_db",    "label": "Go Vulnerability DB", "description": "官方 Go 漏洞数据库 (pkg.go.dev/vuln)"},
-    {"value": "snyk",          "label": "Snyk",                "description": "Snyk 开源漏洞库"},
-    {"value": "custom_rss",    "label": "自定义 RSS",           "description": "自定义 RSS/Atom 订阅源"},
+    {
+        "value": "github",
+        "label": "GitHub Advisory",
+        "description": "GitHub Security Advisory Database",
+    },
+    {"value": "nvd", "label": "NVD (CVE)", "description": "美国国家漏洞数据库"},
+    {"value": "osv", "label": "OSV", "description": "Open Source Vulnerabilities"},
+    {"value": "codehub", "label": "CodeHub", "description": "华为云 CodeHub 安全公告"},
+    {
+        "value": "tech_blog",
+        "label": "技术博客",
+        "description": "安全技术博客聚合（先知、FreeBuf 等）",
+    },
+    {
+        "value": "go_vuln_db",
+        "label": "Go Vulnerability DB",
+        "description": "官方 Go 漏洞数据库 (pkg.go.dev/vuln)",
+    },
+    {"value": "snyk", "label": "Snyk", "description": "Snyk 开源漏洞库"},
+    {"value": "custom_rss", "label": "自定义 RSS", "description": "自定义 RSS/Atom 订阅源"},
 ]
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -77,7 +90,7 @@ def load_insight_config() -> dict[str, Any]:
             merged = {**DEFAULT_CONFIG, **stored}
             return merged
     except Exception as exc:  # noqa: BLE001
-        print(f"[InsightConfig] 读取配置文件失败，使用默认配置: {exc}")
+        logger.warning(f"[InsightConfig] 读取配置文件失败，使用默认配置: {exc}")
     return dict(DEFAULT_CONFIG)
 
 
@@ -90,9 +103,13 @@ def save_insight_config(config: dict[str, Any]) -> dict[str, Any]:
         "sources": list(config.get("sources", DEFAULT_CONFIG["sources"])),
         "last_run_at": config.get("last_run_at"),
         "next_run_at": config.get("next_run_at"),
-        "insight_project_path": str(config.get("insight_project_path", DEFAULT_CONFIG["insight_project_path"])),
+        "insight_project_path": str(
+            config.get("insight_project_path", DEFAULT_CONFIG["insight_project_path"])
+        ),
         "insight_prompt": str(config.get("insight_prompt", DEFAULT_CONFIG["insight_prompt"])),
-        "attack_pattern_prompt": str(config.get("attack_pattern_prompt", DEFAULT_CONFIG["attack_pattern_prompt"])),
+        "attack_pattern_prompt": str(
+            config.get("attack_pattern_prompt", DEFAULT_CONFIG["attack_pattern_prompt"])
+        ),
     }
     INSIGHT_CONFIG_PATH.write_text(
         json.dumps(to_save, ensure_ascii=False, indent=2),

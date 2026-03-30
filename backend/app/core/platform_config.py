@@ -6,6 +6,8 @@ import os
 import sys
 import shutil
 
+from app.utils.log import logger
+
 
 def get_config_dir() -> str:
     """获取跨平台的配置目录
@@ -70,5 +72,5 @@ def delete_file_or_dir(path: str) -> bool:
             return True
         return False
     except Exception as e:
-        print(f"Warning: Failed to delete {path}: {e}")
+        logger.warning(f"Warning: Failed to delete {path}: {e}")
         return False

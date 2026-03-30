@@ -37,19 +37,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal
 from app.models.security_kb import GoAttackPatternEntry, GoVulnerabilityEntry
 from app.services.insight_config_service import load_insight_config, save_insight_config
+from app.utils.log import logger
 
 # ─── 运行状态（进程内单例） ────────────────────────────────────────────────────
 
 _insight_running: bool = False
-_insight_abort: bool = False            # 中止标志，设为 True 后各等待循环将退出
+_insight_abort: bool = False  # 中止标志，设为 True 后各等待循环将退出
 _insight_pid: Optional[int] = None
 _insight_port: Optional[str] = None
-_insight_status: str = "idle"           # idle | running | success | error | aborted
+_insight_status: str = "idle"  # idle | running | success | error | aborted
 _insight_last_error: str = ""
 _insight_last_report: str = ""
-_insight_current_step: str = ""         # 当前步骤描述
-_insight_logs: list[str] = []           # 运行日志（最近 200 条）
-_insight_messages: list[dict] = []      # opencode 消息（think + text，最近 50 条）
+_insight_current_step: str = ""  # 当前步骤描述
+_insight_logs: list[str] = []  # 运行日志（最近 200 条）
+_insight_messages: list[dict] = []  # opencode 消息（think + text，最近 50 条）
 
 _MAX_LOGS = 200
 _MAX_MSGS = 50
@@ -58,7 +59,7 @@ _MAX_MSGS = 50
 def _log(msg: str) -> None:
     """记录一条运行日志，同时打印到 stdout。"""
     global _insight_logs
-    print(f"[Insight] {msg}")
+    logger.info(f"[Insight] {msg}")
     _insight_logs.append(msg)
     if len(_insight_logs) > _MAX_LOGS:
         _insight_logs = _insight_logs[-_MAX_LOGS:]
@@ -72,12 +73,14 @@ def _set_step(step: str) -> None:
 
 def _add_message(role: str, content_type: str, text: str) -> None:
     global _insight_messages
-    _insight_messages.append({
-        "role": role,
-        "type": content_type,   # "text" | "reasoning"
-        "text": text[:4000],    # 截断超长内容
-        "ts": datetime.now(timezone.utc).isoformat(),
-    })
+    _insight_messages.append(
+        {
+            "role": role,
+            "type": content_type,  # "text" | "reasoning"
+            "text": text[:4000],  # 截断超长内容
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+    )
     if len(_insight_messages) > _MAX_MSGS:
         _insight_messages = _insight_messages[-_MAX_MSGS:]
 
@@ -130,9 +133,12 @@ def _reset_state() -> None:
 
 # ─── OpenCode 进程管理 ────────────────────────────────────────────────────────
 
+
 def _start_opencode_process(project_path: str) -> tuple[int, str]:
     """在 project_path 目录下启动 opencode serve，返回 (pid, log_path)。"""
-    log_dir = "/tmp/opencode_insight_logs" if sys.platform != "win32" else "C:/temp/opencode_insight_logs"
+    log_dir = (
+        "/tmp/opencode_insight_logs" if sys.platform != "win32" else "C:/temp/opencode_insight_logs"
+    )
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"insight_{uuid.uuid4().hex[:8]}.log")
 
@@ -159,16 +165,16 @@ async def _wait_for_port(log_path: str, max_attempts: int = 20) -> Optional[str]
                 content = Path(log_path).read_text(encoding="utf-8", errors="replace")
                 m = re.search(r"http://127\.0\.0\.1:(\d+)", content)
                 if m:
-                    _log(f"检测到 opencode 端口: {m.group(1)}（第 {attempt+1} 次尝试）")
+                    _log(f"检测到 opencode 端口: {m.group(1)}（第 {attempt + 1} 次尝试）")
                     return m.group(1)
                 else:
                     if attempt < 3 or attempt % 5 == 0:
-                        _log(f"等待端口中（第 {attempt+1} 次），日志内容: {content[:300]!r}")
+                        _log(f"等待端口中（第 {attempt + 1} 次），日志内容: {content[:300]!r}")
             except Exception as exc:
                 _log(f"读取 opencode 日志失败: {exc}")
         else:
             if attempt < 3:
-                _log(f"等待日志文件（第 {attempt+1} 次）: {log_path}")
+                _log(f"等待日志文件（第 {attempt + 1} 次）: {log_path}")
     return None
 
 
@@ -181,6 +187,7 @@ def _stop_opencode_process(pid: int) -> None:
         _log(f"SIGTERM 失败: {e}")
         return
     import time
+
     time.sleep(1)
     try:
         os.kill(pid, 0)
@@ -191,6 +198,7 @@ def _stop_opencode_process(pid: int) -> None:
 
 
 # ─── OpenCode HTTP 调用 ───────────────────────────────────────────────────────
+
 
 async def _create_session(base_url: str) -> Optional[str]:
     try:
@@ -225,6 +233,7 @@ async def _send_prompt(base_url: str, session_id: str, prompt: str) -> Optional[
     """异步发送 prompt，返回 message_id。"""
     import secrets
     import string
+
     alphabet = string.ascii_letters + string.digits
     message_id = "msg_" + "".join(secrets.choice(alphabet) for _ in range(26))
     _log(f"发送 prompt，message_id={message_id}，内容: {prompt[:80]!r}")
@@ -305,7 +314,7 @@ async def _wait_for_completion(
                     # 每30次或前10次打印详细状态
                     if poll_count % 30 == 0 or poll_count < 10:
                         _log(
-                            f"[{tag}] #{poll_count+1}: "
+                            f"[{tag}] #{poll_count + 1}: "
                             f"总={len(data)} 新={new_count} "
                             f"stable={stable_count} prev={prev_new_count}"
                         )
@@ -319,7 +328,7 @@ async def _wait_for_completion(
                     prev_new_count = new_count
 
                     if stable_count >= 10 and new_count > 0:
-                        _log(f"[{tag}] 执行完成，new_count={new_count}，共 {poll_count+1} 次轮询")
+                        _log(f"[{tag}] 执行完成，new_count={new_count}，共 {poll_count + 1} 次轮询")
                         return True
 
                     if stable_count >= 120 and new_count == 0:
@@ -339,6 +348,7 @@ async def _wait_for_completion(
 
 
 # ─── 工具函数 ────────────────────────────────────────────────────────────────
+
 
 def _slugify_simple(text: str) -> str:
     s = text.lower()
@@ -369,6 +379,7 @@ def _bump_minor_version(version: str) -> str:
 
 # ─── 文件等待 / 诊断辅助 ─────────────────────────────────────────────────────
 
+
 async def _wait_for_file(
     path: Path,
     label: str = "文件",
@@ -383,7 +394,7 @@ async def _wait_for_file(
     base_url/session_id/start_index 有值时，同步收集 opencode 消息到前端。
     返回 True 表示文件已存在，False 表示超时。
     """
-    _log(f"等待 {label} 生成: {path}（最多 {timeout_secs//60}分{timeout_secs%60}秒）")
+    _log(f"等待 {label} 生成: {path}（最多 {timeout_secs // 60}分{timeout_secs % 60}秒）")
     _log(f"  skill 可能运行较长时间（需采集数据、调用 LLM），请耐心等待")
 
     collected_indices: set = set()
@@ -445,7 +456,7 @@ async def _wait_for_dir_non_empty(
     start_index: int = 0,
 ) -> bool:
     """轮询等待目录存在且含有 .md 文件，以文件生成为主要信号。"""
-    _log(f"等待 {label} 有文件写入: {path}（最多 {timeout_secs//60}分）")
+    _log(f"等待 {label} 有文件写入: {path}（最多 {timeout_secs // 60}分）")
     collected_indices: set = set()
 
     for elapsed in range(timeout_secs):
@@ -504,14 +515,14 @@ async def _dump_session_messages(base_url: str, session_id: str, start_index: in
                     ptype = part.get("type", "")
                     text = part.get("text", "").strip()
                     if ptype == "text" and text:
-                        _log(f"  [消息{i+1}·text] {text[:500]}")
+                        _log(f"  [消息{i + 1}·text] {text[:500]}")
                     elif ptype == "reasoning" and text:
-                        _log(f"  [消息{i+1}·think] {text[:300]}")
+                        _log(f"  [消息{i + 1}·think] {text[:300]}")
                     elif ptype == "tool-invocation":
                         tool = part.get("toolInvocation", {})
                         tool_name = tool.get("toolName", "")
                         tool_state = tool.get("state", "")
-                        _log(f"  [消息{i+1}·tool] {tool_name} state={tool_state}")
+                        _log(f"  [消息{i + 1}·tool] {tool_name} state={tool_state}")
                         if tool_state == "result":
                             result = tool.get("result", "")
                             _log(f"    result: {str(result)[:300]}")
@@ -520,6 +531,7 @@ async def _dump_session_messages(base_url: str, session_id: str, start_index: in
 
 
 # ─── 项目目录诊断 ─────────────────────────────────────────────────────────────
+
 
 def _log_project_tree(project_path: str, depth: int = 3) -> None:
     """记录项目目录结构（最多3层），辅助确认 skill 输出路径。"""
@@ -650,9 +662,16 @@ _PATTERN_TYPE_MAP: dict[str, str] = {
 
 _RISK_PRIORITY = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 _RISK_MAP: dict[str, str] = {
-    "高危": "high", "高": "high", "critical": "critical", "严重": "critical",
-    "中危": "medium", "中": "medium", "medium": "medium",
-    "低危": "low", "低": "low", "low": "low",
+    "高危": "high",
+    "高": "high",
+    "critical": "critical",
+    "严重": "critical",
+    "中危": "medium",
+    "中": "medium",
+    "medium": "medium",
+    "低危": "low",
+    "低": "low",
+    "low": "low",
 }
 
 
@@ -678,8 +697,7 @@ def _extract_highest_risk(md_content: str) -> str:
             found_levels.append(_RISK_MAP[cell])
     # 匹配字段行：**严重性：** 高危 / **Severity:** high
     for field_m in re.finditer(
-        r"\*\*(?:严重性|Severity|风险等级)[：:]\*\*\s*(\S+)",
-        md_content, re.IGNORECASE
+        r"\*\*(?:严重性|Severity|风险等级)[：:]\*\*\s*(\S+)", md_content, re.IGNORECASE
     ):
         val = field_m.group(1).strip().rstrip("。，,.")
         if val in _RISK_MAP:
@@ -697,7 +715,12 @@ def _parse_attack_pattern_file_as_whole(md_content: str, filename: str) -> dict:
         title = title_m.group(1).strip()
     else:
         # fallback：文件名转标题
-        title = filename.replace("-patterns.md", "").replace("_patterns.md", "").replace("-", " ").title()
+        title = (
+            filename.replace("-patterns.md", "")
+            .replace("_patterns.md", "")
+            .replace("-", " ")
+            .title()
+        )
 
     # ── pattern_type ────────────────────────────────────────────────────────
     pattern_type = _detect_pattern_type(filename)
@@ -727,13 +750,13 @@ def _parse_attack_pattern_file_as_whole(md_content: str, filename: str) -> dict:
     file_key = filename.replace(".md", "")
     slug_base = _slugify_simple(file_key) or uuid.uuid4().hex[:8]
 
-    print(
+    logger.info(
         f"[Insight] 攻击模式文件解析: {filename} → title={title!r}, "
         f"risk={risk_level}, type={pattern_type}, tags_count={len(tags)}"
     )
     return {
-        "file_key": file_key,       # 用于 upsert 查找
-        "slug_base": slug_base,     # slug 的基础部分
+        "file_key": file_key,  # 用于 upsert 查找
+        "slug_base": slug_base,  # slug 的基础部分
         "title": title[:200],
         "pattern_type": pattern_type,
         "risk_level": risk_level,
@@ -755,10 +778,9 @@ def parse_attack_pattern_files(project_path: str) -> list[dict]:
         _log(f"攻击模式目录不存在: {patterns_dir}")
         return []
 
-    all_files = sorted(set(
-        list(patterns_dir.glob("*-patterns.md")) +
-        list(patterns_dir.glob("*_patterns.md"))
-    ))
+    all_files = sorted(
+        set(list(patterns_dir.glob("*-patterns.md")) + list(patterns_dir.glob("*_patterns.md")))
+    )
     _log(f"发现 {len(all_files)} 个攻击模式文件: {[f.name for f in all_files]}")
 
     entries: list[dict] = []
@@ -777,15 +799,16 @@ def parse_attack_pattern_files(project_path: str) -> list[dict]:
 
 # ─── DB 保存 ─────────────────────────────────────────────────────────────────
 
+
 async def _save_vuln_entries(db: AsyncSession, entries: list[dict]) -> int:
     """批量保存漏洞条目（append-only），返回实际保存数量。"""
     saved = 0
     for e in entries:
         # slug 含时间戳基本不会冲突，保险起见仍检查
         slug = e["slug"]
-        existing = (await db.execute(
-            select(GoVulnerabilityEntry).where(GoVulnerabilityEntry.slug == slug)
-        )).scalar_one_or_none()
+        existing = (
+            await db.execute(select(GoVulnerabilityEntry).where(GoVulnerabilityEntry.slug == slug))
+        ).scalar_one_or_none()
         if existing:
             slug = slug + "-" + uuid.uuid4().hex[:6]
 
@@ -797,7 +820,7 @@ async def _save_vuln_entries(db: AsyncSession, entries: list[dict]) -> int:
             content=e["content"],
             go_packages=json.dumps(e.get("go_packages", []), ensure_ascii=False),
             source_url=e.get("source_url"),
-            is_system=False,    # 洞察生成的报告允许用户编辑
+            is_system=False,  # 洞察生成的报告允许用户编辑
             is_active=True,
         )
         db.add(entry)
@@ -830,12 +853,14 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
         slug_base = e["slug_base"]
 
         # 查找同 slug_base 前缀且 is_latest=True 的最新记录
-        existing = (await db.execute(
-            select(GoAttackPatternEntry).where(
-                GoAttackPatternEntry.slug == slug_base,
-                GoAttackPatternEntry.is_latest == True,
+        existing = (
+            await db.execute(
+                select(GoAttackPatternEntry).where(
+                    GoAttackPatternEntry.slug == slug_base,
+                    GoAttackPatternEntry.is_latest == True,
+                )
             )
-        )).scalar_one_or_none()
+        ).scalar_one_or_none()
 
         if existing:
             # 旧版本标记为非最新，同时重命名 slug（追加版本号）以释放唯一约束
@@ -844,7 +869,7 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
             new_version = _bump_minor_version(old_version)
             archived_slug = f"{slug_base}-v{old_version}"
             existing.is_latest = False
-            existing.slug = archived_slug          # 释放 slug_base 以供新版本使用
+            existing.slug = archived_slug  # 释放 slug_base 以供新版本使用
             db.add(existing)
 
             # 先 flush 旧版本的 slug 变更，再插入新版本，避免唯一约束冲突
@@ -859,7 +884,7 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
                 is_latest=True,
                 parent_id=existing.id,
                 title=e["title"],
-                slug=slug_base,                    # 新版本继承规范 slug
+                slug=slug_base,  # 新版本继承规范 slug
                 pattern_type=e["pattern_type"],
                 risk_level=e["risk_level"],
                 tags=json.dumps(e["tags"], ensure_ascii=False),
@@ -870,7 +895,9 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
             )
             db.add(new_entry)
             updated += 1
-            _log(f"更新攻击模式: slug={slug_base!r}, {old_version}(→{archived_slug}) → {new_version}")
+            _log(
+                f"更新攻击模式: slug={slug_base!r}, {old_version}(→{archived_slug}) → {new_version}"
+            )
         else:
             new_id = str(uuid.uuid4())
             new_entry = GoAttackPatternEntry(
@@ -885,7 +912,7 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
                 tags=json.dumps(e["tags"], ensure_ascii=False),
                 summary=e.get("summary"),
                 content=e["content"],
-                is_system=False,    # 洞察生成的攻击模式允许用户编辑
+                is_system=False,  # 洞察生成的攻击模式允许用户编辑
                 is_active=True,
             )
             db.add(new_entry)
@@ -907,6 +934,7 @@ async def _upsert_attack_entries(db: AsyncSession, entries: list[dict]) -> tuple
 
 # ─── 主执行入口 ───────────────────────────────────────────────────────────────
 
+
 async def run_insight() -> dict[str, Any]:
     """
     执行一次完整的洞察流程。如果已有洞察在运行，则立即返回。
@@ -915,7 +943,12 @@ async def run_insight() -> dict[str, Any]:
     global _insight_running, _insight_pid, _insight_port, _insight_status
 
     if _insight_running:
-        return {"success": False, "message": "洞察正在运行中，请稍后", "vuln_count": 0, "attack_count": 0}
+        return {
+            "success": False,
+            "message": "洞察正在运行中，请稍后",
+            "vuln_count": 0,
+            "attack_count": 0,
+        }
 
     _insight_running = True
     _insight_status = "running"
@@ -936,7 +969,12 @@ async def run_insight() -> dict[str, Any]:
         global _insight_last_error
         _insight_last_error = f"洞察项目路径无效: '{project_path}'"
         _log(f"错误: {_insight_last_error}")
-        return {"success": False, "message": _insight_last_error, "vuln_count": 0, "attack_count": 0}
+        return {
+            "success": False,
+            "message": _insight_last_error,
+            "vuln_count": 0,
+            "attack_count": 0,
+        }
 
     # 记录初始目录结构，确认 skill 输出路径是否已存在
     _log_project_tree(project_path)
@@ -967,12 +1005,12 @@ async def run_insight() -> dict[str, Any]:
                     r = await client.get(f"{base_url}/global/health")
                     if r.status_code == 200 and r.json().get("healthy"):
                         healthy = True
-                        _log(f"健康检查通过（第 {attempt+1} 次）")
+                        _log(f"健康检查通过（第 {attempt + 1} 次）")
                         break
                     else:
-                        _log(f"健康检查第 {attempt+1} 次: HTTP {r.status_code}, {r.text[:100]}")
+                        _log(f"健康检查第 {attempt + 1} 次: HTTP {r.status_code}, {r.text[:100]}")
             except Exception as exc:
-                _log(f"健康检查第 {attempt+1} 次异常: {exc}")
+                _log(f"健康检查第 {attempt + 1} 次异常: {exc}")
             await asyncio.sleep(1)
         if not healthy:
             raise RuntimeError("opencode 健康检查超时（15次）")
@@ -998,7 +1036,7 @@ async def run_insight() -> dict[str, Any]:
         await _wait_for_file(
             report_path,
             label="洞察报告",
-            timeout_secs=1800,          # 最多等 30 分钟
+            timeout_secs=1800,  # 最多等 30 分钟
             base_url=base_url,
             session_id=session_id,
             start_index=pre_insight_count,
@@ -1064,6 +1102,7 @@ async def run_insight() -> dict[str, Any]:
         interval_hours: int = config.get("interval_hours", 24)
         if interval_hours > 0:
             from datetime import timedelta
+
             next_iso = (datetime.now(timezone.utc) + timedelta(hours=interval_hours)).isoformat()
         else:
             next_iso = None
@@ -1074,8 +1113,7 @@ async def run_insight() -> dict[str, Any]:
 
         attack_count = attack_created + attack_updated
         summary = (
-            f"洞察完成：{vuln_count} 条漏洞报告，"
-            f"攻击模式 新增{attack_created}/更新{attack_updated}"
+            f"洞察完成：{vuln_count} 条漏洞报告，攻击模式 新增{attack_created}/更新{attack_updated}"
         )
         _insight_status = "success"
         global _insight_last_report
@@ -1083,8 +1121,10 @@ async def run_insight() -> dict[str, Any]:
         _set_step("步骤9/9：完成")
         _log(f"===== {summary} =====")
         return {
-            "success": True, "message": summary,
-            "vuln_count": vuln_count, "attack_count": attack_count,
+            "success": True,
+            "message": summary,
+            "vuln_count": vuln_count,
+            "attack_count": attack_count,
         }
 
     except Exception as exc:

@@ -19,13 +19,27 @@ from app.models.audit import AuditTask, AuditIssue
 from app.models.agent_task import AgentTask, AgentTaskStatus, AgentFinding
 from app.models.user_config import UserConfig
 import zipfile
-from app.services.scanner import scan_repo_task, get_github_files, get_gitlab_files, get_github_branches, get_gitlab_branches, get_gitea_branches, should_exclude, is_text_file
-from app.services.zip_storage import (
-    save_project_zip, load_project_zip, get_project_zip_meta,
-    delete_project_zip, has_project_zip
+from app.services.scanner import (
+    scan_repo_task,
+    get_github_files,
+    get_gitlab_files,
+    get_github_branches,
+    get_gitlab_branches,
+    get_gitea_branches,
+    should_exclude,
+    is_text_file,
 )
+from app.services.zip_storage import (
+    save_project_zip,
+    load_project_zip,
+    get_project_zip_meta,
+    delete_project_zip,
+    has_project_zip,
+)
+from app.utils.log import logger
 
 router = APIRouter()
+
 
 # Schemas
 class ProjectCreate(BaseModel):
@@ -37,6 +51,7 @@ class ProjectCreate(BaseModel):
     default_branch: Optional[str] = "main"
     programming_languages: Optional[List[str]] = None
 
+
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     source_type: Optional[str] = None
@@ -45,6 +60,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     default_branch: Optional[str] = None
     programming_languages: Optional[List[str]] = None
+
 
 class OwnerSchema(BaseModel):
     id: str
@@ -55,6 +71,7 @@ class OwnerSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class ProjectResponse(BaseModel):
     id: str
@@ -79,6 +96,7 @@ class ProjectResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class StatsResponse(BaseModel):
     total_projects: int
     active_projects: int
@@ -87,6 +105,7 @@ class StatsResponse(BaseModel):
     total_issues: int
     resolved_issues: int
     avg_quality_score: float = 0.0
+
 
 @router.post("/", response_model=ProjectResponse)
 async def create_project(
@@ -99,23 +118,27 @@ async def create_project(
     Create new project.
     """
     import json
+
     # 根据 source_type 设置默认值
     source_type = project_in.source_type or "repository"
-    
+
     project = Project(
         name=project_in.name,
         source_type=source_type,
         repository_url=project_in.repository_url if source_type == "repository" else None,
-        repository_type=project_in.repository_type or "other" if source_type == "repository" else "other",
+        repository_type=project_in.repository_type or "other"
+        if source_type == "repository"
+        else "other",
         description=project_in.description,
         default_branch=project_in.default_branch or "main",
         programming_languages=json.dumps(project_in.programming_languages or []),
-        owner_id=current_user.id
+        owner_id=current_user.id,
     )
     db.add(project)
     await db.commit()
     await db.refresh(project)
     return project
+
 
 @router.get("/", response_model=List[ProjectResponse])
 async def read_projects(
@@ -137,6 +160,7 @@ async def read_projects(
     result = await db.execute(query)
     return result.scalars().all()
 
+
 @router.get("/deleted", response_model=List[ProjectResponse])
 async def read_deleted_projects(
     db: AsyncSession = Depends(get_db),
@@ -154,6 +178,7 @@ async def read_deleted_projects(
     )
     return result.scalars().all()
 
+
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats(
     db: AsyncSession = Depends(get_db),
@@ -163,55 +188,64 @@ async def get_stats(
     Get statistics for current user.
     """
     # 只统计当前用户的项目
-    projects_result = await db.execute(
-        select(Project).where(Project.owner_id == current_user.id)
-    )
+    projects_result = await db.execute(select(Project).where(Project.owner_id == current_user.id))
     projects = projects_result.scalars().all()
     project_ids = [p.id for p in projects]
 
     # 统计旧的 AuditTask
     tasks_result = await db.execute(
-        select(AuditTask).where(AuditTask.project_id.in_(project_ids)) if project_ids else select(AuditTask).where(False)
+        select(AuditTask).where(AuditTask.project_id.in_(project_ids))
+        if project_ids
+        else select(AuditTask).where(False)
     )
     tasks = tasks_result.scalars().all()
     task_ids = [t.id for t in tasks]
 
     # 统计旧的 AuditIssue
     issues_result = await db.execute(
-        select(AuditIssue).where(AuditIssue.task_id.in_(task_ids)) if task_ids else select(AuditIssue).where(False)
+        select(AuditIssue).where(AuditIssue.task_id.in_(task_ids))
+        if task_ids
+        else select(AuditIssue).where(False)
     )
     issues = issues_result.scalars().all()
 
     # 🔥 同时统计新的 AgentTask
     agent_tasks_result = await db.execute(
-        select(AgentTask).where(AgentTask.project_id.in_(project_ids)) if project_ids else select(AgentTask).where(False)
+        select(AgentTask).where(AgentTask.project_id.in_(project_ids))
+        if project_ids
+        else select(AgentTask).where(False)
     )
     agent_tasks = agent_tasks_result.scalars().all()
     agent_task_ids = [t.id for t in agent_tasks]
 
     # 🔥 统计 AgentFinding
     agent_findings_result = await db.execute(
-        select(AgentFinding).where(AgentFinding.task_id.in_(agent_task_ids)) if agent_task_ids else select(AgentFinding).where(False)
+        select(AgentFinding).where(AgentFinding.task_id.in_(agent_task_ids))
+        if agent_task_ids
+        else select(AgentFinding).where(False)
     )
     agent_findings = agent_findings_result.scalars().all()
 
     # 合并统计（旧任务 + 新 Agent 任务）
     total_tasks = len(tasks) + len(agent_tasks)
-    completed_tasks = (
-        len([t for t in tasks if t.status == "completed"]) +
-        len([t for t in agent_tasks if t.status == AgentTaskStatus.COMPLETED])
+    completed_tasks = len([t for t in tasks if t.status == "completed"]) + len(
+        [t for t in agent_tasks if t.status == AgentTaskStatus.COMPLETED]
     )
     total_issues = len(issues) + len(agent_findings)
-    resolved_issues = (
-        len([i for i in issues if i.status == "resolved"]) +
-        len([f for f in agent_findings if f.status in ("fixed", "wont_fix", "false_positive")])
+    resolved_issues = len([i for i in issues if i.status == "resolved"]) + len(
+        [f for f in agent_findings if f.status in ("fixed", "wont_fix", "false_positive")]
     )
 
     # 计算平均质量分（只统计已完成且有质量分的任务）
-    quality_scores = (
-        [t.quality_score for t in tasks if t.status == "completed" and t.quality_score and t.quality_score > 0] +
-        [t.quality_score for t in agent_tasks if t.status == AgentTaskStatus.COMPLETED and t.quality_score and t.quality_score > 0]
-    )
+    quality_scores = [
+        t.quality_score
+        for t in tasks
+        if t.status == "completed" and t.quality_score and t.quality_score > 0
+    ] + [
+        t.quality_score
+        for t in agent_tasks
+        if t.status == AgentTaskStatus.COMPLETED and t.quality_score and t.quality_score > 0
+    ]
     avg_quality_score = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
 
     return {
@@ -224,6 +258,7 @@ async def get_stats(
         "avg_quality_score": avg_quality_score,
     }
 
+
 @router.get("/{id}", response_model=ProjectResponse)
 async def read_project(
     id: str,
@@ -234,19 +269,18 @@ async def read_project(
     Get project by ID.
     """
     result = await db.execute(
-        select(Project)
-        .options(selectinload(Project.owner))
-        .where(Project.id == id)
+        select(Project).options(selectinload(Project.owner)).where(Project.id == id)
     )
     project = result.scalars().first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查权限：只有项目所有者可以查看
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权查看此项目")
-    
+
     return project
+
 
 @router.put("/{id}", response_model=ProjectResponse)
 async def update_project(
@@ -260,26 +294,28 @@ async def update_project(
     Update project.
     """
     import json
+
     result = await db.execute(select(Project).where(Project.id == id))
     project = result.scalars().first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查权限：只有项目所有者可以更新
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权更新此项目")
-    
+
     update_data = project_in.model_dump(exclude_unset=True)
     if "programming_languages" in update_data and update_data["programming_languages"] is not None:
         update_data["programming_languages"] = json.dumps(update_data["programming_languages"])
-    
+
     for field, value in update_data.items():
         setattr(project, field, value)
-    
+
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(project)
     return project
+
 
 @router.delete("/{id}")
 async def delete_project(
@@ -294,15 +330,16 @@ async def delete_project(
     project = result.scalars().first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查权限：只有项目所有者可以删除
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权删除此项目")
-    
+
     project.is_active = False
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return {"message": "项目已删除"}
+
 
 @router.post("/{id}/restore")
 async def restore_project(
@@ -317,15 +354,16 @@ async def restore_project(
     project = result.scalars().first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查权限：只有项目所有者可以恢复
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权恢复此项目")
-    
+
     project.is_active = True
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return {"message": "项目已恢复"}
+
 
 @router.delete("/{id}/permanent")
 async def permanently_delete_project(
@@ -340,19 +378,19 @@ async def permanently_delete_project(
     project = result.scalars().first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查权限：只有项目所有者可以永久删除
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权永久删除此项目")
-    
+
     # 如果是ZIP类型项目，删除关联的ZIP文件和元数据
     if project.source_type == "zip":
         try:
             await delete_project_zip(id)
-            print(f"[Project] 已删除项目 {id} 的ZIP文件")
+            logger.info(f"[Project] 已删除项目 {id} 的ZIP文件")
         except Exception as e:
-            print(f"[Warning] 删除ZIP文件失败: {e}")
-    
+            logger.warning(f"[Warning] 删除ZIP文件失败: {e}")
+
     await db.delete(project)
     await db.commit()
     return {"message": "项目已永久删除"}
@@ -375,11 +413,11 @@ async def get_project_files(
     project = await db.get(Project, id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # Check permissions
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权查看此项目")
-    
+
     # 解析排除模式
     parsed_exclude_patterns = []
     if exclude_patterns:
@@ -387,19 +425,19 @@ async def get_project_files(
             parsed_exclude_patterns = json.loads(exclude_patterns)
         except json.JSONDecodeError:
             pass
-    
+
     files = []
-    
+
     if project.source_type == "zip":
         # Handle ZIP project
         zip_path = await load_project_zip(id)
-        print(f"📦 ZIP项目 {id} 文件路径: {zip_path}")
+        logger.info(f"📦 ZIP项目 {id} 文件路径: {zip_path}")
         if not zip_path or not os.path.exists(zip_path):
-            print(f"⚠️ ZIP文件不存在: {zip_path}")
+            logger.warning(f"⚠️ ZIP文件不存在: {zip_path}")
             return []
-            
+
         try:
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 for file_info in zip_ref.infolist():
                     if not file_info.is_dir():
                         name = file_info.filename
@@ -411,9 +449,9 @@ async def get_project_files(
                             continue
                         files.append({"path": name, "size": file_info.file_size})
         except Exception as e:
-            print(f"Error reading zip file: {e}")
+            logger.error(f"Error reading zip file: {e}")
             raise HTTPException(status_code=500, detail="无法读取项目文件")
-            
+
     elif project.source_type == "repository":
         # Handle Repository project
         if not project.repository_url:
@@ -425,11 +463,9 @@ async def get_project_files(
         from app.core.config import settings
         from app.services.git_ssh_service import GitSSHOperations
 
-        SENSITIVE_OTHER_FIELDS = ['githubToken', 'gitlabToken', 'sshPrivateKey']
+        SENSITIVE_OTHER_FIELDS = ["githubToken", "gitlabToken", "sshPrivateKey"]
 
-        result = await db.execute(
-            select(UserConfig).where(UserConfig.user_id == current_user.id)
-        )
+        result = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
         config = result.scalar_one_or_none()
 
         github_token = settings.GITHUB_TOKEN
@@ -441,11 +477,11 @@ async def get_project_files(
             for field in SENSITIVE_OTHER_FIELDS:
                 if field in other_config and other_config[field]:
                     decrypted_val = decrypt_sensitive_data(other_config[field])
-                    if field == 'githubToken':
+                    if field == "githubToken":
                         github_token = decrypted_val
-                    elif field == 'gitlabToken':
+                    elif field == "gitlabToken":
                         gitlab_token = decrypted_val
-                    elif field == 'sshPrivateKey':
+                    elif field == "sshPrivateKey":
                         ssh_private_key = decrypted_val
 
         # 检查是否为SSH URL
@@ -458,38 +494,43 @@ async def get_project_files(
                 if not ssh_private_key:
                     raise HTTPException(
                         status_code=400,
-                        detail="仓库使用SSH URL，但未配置SSH密钥。请先在设置中生成SSH密钥。"
+                        detail="仓库使用SSH URL，但未配置SSH密钥。请先在设置中生成SSH密钥。",
                     )
 
-                print(f"🔐 使用SSH方式获取文件列表: {project.repository_url}")
+                logger.info(f"🔐 使用SSH方式获取文件列表: {project.repository_url}")
                 files_with_content = GitSSHOperations.get_repo_files_via_ssh(
-                    project.repository_url,
-                    ssh_private_key,
-                    target_branch,
-                    parsed_exclude_patterns
+                    project.repository_url, ssh_private_key, target_branch, parsed_exclude_patterns
                 )
-                files = [{"path": f["path"], "size": len(f.get("content", ""))} for f in files_with_content]
+                files = [
+                    {"path": f["path"], "size": len(f.get("content", ""))}
+                    for f in files_with_content
+                ]
             else:
                 # 使用API方式获取文件列表
                 repo_type = project.repository_type or "other"
 
                 if repo_type == "github":
                     # 传入用户自定义排除模式
-                    repo_files = await get_github_files(project.repository_url, target_branch, github_token, parsed_exclude_patterns)
+                    repo_files = await get_github_files(
+                        project.repository_url, target_branch, github_token, parsed_exclude_patterns
+                    )
                     files = [{"path": f["path"], "size": 0} for f in repo_files]
                 elif repo_type == "gitlab":
                     # 传入用户自定义排除模式
-                    repo_files = await get_gitlab_files(project.repository_url, target_branch, gitlab_token, parsed_exclude_patterns)
+                    repo_files = await get_gitlab_files(
+                        project.repository_url, target_branch, gitlab_token, parsed_exclude_patterns
+                    )
                     files = [{"path": f["path"], "size": 0} for f in repo_files]
                 else:
                     raise HTTPException(status_code=400, detail="不支持的仓库类型")
         except HTTPException:
             raise
         except Exception as e:
-             print(f"Error fetching repo files: {e}")
-             raise HTTPException(status_code=500, detail=f"无法获取仓库文件: {str(e)}")
+            logger.error(f"Error fetching repo files: {e}")
+            raise HTTPException(status_code=500, detail=f"无法获取仓库文件: {str(e)}")
 
     return files
+
 
 class ScanRequest(BaseModel):
     file_paths: Optional[List[str]] = None
@@ -525,7 +566,7 @@ async def scan_project(
         status="pending",
         branch_name=branch_name or project.default_branch or "main",
         exclude_patterns=json.dumps(exclude_patterns or []),
-        scan_config=json.dumps(scan_request.dict()) if scan_request else "{}"
+        scan_config=json.dumps(scan_request.dict()) if scan_request else "{}",
     )
     db.add(task)
     await db.commit()
@@ -536,11 +577,19 @@ async def scan_project(
 
     # 需要解密的敏感字段列表
     SENSITIVE_LLM_FIELDS = [
-        'llmApiKey', 'geminiApiKey', 'openaiApiKey', 'claudeApiKey',
-        'qwenApiKey', 'deepseekApiKey', 'zhipuApiKey', 'moonshotApiKey',
-        'baiduApiKey', 'minimaxApiKey', 'doubaoApiKey'
+        "llmApiKey",
+        "geminiApiKey",
+        "openaiApiKey",
+        "claudeApiKey",
+        "qwenApiKey",
+        "deepseekApiKey",
+        "zhipuApiKey",
+        "moonshotApiKey",
+        "baiduApiKey",
+        "minimaxApiKey",
+        "doubaoApiKey",
     ]
-    SENSITIVE_OTHER_FIELDS = ['githubToken', 'gitlabToken']
+    SENSITIVE_OTHER_FIELDS = ["githubToken", "gitlabToken"]
 
     def decrypt_config(config_dict: dict, sensitive_fields: list) -> dict:
         """解密配置中的敏感字段"""
@@ -550,9 +599,7 @@ async def scan_project(
                 decrypted[field] = decrypt_sensitive_data(decrypted[field])
         return decrypted
 
-    result = await db.execute(
-        select(UserConfig).where(UserConfig.user_id == current_user.id)
-    )
+    result = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
     config = result.scalar_one_or_none()
     user_config = {}
     if config:
@@ -562,13 +609,13 @@ async def scan_project(
         llm_config = decrypt_config(llm_config, SENSITIVE_LLM_FIELDS)
         other_config = decrypt_config(other_config, SENSITIVE_OTHER_FIELDS)
         user_config = {
-            'llmConfig': llm_config,
-            'otherConfig': other_config,
+            "llmConfig": llm_config,
+            "otherConfig": other_config,
         }
 
     # 将扫描配置注入到 user_config 中，以便 scan_repo_task 使用
     if scan_request and scan_request.file_paths:
-        user_config['scan_config'] = {'file_paths': scan_request.file_paths}
+        user_config["scan_config"] = {"file_paths": scan_request.file_paths}
 
     # Trigger Background Task
     background_tasks.add_task(scan_repo_task, task.id, AsyncSessionLocal, user_config)
@@ -577,6 +624,7 @@ async def scan_project(
 
 
 # ============ ZIP文件管理端点 ============
+
 
 class ZipFileMetaResponse(BaseModel):
     has_file: bool
@@ -597,12 +645,12 @@ async def get_project_zip_info(
     project = await db.get(Project, id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查是否有ZIP文件
     has_file = await has_project_zip(id)
     if not has_file:
         return {"has_file": False}
-    
+
     # 获取元数据
     meta = await get_project_zip_meta(id)
     if meta:
@@ -610,9 +658,9 @@ async def get_project_zip_info(
             "has_file": True,
             "original_filename": meta.get("original_filename"),
             "file_size": meta.get("file_size"),
-            "uploaded_at": meta.get("uploaded_at")
+            "uploaded_at": meta.get("uploaded_at"),
         }
-    
+
     return {"has_file": True}
 
 
@@ -629,40 +677,40 @@ async def upload_project_zip(
     project = await db.get(Project, id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查权限
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权操作此项目")
-    
+
     # 检查项目类型
     if project.source_type != "zip":
         raise HTTPException(status_code=400, detail="仅ZIP类型项目可以上传ZIP文件")
-    
+
     # 验证文件类型
-    if not file.filename.lower().endswith('.zip'):
+    if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="请上传ZIP格式文件")
-    
+
     # 保存到临时文件
     temp_file_id = str(uuid.uuid4())
     temp_file_path = f"/tmp/{temp_file_id}.zip"
-    
+
     try:
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
+
         # 检查文件大小
         file_size = os.path.getsize(temp_file_path)
         if file_size > 500 * 1024 * 1024:  # 500MB limit
             raise HTTPException(status_code=400, detail="文件大小不能超过500MB")
-        
+
         # 保存到持久化存储
         meta = await save_project_zip(id, temp_file_path, file.filename)
-        
+
         return {
             "message": "ZIP文件上传成功",
             "original_filename": meta["original_filename"],
             "file_size": meta["file_size"],
-            "uploaded_at": meta["uploaded_at"]
+            "uploaded_at": meta["uploaded_at"],
         }
     finally:
         # 清理临时文件
@@ -682,13 +730,13 @@ async def delete_project_zip_file(
     project = await db.get(Project, id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查权限
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权操作此项目")
-    
+
     deleted = await delete_project_zip(id)
-    
+
     if deleted:
         return {"message": "ZIP文件已删除"}
     else:
@@ -696,6 +744,7 @@ async def delete_project_zip_file(
 
 
 # ============ 分支管理端点 ============
+
 
 @router.get("/{id}/branches")
 async def get_project_branches(
@@ -709,81 +758,80 @@ async def get_project_branches(
     project = await db.get(Project, id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     # 检查是否为仓库类型项目
     if project.source_type != "repository":
         raise HTTPException(status_code=400, detail="仅仓库类型项目支持获取分支")
-    
+
     if not project.repository_url:
         raise HTTPException(status_code=400, detail="项目未配置仓库地址")
-    
+
     # 获取用户配置的 Token
     from app.core.config import settings
     from app.core.encryption import decrypt_sensitive_data
-    
-    config = await db.execute(
-        select(UserConfig).where(UserConfig.user_id == current_user.id)
-    )
+
+    config = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
     config = config.scalar_one_or_none()
-    
+
     github_token = settings.GITHUB_TOKEN
     gitea_token = settings.GITEA_TOKEN
     gitlab_token = settings.GITLAB_TOKEN
 
-    SENSITIVE_OTHER_FIELDS = ['githubToken', 'gitlabToken', 'giteaToken']
-    
+    SENSITIVE_OTHER_FIELDS = ["githubToken", "gitlabToken", "giteaToken"]
+
     if config and config.other_config:
         import json
+
         other_config = json.loads(config.other_config)
         for field in SENSITIVE_OTHER_FIELDS:
             if field in other_config and other_config[field]:
                 decrypted_val = decrypt_sensitive_data(other_config[field])
-                if field == 'githubToken':
+                if field == "githubToken":
                     github_token = decrypted_val
-                elif field == 'gitlabToken':
+                elif field == "gitlabToken":
                     gitlab_token = decrypted_val
-                elif field == 'giteaToken':
+                elif field == "giteaToken":
                     gitea_token = decrypted_val
-    
+
     repo_type = project.repository_type or "other"
-    
+
     # 详细日志
-    print(f"[Branch] 项目: {project.name}, 类型: {repo_type}, URL: {project.repository_url}")
-    
+    logger.info(f"[Branch] 项目: {project.name}, 类型: {repo_type}, URL: {project.repository_url}")
+
     try:
         if repo_type == "github":
             if not github_token:
-                print("[Branch] 警告: GitHub Token 未配置，可能会遇到 API 限制")
+                logger.warning("[Branch] 警告: GitHub Token 未配置，可能会遇到 API 限制")
             branches = await get_github_branches(project.repository_url, github_token)
         elif repo_type == "gitlab":
             if not gitlab_token:
-                print("[Branch] 警告: GitLab Token 未配置，可能无法访问私有仓库")
+                logger.warning("[Branch] 警告: GitLab Token 未配置，可能无法访问私有仓库")
             branches = await get_gitlab_branches(project.repository_url, gitlab_token)
         elif repo_type == "gitea":
             if not gitea_token:
-                print("[Branch] 警告: Gitea Token 未配置，可能无法访问私有仓库")
+                logger.warning("[Branch] 警告: Gitea Token 未配置，可能无法访问私有仓库")
             branches = await get_gitea_branches(project.repository_url, gitea_token)
         else:
             # 对于其他类型，返回默认分支
-            print(f"[Branch] 仓库类型 '{repo_type}' 不支持获取分支，返回默认分支")
+            logger.info(f"[Branch] 仓库类型 '{repo_type}' 不支持获取分支，返回默认分支")
             branches = [project.default_branch or "main"]
-        
-        print(f"[Branch] 成功获取 {len(branches)} 个分支")
-        
+
+        logger.info(f"[Branch] 成功获取 {len(branches)} 个分支")
+
         # 将默认分支放在第一位
         default_branch = project.default_branch or "main"
         if default_branch in branches:
             branches.remove(default_branch)
             branches.insert(0, default_branch)
-        
+
         return {"branches": branches, "default_branch": default_branch}
-    
+
     except Exception as e:
         error_msg = str(e)
-        print(f"[Branch] 获取分支列表失败: {error_msg}")
+        logger.error(f"[Branch] 获取分支列表失败: {error_msg}")
         # 返回默认分支作为后备
         return {
             "branches": [project.default_branch or "main"],
             "default_branch": project.default_branch or "main",
-            "error": str(e)
+            "error": str(e),
         }

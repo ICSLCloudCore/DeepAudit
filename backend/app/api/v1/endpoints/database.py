@@ -19,16 +19,18 @@ from app.models.project import Project, ProjectMember
 from app.models.audit import AuditTask, AuditIssue
 from app.models.analysis import InstantAnalysis
 from app.models.user_config import UserConfig
+from app.utils.log import logger
 
 router = APIRouter()
 
 
 class DatabaseExportResponse(BaseModel):
     """数据库导出响应"""
+
     export_date: str
     user_id: str
     data: Dict[str, Any]
-    
+
     class Config:
         from_attributes = True
 
@@ -50,7 +52,7 @@ async def export_database(
             .options(selectinload(Project.tasks))
         )
         projects = projects_result.scalars().all()
-        
+
         # 2. 获取用户的所有任务
         tasks_result = await db.execute(
             select(AuditTask)
@@ -58,31 +60,28 @@ async def export_database(
             .options(selectinload(AuditTask.issues))
         )
         tasks = tasks_result.scalars().all()
-        
+
         # 3. 获取用户的所有问题（通过任务关联）
         task_ids = [task.id for task in tasks]
         issues = []
         if task_ids:
             issues_result = await db.execute(
-                select(AuditIssue)
-                .where(AuditIssue.task_id.in_(task_ids))
+                select(AuditIssue).where(AuditIssue.task_id.in_(task_ids))
             )
             issues = issues_result.scalars().all()
-        
+
         # 4. 获取用户的即时分析记录
         analyses_result = await db.execute(
-            select(InstantAnalysis)
-            .where(InstantAnalysis.user_id == current_user.id)
+            select(InstantAnalysis).where(InstantAnalysis.user_id == current_user.id)
         )
         analyses = analyses_result.scalars().all()
-        
+
         # 5. 获取用户的配置
         config_result = await db.execute(
-            select(UserConfig)
-            .where(UserConfig.user_id == current_user.id)
+            select(UserConfig).where(UserConfig.user_id == current_user.id)
         )
         config = config_result.scalar_one_or_none()
-        
+
         # 6. 获取用户参与的项目（作为成员）
         members_result = await db.execute(
             select(ProjectMember)
@@ -90,7 +89,7 @@ async def export_database(
             .options(selectinload(ProjectMember.project))
         )
         members = members_result.scalars().all()
-        
+
         # 7. 构建导出数据
         export_data = {
             "version": "1.0.0",
@@ -109,7 +108,9 @@ async def export_database(
                     "repository_url": p.repository_url,
                     "repository_type": p.repository_type,
                     "default_branch": p.default_branch,
-                    "programming_languages": json.loads(p.programming_languages) if p.programming_languages else [],
+                    "programming_languages": json.loads(p.programming_languages)
+                    if p.programming_languages
+                    else [],
                     "is_active": p.is_active,
                     "created_at": p.created_at.isoformat() if p.created_at else None,
                     "updated_at": p.updated_at.isoformat() if p.updated_at else None,
@@ -123,7 +124,9 @@ async def export_database(
                     "task_type": t.task_type,
                     "status": t.status,
                     "branch_name": t.branch_name,
-                    "exclude_patterns": json.loads(t.exclude_patterns) if t.exclude_patterns else [],
+                    "exclude_patterns": json.loads(t.exclude_patterns)
+                    if t.exclude_patterns
+                    else [],
                     "total_files": t.total_files,
                     "scanned_files": t.scanned_files,
                     "total_lines": t.total_lines,
@@ -168,8 +171,12 @@ async def export_database(
             ],
             "user_config": {
                 "llm_config": json.loads(config.llm_config) if config and config.llm_config else {},
-                "other_config": json.loads(config.other_config) if config and config.other_config else {},
-            } if config else {},
+                "other_config": json.loads(config.other_config)
+                if config and config.other_config
+                else {},
+            }
+            if config
+            else {},
             "project_members": [
                 {
                     "id": m.id,
@@ -181,20 +188,19 @@ async def export_database(
                 for m in members
             ],
         }
-        
+
         return DatabaseExportResponse(
-            export_date=export_data["export_date"],
-            user_id=current_user.id,
-            data=export_data
+            export_date=export_data["export_date"], user_id=current_user.id, data=export_data
         )
-        
+
     except Exception as e:
-        print(f"导出数据失败: {e}")
+        logger.error(f"导出数据失败: {e}")
         raise HTTPException(status_code=500, detail=f"导出数据失败: {str(e)}")
 
 
 class DatabaseImportRequest(BaseModel):
     """数据库导入请求"""
+
     data: Dict[str, Any]
 
 
@@ -211,17 +217,17 @@ async def import_database(
     try:
         # 读取文件内容
         content = await file.read()
-        import_data = json.loads(content.decode('utf-8'))
-        
+        import_data = json.loads(content.decode("utf-8"))
+
         if not isinstance(import_data, dict) or "data" not in import_data:
             raise HTTPException(status_code=400, detail="无效的导入文件格式")
-        
+
         data = import_data["data"]
-        
+
         # 验证用户ID（只能导入自己的数据）
         if data.get("user", {}).get("id") != current_user.id:
             raise HTTPException(status_code=403, detail="只能导入自己的数据")
-        
+
         imported_count = {
             "projects": 0,
             "tasks": 0,
@@ -229,7 +235,7 @@ async def import_database(
             "analyses": 0,
             "config": 0,
         }
-        
+
         # 1. 导入项目（跳过已存在的）
         if "projects" in data:
             for p_data in data["projects"]:
@@ -245,13 +251,15 @@ async def import_database(
                         default_branch=p_data.get("default_branch"),
                         programming_languages=json.dumps(p_data.get("programming_languages", [])),
                         owner_id=current_user.id,
-                        is_active=p_data.get("is_active", True) if "is_active" in p_data else (p_data.get("status") != "inactive" if "status" in p_data else True),
+                        is_active=p_data.get("is_active", True)
+                        if "is_active" in p_data
+                        else (p_data.get("status") != "inactive" if "status" in p_data else True),
                     )
                     db.add(project)
                     imported_count["projects"] += 1
-        
+
         await db.commit()
-        
+
         # 2. 导入任务（需要先有项目）
         if "tasks" in data:
             for t_data in data["tasks"]:
@@ -277,9 +285,9 @@ async def import_database(
                         )
                         db.add(task)
                         imported_count["tasks"] += 1
-        
+
         await db.commit()
-        
+
         # 3. 导入问题（需要先有任务）
         if "issues" in data:
             for i_data in data["issues"]:
@@ -306,9 +314,9 @@ async def import_database(
                         )
                         db.add(issue)
                         imported_count["issues"] += 1
-        
+
         await db.commit()
-        
+
         # 4. 导入即时分析
         if "instant_analyses" in data:
             for a_data in data["instant_analyses"]:
@@ -326,17 +334,16 @@ async def import_database(
                     )
                     db.add(analysis)
                     imported_count["analyses"] += 1
-        
+
         await db.commit()
-        
+
         # 5. 导入用户配置（合并）
         if "user_config" in data and data["user_config"]:
             config_result = await db.execute(
-                select(UserConfig)
-                .where(UserConfig.user_id == current_user.id)
+                select(UserConfig).where(UserConfig.user_id == current_user.id)
             )
             config = config_result.scalar_one_or_none()
-            
+
             if not config:
                 config = UserConfig(
                     user_id=current_user.id,
@@ -352,20 +359,17 @@ async def import_database(
                 existing_other.update(data["user_config"].get("other_config", {}))
                 config.llm_config = json.dumps(existing_llm)
                 config.other_config = json.dumps(existing_other)
-            
+
             imported_count["config"] = 1
-        
+
         await db.commit()
-        
-        return {
-            "message": "数据导入成功",
-            "imported": imported_count
-        }
-        
+
+        return {"message": "数据导入成功", "imported": imported_count}
+
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="无效的 JSON 文件格式")
     except Exception as e:
-        print(f"导入数据失败: {e}")
+        logger.error(f"导入数据失败: {e}")
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"导入数据失败: {str(e)}")
 
@@ -387,84 +391,76 @@ async def clear_database(
             "analyses": 0,
             "config": 0,
         }
-        
+
         # 1. 删除用户的所有问题（通过任务）
         tasks_result = await db.execute(
-            select(AuditTask)
-            .where(AuditTask.created_by == current_user.id)
+            select(AuditTask).where(AuditTask.created_by == current_user.id)
         )
         tasks = tasks_result.scalars().all()
         task_ids = [task.id for task in tasks]
-        
+
         if task_ids:
             issues_result = await db.execute(
-                select(AuditIssue)
-                .where(AuditIssue.task_id.in_(task_ids))
+                select(AuditIssue).where(AuditIssue.task_id.in_(task_ids))
             )
             issues = issues_result.scalars().all()
             for issue in issues:
                 await db.delete(issue)
             deleted_count["issues"] = len(issues)
-        
+
         # 2. 删除用户的所有任务
         for task in tasks:
             await db.delete(task)
         deleted_count["tasks"] = len(tasks)
-        
+
         # 3. 删除用户的所有项目
         projects_result = await db.execute(
-            select(Project)
-            .where(Project.owner_id == current_user.id)
+            select(Project).where(Project.owner_id == current_user.id)
         )
         projects = projects_result.scalars().all()
         for project in projects:
             await db.delete(project)
         deleted_count["projects"] = len(projects)
-        
+
         # 4. 删除用户的即时分析
         analyses_result = await db.execute(
-            select(InstantAnalysis)
-            .where(InstantAnalysis.user_id == current_user.id)
+            select(InstantAnalysis).where(InstantAnalysis.user_id == current_user.id)
         )
         analyses = analyses_result.scalars().all()
         for analysis in analyses:
             await db.delete(analysis)
         deleted_count["analyses"] = len(analyses)
-        
+
         # 5. 删除用户配置
         config_result = await db.execute(
-            select(UserConfig)
-            .where(UserConfig.user_id == current_user.id)
+            select(UserConfig).where(UserConfig.user_id == current_user.id)
         )
         config = config_result.scalar_one_or_none()
         if config:
             await db.delete(config)
             deleted_count["config"] = 1
-        
+
         # 6. 删除用户的项目成员关系（作为成员）
         members_result = await db.execute(
-            select(ProjectMember)
-            .where(ProjectMember.user_id == current_user.id)
+            select(ProjectMember).where(ProjectMember.user_id == current_user.id)
         )
         members = members_result.scalars().all()
         for member in members:
             await db.delete(member)
-        
+
         await db.commit()
-        
-        return {
-            "message": "数据已清空",
-            "deleted": deleted_count
-        }
-        
+
+        return {"message": "数据已清空", "deleted": deleted_count}
+
     except Exception as e:
-        print(f"清空数据失败: {e}")
+        logger.error(f"清空数据失败: {e}")
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"清空数据失败: {str(e)}")
 
 
 class DatabaseStatsResponse(BaseModel):
     """数据库统计信息响应"""
+
     total_projects: int
     active_projects: int
     total_tasks: int
@@ -495,17 +491,15 @@ async def get_database_stats(
     try:
         # 1. 项目统计
         projects_result = await db.execute(
-            select(Project)
-            .where(Project.owner_id == current_user.id)
+            select(Project).where(Project.owner_id == current_user.id)
         )
         projects = projects_result.scalars().all()
         total_projects = len(projects)
         active_projects = len([p for p in projects if p.is_active])
-        
+
         # 2. 任务统计
         tasks_result = await db.execute(
-            select(AuditTask)
-            .where(AuditTask.created_by == current_user.id)
+            select(AuditTask).where(AuditTask.created_by == current_user.id)
         )
         tasks = tasks_result.scalars().all()
         total_tasks = len(tasks)
@@ -513,7 +507,7 @@ async def get_database_stats(
         pending_tasks = len([t for t in tasks if t.status == "pending"])
         running_tasks = len([t for t in tasks if t.status == "running"])
         failed_tasks = len([t for t in tasks if t.status == "failed"])
-        
+
         # 3. 问题统计
         task_ids = [task.id for task in tasks]
         total_issues = 0
@@ -523,11 +517,10 @@ async def get_database_stats(
         high_issues = 0
         medium_issues = 0
         low_issues = 0
-        
+
         if task_ids:
             issues_result = await db.execute(
-                select(AuditIssue)
-                .where(AuditIssue.task_id.in_(task_ids))
+                select(AuditIssue).where(AuditIssue.task_id.in_(task_ids))
             )
             issues = issues_result.scalars().all()
             total_issues = len(issues)
@@ -537,30 +530,27 @@ async def get_database_stats(
             high_issues = len([i for i in issues if i.severity == "high"])
             medium_issues = len([i for i in issues if i.severity == "medium"])
             low_issues = len([i for i in issues if i.severity == "low"])
-        
+
         # 4. 即时分析统计
         analyses_result = await db.execute(
-            select(InstantAnalysis)
-            .where(InstantAnalysis.user_id == current_user.id)
+            select(InstantAnalysis).where(InstantAnalysis.user_id == current_user.id)
         )
         analyses = analyses_result.scalars().all()
         total_analyses = len(analyses)
-        
+
         # 5. 项目成员统计
         members_result = await db.execute(
-            select(ProjectMember)
-            .where(ProjectMember.user_id == current_user.id)
+            select(ProjectMember).where(ProjectMember.user_id == current_user.id)
         )
         members = members_result.scalars().all()
         total_members = len(members)
-        
+
         # 6. 配置检查
         config_result = await db.execute(
-            select(UserConfig)
-            .where(UserConfig.user_id == current_user.id)
+            select(UserConfig).where(UserConfig.user_id == current_user.id)
         )
         has_config = config_result.scalar_one_or_none() is not None
-        
+
         return DatabaseStatsResponse(
             total_projects=total_projects,
             active_projects=active_projects,
@@ -580,14 +570,15 @@ async def get_database_stats(
             total_members=total_members,
             has_config=has_config,
         )
-        
+
     except Exception as e:
-        print(f"获取统计信息失败: {e}")
+        logger.error(f"获取统计信息失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
 
 
 class DatabaseHealthResponse(BaseModel):
     """数据库健康检查响应"""
+
     status: str  # healthy, warning, error
     database_connected: bool
     total_records: int
@@ -610,33 +601,49 @@ async def check_database_health(
         database_connected = True
         total_records = 0
         last_backup_date = None
-        
+
         # 1. 检查数据库连接
         try:
             await db.execute(select(1))
         except Exception as e:
             database_connected = False
             issues.append(f"数据库连接失败: {str(e)}")
-        
+
         if database_connected:
             # 2. 统计总记录数
             try:
-                projects_count = len((await db.execute(
-                    select(Project).where(Project.owner_id == current_user.id)
-                )).scalars().all())
-                
-                tasks_count = len((await db.execute(
-                    select(AuditTask).where(AuditTask.created_by == current_user.id)
-                )).scalars().all())
-                
-                analyses_count = len((await db.execute(
-                    select(InstantAnalysis).where(InstantAnalysis.user_id == current_user.id)
-                )).scalars().all())
-                
+                projects_count = len(
+                    (await db.execute(select(Project).where(Project.owner_id == current_user.id)))
+                    .scalars()
+                    .all()
+                )
+
+                tasks_count = len(
+                    (
+                        await db.execute(
+                            select(AuditTask).where(AuditTask.created_by == current_user.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+
+                analyses_count = len(
+                    (
+                        await db.execute(
+                            select(InstantAnalysis).where(
+                                InstantAnalysis.user_id == current_user.id
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+
                 total_records = projects_count + tasks_count + analyses_count
             except Exception as e:
                 warnings.append(f"统计记录数时出错: {str(e)}")
-            
+
             # 3. 检查数据完整性
             try:
                 # 检查孤立的任务（项目不存在）
@@ -649,10 +656,10 @@ async def check_database_health(
                     project = await db.get(Project, task.project_id)
                     if not project:
                         orphan_tasks += 1
-                
+
                 if orphan_tasks > 0:
                     warnings.append(f"发现 {orphan_tasks} 个孤立任务（关联的项目不存在）")
-                
+
                 # 检查孤立的问题（任务不存在）
                 if tasks:
                     task_ids = [task.id for task in tasks]
@@ -665,12 +672,12 @@ async def check_database_health(
                         task = await db.get(AuditTask, issue.task_id)
                         if not task:
                             orphan_issues += 1
-                    
+
                     if orphan_issues > 0:
                         warnings.append(f"发现 {orphan_issues} 个孤立问题（关联的任务不存在）")
             except Exception as e:
                 warnings.append(f"数据完整性检查时出错: {str(e)}")
-        
+
         # 4. 确定健康状态
         if not database_connected or issues:
             status = "error"
@@ -678,7 +685,7 @@ async def check_database_health(
             status = "warning"
         else:
             status = "healthy"
-        
+
         return DatabaseHealthResponse(
             status=status,
             database_connected=database_connected,
@@ -687,8 +694,7 @@ async def check_database_health(
             issues=issues,
             warnings=warnings,
         )
-        
-    except Exception as e:
-        print(f"健康检查失败: {e}")
-        raise HTTPException(status_code=500, detail=f"健康检查失败: {str(e)}")
 
+    except Exception as e:
+        logger.error(f"健康检查失败: {e}")
+        raise HTTPException(status_code=500, detail=f"健康检查失败: {str(e)}")
