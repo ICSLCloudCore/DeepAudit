@@ -357,7 +357,8 @@ Note:
         
         # 构建用户提示词
         if is_chinese:
-            user_prompt = f"""编程语言: {language}
+            lang_hint = "请自动识别编程语言" if language == "auto" else f"编程语言: {language}"
+            user_prompt = f"""{lang_hint}
 
 ⚠️ 代码已标注行号（格式：行号| 代码内容），请根据行号准确填写 line 字段！
 
@@ -365,7 +366,8 @@ Note:
 
 {code_with_lines}"""
         else:
-            user_prompt = f"""Programming Language: {language}
+            lang_hint = "Please auto-detect the programming language" if language == "auto" else f"Programming Language: {language}"
+            user_prompt = f"""{lang_hint}
 
 ⚠️ Code is annotated with line numbers (format: lineNumber| code), please fill the 'line' field accurately based on these numbers!
 
@@ -972,7 +974,8 @@ Please analyze the following code:
         
         # 构建用户提示词
         if is_chinese:
-            user_prompt = f"""编程语言: {language}
+            lang_hint = "请自动识别编程语言" if language == "auto" else f"编程语言: {language}"
+            user_prompt = f"""{lang_hint}
 
 代码已标注行号（格式：行号| 代码内容），请根据行号准确填写 line 字段。
 
@@ -980,7 +983,8 @@ Please analyze the following code:
 
 {code_with_lines}"""
         else:
-            user_prompt = f"""Programming Language: {language}
+            lang_hint = "Please auto-detect the programming language" if language == "auto" else f"Programming Language: {language}"
+            user_prompt = f"""{lang_hint}
 
 Code is annotated with line numbers (format: lineNumber| code), please fill the 'line' field accurately.
 

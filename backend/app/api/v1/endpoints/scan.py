@@ -372,8 +372,9 @@ async def scan_stored_zip(
 
 class InstantAnalysisRequest(BaseModel):
     code: str
-    language: str
+    language: str = "auto"
     prompt_template_id: Optional[str] = None
+    custom_prompt: Optional[str] = None
 
 
 class InstantAnalysisResponse(BaseModel):
@@ -449,14 +450,20 @@ async def instant_analysis(
     start_time = datetime.now(timezone.utc)
     
     try:
-        # 如果指定了提示词模板，使用自定义分析
-        # 统一使用 analyze_code_with_rules，会自动使用默认模板
-        result = await llm_service.analyze_code_with_rules(
-            req.code, req.language,
-            prompt_template_id=req.prompt_template_id,
-            db_session=db,
-            use_default_template=True  # 没有指定模板时使用数据库中的默认模板
-        )
+        if req.custom_prompt and req.custom_prompt.strip():
+            # 用户输入了自定义提示词，直接使用
+            result = await llm_service.analyze_code_with_custom_prompt(
+                req.code, req.language,
+                custom_prompt=req.custom_prompt.strip()
+            )
+        else:
+            # 统一使用 analyze_code_with_rules，会自动使用默认模板
+            result = await llm_service.analyze_code_with_rules(
+                req.code, req.language,
+                prompt_template_id=req.prompt_template_id,
+                db_session=db,
+                use_default_template=True  # 没有指定模板时使用数据库中的默认模板
+            )
     except Exception as e:
         # 分析失败，返回错误信息
         error_msg = str(e)

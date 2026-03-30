@@ -8,7 +8,6 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,14 +29,15 @@ import {
   History,
   ChevronRight,
   MessageSquare,
-  Terminal
+  Terminal,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { CodeAnalysisEngine } from "@/features/analysis/services";
 import { api } from "@/shared/config/database";
 import type { CodeAnalysisResult, InstantAnalysis as InstantAnalysisType } from "@/shared/types";
 import { toast } from "sonner";
 import InstantExportDialog from "@/components/reports/InstantExportDialog";
-import { getPromptTemplates, type PromptTemplate } from "@/shared/api/prompts";
 
 // AI explanation parser
 function parseAIExplanation(aiExplanation: string) {
@@ -53,7 +53,7 @@ function parseAIExplanation(aiExplanation: string) {
 
 export default function InstantAnalysis() {
   const [code, setCode] = useState("");
-  const [language, setLanguage] = useState("");
+  const [language, setLanguage] = useState("auto");
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<CodeAnalysisResult | null>(null);
   const [analysisTime, setAnalysisTime] = useState(0);
@@ -68,30 +68,9 @@ export default function InstantAnalysis() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
-  // Prompt templates
-  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
-  const [selectedPromptTemplateId, setSelectedPromptTemplateId] = useState<string>("");
-
-  const supportedLanguages = CodeAnalysisEngine.getSupportedLanguages();
-
-  // Load prompt templates
-  useEffect(() => {
-    const loadPromptTemplates = async () => {
-      try {
-        const res = await getPromptTemplates({ is_active: true });
-        setPromptTemplates(res.items);
-        const defaultTemplate = res.items.find(t => t.is_default);
-        if (defaultTemplate) {
-          setSelectedPromptTemplateId(defaultTemplate.id);
-        } else if (res.items.length > 0) {
-          setSelectedPromptTemplateId(res.items[0].id);
-        }
-      } catch (error) {
-        console.error("加载提示词模板失败:", error);
-      }
-    };
-    loadPromptTemplates();
-  }, []);
+  // Custom prompt state
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [showPromptInput, setShowPromptInput] = useState(false);
 
   // Load history
   const loadHistory = async () => {
@@ -112,7 +91,7 @@ export default function InstantAnalysis() {
     try {
       const analysisResult = JSON.parse(record.analysis_result) as CodeAnalysisResult;
       setResult(analysisResult);
-      setLanguage(record.language);
+      setLanguage(record.language || "auto");
       setAnalysisTime(record.analysis_time);
       setSelectedHistoryId(record.id);
       setCurrentAnalysisId(record.id);
@@ -262,10 +241,6 @@ int main() {
       toast.error("请输入要分析的代码");
       return;
     }
-    if (!language) {
-      toast.error("请选择编程语言");
-      return;
-    }
 
     try {
       setAnalyzing(true);
@@ -274,7 +249,12 @@ int main() {
       }, 100);
 
       const startTime = Date.now();
-      const analysisResult = await CodeAnalysisEngine.analyzeCode(code, language, selectedPromptTemplateId || undefined);
+      const analysisResult = await CodeAnalysisEngine.analyzeCode(
+        code,
+        language,
+        undefined,
+        customPrompt.trim() || undefined
+      );
       const endTime = Date.now();
       const duration = (endTime - startTime) / 1000;
 
@@ -300,18 +280,6 @@ int main() {
     reader.onload = (e) => {
       const content = e.target?.result as string;
       setCode(content);
-
-      const extension = file.name.split('.').pop()?.toLowerCase();
-      const languageMap: Record<string, string> = {
-        'js': 'javascript', 'jsx': 'javascript', 'ts': 'typescript', 'tsx': 'typescript',
-        'py': 'python', 'java': 'java', 'go': 'go', 'rs': 'rust',
-        'cpp': 'cpp', 'c': 'cpp', 'cs': 'csharp', 'php': 'php',
-        'rb': 'ruby', 'swift': 'swift', 'kt': 'kotlin'
-      };
-
-      if (extension && languageMap[extension]) {
-        setLanguage(languageMap[extension]);
-      }
     };
     reader.readAsText(file);
   };
@@ -320,7 +288,6 @@ int main() {
     const example = exampleCodes[lang as keyof typeof exampleCodes];
     if (example) {
       setCode(example);
-      setLanguage(lang);
       toast.success(`已加载${lang}示例代码`);
     }
   };
@@ -348,9 +315,10 @@ int main() {
 
   const clearAnalysis = () => {
     setCode("");
-    setLanguage("");
+    setLanguage("auto");
     setResult(null);
     setAnalysisTime(0);
+    setCustomPrompt("");
   };
 
   // Render issue with cyberpunk style
@@ -614,40 +582,17 @@ int main() {
         <div className="p-6 space-y-4">
           {/* Toolbar */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase">编程语言</label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger className="cyber-input h-10">
-                  <SelectValue placeholder="选择编程语言" />
-                </SelectTrigger>
-                <SelectContent className="cyber-dialog border-border">
-                  {supportedLanguages.map((lang) => (
-                    <SelectItem key={lang} value={lang}>
-                      {lang.charAt(0).toUpperCase() + lang.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1 space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase">提示词模板</label>
-              <Select value={selectedPromptTemplateId} onValueChange={setSelectedPromptTemplateId}>
-                <SelectTrigger className="cyber-input h-10">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-violet-400" />
-                    <SelectValue placeholder="选择提示词模板" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="cyber-dialog border-border">
-                  {promptTemplates.map((pt) => (
-                    <SelectItem key={pt.id} value={pt.id}>
-                      {pt.name} {pt.is_default && '(默认)'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
+            <div className="flex items-end gap-2 ml-auto">
+              <Button
+                variant="outline"
+                onClick={() => setShowPromptInput(!showPromptInput)}
+                disabled={analyzing}
+                className="cyber-btn-outline h-10"
+              >
+                <MessageSquare className="w-4 h-4 mr-2 text-violet-400" />
+                自定义提示词
+                {showPromptInput ? <ChevronUp className="w-3 h-3 ml-2" /> : <ChevronDown className="w-3 h-3 ml-2" />}
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
@@ -666,6 +611,23 @@ int main() {
               className="hidden"
             />
           </div>
+
+          {/* Custom Prompt Input */}
+          {showPromptInput && (
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1">
+                <MessageSquare className="w-3 h-3 text-violet-400" />
+                自定义提示词（可选，留空则使用默认审计提示词）
+              </label>
+              <Textarea
+                placeholder="输入自定义提示词，例如：请重点检测SQL注入和XSS漏洞，并给出详细的修复建议..."
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                className="min-h-[100px] font-mono text-sm cyber-input text-violet-300 placeholder:text-muted-foreground"
+                disabled={analyzing}
+              />
+            </div>
+          )}
 
           {/* Quick Examples */}
           <div className="flex flex-wrap gap-2 items-center p-3 bg-muted border border-border rounded">
@@ -704,7 +666,7 @@ int main() {
           {/* Analyze Button */}
           <Button
             onClick={handleAnalyze}
-            disabled={!code.trim() || !language || analyzing}
+            disabled={!code.trim() || analyzing}
             className="w-full cyber-btn-primary h-12 text-lg font-bold uppercase"
           >
             {analyzing ? (
@@ -735,7 +697,7 @@ int main() {
                   <Clock className="w-3 h-3 mr-1" />
                   {(analysisTime ?? 0).toFixed(2)}s
                 </Badge>
-                <Badge className="cyber-badge-muted uppercase">{language}</Badge>
+                <Badge className="cyber-badge-muted uppercase">{language === "auto" ? "自动识别" : language}</Badge>
                 <Button
                   size="sm"
                   onClick={() => setExportDialogOpen(true)}
