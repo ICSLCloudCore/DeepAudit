@@ -13,6 +13,7 @@ import subprocess
 import json
 import traceback
 import logging
+import zipfile
 from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
@@ -533,7 +534,9 @@ class OpenCodeSessionService:
                 await asyncio.sleep(1)
 
             if not port:
-                logger.info(f"[OpenCode] Could not find port in log file after {max_attempts} attempts")
+                logger.info(
+                    f"[OpenCode] Could not find port in log file after {max_attempts} attempts"
+                )
 
             logger.info(f"[OpenCode] Updating project with opencode info...")
             project.opencode_pid = str(pid)
@@ -795,6 +798,93 @@ class OpenCodeSessionService:
         )
         return result.scalars().first()
 
+    async def _collect_project_info(self, project_id: str) -> Dict[str, Any]:
+        """
+        收集项目信息（文件数、代码行数等）
+
+        Args:
+            project_id: 项目ID
+
+        Returns:
+            包含 file_count 和 total_lines 的字典
+        """
+        file_count = 0
+        total_lines = 0
+
+        try:
+            result = await self.db.execute(select(Project).where(Project.id == project_id))
+            project = result.scalar_one_or_none()
+
+            if not project:
+                return {"file_count": 0, "total_lines": 0}
+
+            if project.source_type == "zip":
+                from app.services.zip_storage import load_project_zip
+
+                zip_path = await load_project_zip(project_id)
+                if zip_path and os.path.exists(zip_path):
+                    try:
+                        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                            for file_info in zip_ref.infolist():
+                                if not file_info.is_dir():
+                                    name = file_info.filename
+                                    if not self._should_exclude_file(name):
+                                        file_count += 1
+                                        try:
+                                            content = zip_ref.read(name)
+                                            try:
+                                                text_content = content.decode(
+                                                    "utf-8", errors="ignore"
+                                                )
+                                                total_lines += len(text_content.splitlines())
+                                            except Exception:
+                                                pass
+                                        except Exception:
+                                            pass
+                    except Exception as e:
+                        logger.warning(f"[OpenCode] Error reading zip file for stats: {e}")
+
+            # 对于 repository 类型，暂时返回 0（需要更复杂的实现）
+            # TODO: 实现 repository 类型的文件统计
+
+        except Exception as e:
+            logger.warning(f"[OpenCode] Error collecting project info: {e}")
+
+        return {"file_count": file_count, "total_lines": total_lines}
+
+    def _should_exclude_file(self, filename: str) -> bool:
+        """
+        判断文件是否应该被排除
+
+        Args:
+            filename: 文件名
+
+        Returns:
+            是否应该排除
+        """
+        exclude_patterns = [
+            "node_modules",
+            "__pycache__",
+            ".git",
+            ".DS_Store",
+            "*.min.js",
+            "*.min.css",
+            "*.log",
+            "*.tmp",
+            "*.temp",
+        ]
+
+        for pattern in exclude_patterns:
+            if pattern.startswith("*."):
+                ext = pattern[1:]
+                if filename.lower().endswith(ext):
+                    return True
+            else:
+                if pattern in filename:
+                    return True
+
+        return False
+
     async def create_opencode_audit_task(
         self,
         project_id: str,
@@ -835,6 +925,11 @@ class OpenCodeSessionService:
                     task_name = f"OpenCode: {template.name}"
                     task_description = template.description or task_description
 
+        # 收集项目统计信息
+        project_info = {"file_count": 0, "total_lines": 0}
+        if not is_just_start_server:
+            project_info = await self._collect_project_info(project_id)
+
         audit_task = OpenCodeAuditTask(
             project_id=project_id,
             created_by=current_user.id,
@@ -852,6 +947,8 @@ class OpenCodeSessionService:
             else "Initializing audit",
             started_at=datetime.now(timezone.utc),
             completed_at=datetime.now(timezone.utc) if is_just_start_server else None,
+            total_files=project_info.get("file_count", 0),
+            total_lines=project_info.get("total_lines", 0),
         )
 
         self.db.add(audit_task)
@@ -974,7 +1071,7 @@ class OpenCodeSessionService:
         server_session_id: str,
         message_id: Optional[str],
         db_session_id: str,
-        audit_task_id: Optional[str]
+        audit_task_id: Optional[str],
     ) -> bool:
         """
         轮询OpenCode服务器获取结果
@@ -1009,9 +1106,7 @@ class OpenCodeSessionService:
                     db_session_local.add(message_content)
                     await db_session_local.commit()
                 except Exception as e:
-                    logger.info(
-                        f"[OpenCode] Failed to save response content: {e}"
-                    )
+                    logger.info(f"[OpenCode] Failed to save response content: {e}")
                     await db_session_local.rollback()
 
         for poll_count in range(max_polls):
@@ -1037,9 +1132,17 @@ class OpenCodeSessionService:
                                 for part in item.get("parts", []):
                                     part_sum += 1
                                     if (part_type := part.get("type")) == "text":
-                                        await save_data_to_database(record_index, OpenCodeMessageContentType.RESPONSE, part.get("text", ""))
+                                        await save_data_to_database(
+                                            record_index,
+                                            OpenCodeMessageContentType.RESPONSE,
+                                            part.get("text", ""),
+                                        )
                                     elif part_type == "reasoning":
-                                        await save_data_to_database(record_index, OpenCodeMessageContentType.REASONING, part.get("text", ""))
+                                        await save_data_to_database(
+                                            record_index,
+                                            OpenCodeMessageContentType.REASONING,
+                                            part.get("text", ""),
+                                        )
                                 if part_sum == 2:
                                     return True
                                 # 索引往前推
@@ -1081,11 +1184,7 @@ class OpenCodeSessionService:
             self.set_current_session_id(db_session_id)
 
             sign = await self.poll_opencode_result_with_updates(
-                project,
-                server_session_id,
-                message_id,
-                db_session_id,
-                audit_task_id
+                project, server_session_id, message_id, db_session_id, audit_task_id
             )
             logger.info(f"[OpenCode] sign: {sign}")
 
@@ -1116,6 +1215,9 @@ class OpenCodeSessionService:
                         if sign:
                             audit_task.status = OpenCodeAuditTaskStatus.COMPLETED
                             audit_task.current_step = "Audit completed"
+                            # 确保完成时 processed_files = total_files
+                            if audit_task.total_files > 0:
+                                audit_task.processed_files = audit_task.total_files
 
                             # 自动尝试导入漏洞报告
                             try:
@@ -1124,7 +1226,9 @@ class OpenCodeSessionService:
                                     audit_task.id,
                                     project_id,
                                 )
-                                logger.info(f"[OpenCode] Auto import completed for task {audit_task.id}")
+                                logger.info(
+                                    f"[OpenCode] Auto import completed for task {audit_task.id}"
+                                )
                             except Exception as e:
                                 logger.info(f"[OpenCode] Auto import error: {e}")
                         else:
@@ -1135,7 +1239,9 @@ class OpenCodeSessionService:
                         audit_task.completed_at = datetime.now(timezone.utc)
                         await db_session_local.commit()
 
-                    logger.info(f"[OpenCode] Background poll completed with status: {db_session.status}")
+                    logger.info(
+                        f"[OpenCode] Background poll completed with status: {db_session.status}"
+                    )
         except Exception as e:
             logger.info(f"[OpenCode] Background poll failed: {e}")
 
@@ -1274,7 +1380,9 @@ class OpenCodeSessionService:
 
             opencode_session_id = audit_task.opencode_session_id
             if not opencode_session_id:
-                logger.info(f"[OpenCode] No opencode_session_id found for audit task: {audit_task_id}")
+                logger.info(
+                    f"[OpenCode] No opencode_session_id found for audit task: {audit_task_id}"
+                )
                 return
 
             # 构建可能的报告路径

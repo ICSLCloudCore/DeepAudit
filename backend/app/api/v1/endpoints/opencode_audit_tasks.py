@@ -118,7 +118,9 @@ class UpdateOpenCodeAuditTaskStatusRequest(BaseModel):
     status: str
     current_step: Optional[str] = None
     error_message: Optional[str] = None
+    total_files: Optional[int] = None
     processed_files: Optional[int] = None
+    total_lines: Optional[int] = None
     findings_count: Optional[int] = None
     critical_count: Optional[int] = None
     high_count: Optional[int] = None
@@ -350,8 +352,12 @@ async def update_opencode_audit_task_status(
         task.current_step = status_data.current_step
     if status_data.error_message is not None:
         task.error_message = status_data.error_message
+    if status_data.total_files is not None:
+        task.total_files = status_data.total_files
     if status_data.processed_files is not None:
         task.processed_files = status_data.processed_files
+    if status_data.total_lines is not None:
+        task.total_lines = status_data.total_lines
     if status_data.findings_count is not None:
         task.findings_count = status_data.findings_count
     if status_data.critical_count is not None:
