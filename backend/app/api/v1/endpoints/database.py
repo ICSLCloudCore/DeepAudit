@@ -19,6 +19,8 @@ from app.models.project import Project, ProjectMember
 from app.models.audit import AuditTask, AuditIssue
 from app.models.analysis import InstantAnalysis
 from app.models.user_config import UserConfig
+from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+from app.models.audit_vulnerabilities import AuditVulnerability
 from app.utils.log import logger
 
 router = APIRouter()
@@ -497,19 +499,35 @@ async def get_database_stats(
         total_projects = len(projects)
         active_projects = len([p for p in projects if p.is_active])
 
-        # 2. 任务统计
+        # 2. 任务统计（AuditTask + OpenCodeAuditTask）
         tasks_result = await db.execute(
             select(AuditTask).where(AuditTask.created_by == current_user.id)
         )
         tasks = tasks_result.scalars().all()
-        total_tasks = len(tasks)
-        completed_tasks = len([t for t in tasks if t.status == "completed"])
-        pending_tasks = len([t for t in tasks if t.status == "pending"])
-        running_tasks = len([t for t in tasks if t.status == "running"])
-        failed_tasks = len([t for t in tasks if t.status == "failed"])
 
-        # 3. 问题统计
+        opencode_tasks_result = await db.execute(
+            select(OpenCodeAuditTask).where(OpenCodeAuditTask.created_by == current_user.id)
+        )
+        opencode_tasks = opencode_tasks_result.scalars().all()
+
+        total_tasks = len(tasks) + len(opencode_tasks)
+        completed_tasks = len([t for t in tasks if t.status == "completed"]) + len(
+            [t for t in opencode_tasks if t.status == OpenCodeAuditTaskStatus.COMPLETED]
+        )
+        pending_tasks = len([t for t in tasks if t.status == "pending"]) + len(
+            [t for t in opencode_tasks if t.status == OpenCodeAuditTaskStatus.PENDING]
+        )
+        running_tasks = len([t for t in tasks if t.status == "running"]) + len(
+            [t for t in opencode_tasks if t.status == OpenCodeAuditTaskStatus.RUNNING]
+        )
+        failed_tasks = len([t for t in tasks if t.status == "failed"]) + len(
+            [t for t in opencode_tasks if t.status == OpenCodeAuditTaskStatus.FAILED]
+        )
+
+        # 3. 问题统计（AuditIssue + AuditVulnerability）
         task_ids = [task.id for task in tasks]
+        opencode_task_ids = [task.id for task in opencode_tasks]
+
         total_issues = 0
         open_issues = 0
         resolved_issues = 0
@@ -523,13 +541,32 @@ async def get_database_stats(
                 select(AuditIssue).where(AuditIssue.task_id.in_(task_ids))
             )
             issues = issues_result.scalars().all()
-            total_issues = len(issues)
-            open_issues = len([i for i in issues if i.status == "open"])
-            resolved_issues = len([i for i in issues if i.status == "resolved"])
-            critical_issues = len([i for i in issues if i.severity == "critical"])
-            high_issues = len([i for i in issues if i.severity == "high"])
-            medium_issues = len([i for i in issues if i.severity == "medium"])
-            low_issues = len([i for i in issues if i.severity == "low"])
+            total_issues += len(issues)
+            open_issues += len([i for i in issues if i.status == "open"])
+            resolved_issues += len([i for i in issues if i.status == "resolved"])
+            critical_issues += len([i for i in issues if i.severity == "critical"])
+            high_issues += len([i for i in issues if i.severity == "high"])
+            medium_issues += len([i for i in issues if i.severity == "medium"])
+            low_issues += len([i for i in issues if i.severity == "low"])
+
+        if opencode_task_ids:
+            vulns_result = await db.execute(
+                select(AuditVulnerability).where(AuditVulnerability.task_id.in_(opencode_task_ids))
+            )
+            vulns = vulns_result.scalars().all()
+            total_issues += len(vulns)
+            open_issues += len([v for v in vulns if v.status in ("new", "open")])
+            resolved_issues += len(
+                [
+                    v
+                    for v in vulns
+                    if v.status in ("fixed", "resolved", "wont_fix", "false_positive")
+                ]
+            )
+            critical_issues += len([v for v in vulns if v.severity == "critical"])
+            high_issues += len([v for v in vulns if v.severity == "high"])
+            medium_issues += len([v for v in vulns if v.severity == "medium"])
+            low_issues += len([v for v in vulns if v.severity == "low"])
 
         # 4. 即时分析统计
         analyses_result = await db.execute(

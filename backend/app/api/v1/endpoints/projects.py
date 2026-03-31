@@ -17,6 +17,8 @@ from app.models.project import Project
 from app.models.user import User
 from app.models.audit import AuditTask, AuditIssue
 from app.models.agent_task import AgentTask, AgentTaskStatus, AgentFinding
+from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+from app.models.audit_vulnerabilities import AuditVulnerability
 from app.models.user_config import UserConfig
 import zipfile
 from app.services.scanner import (
@@ -226,26 +228,63 @@ async def get_stats(
     )
     agent_findings = agent_findings_result.scalars().all()
 
-    # 合并统计（旧任务 + 新 Agent 任务）
-    total_tasks = len(tasks) + len(agent_tasks)
-    completed_tasks = len([t for t in tasks if t.status == "completed"]) + len(
-        [t for t in agent_tasks if t.status == AgentTaskStatus.COMPLETED]
+    # 🔥 统计 OpenCodeAuditTask
+    opencode_tasks_result = await db.execute(
+        select(OpenCodeAuditTask).where(OpenCodeAuditTask.project_id.in_(project_ids))
+        if project_ids
+        else select(OpenCodeAuditTask).where(False)
     )
-    total_issues = len(issues) + len(agent_findings)
-    resolved_issues = len([i for i in issues if i.status == "resolved"]) + len(
-        [f for f in agent_findings if f.status in ("fixed", "wont_fix", "false_positive")]
+    opencode_tasks = opencode_tasks_result.scalars().all()
+    opencode_task_ids = [t.id for t in opencode_tasks]
+
+    # 🔥 统计 AuditVulnerability（OpenCode 漏洞）
+    opencode_vulns_result = await db.execute(
+        select(AuditVulnerability).where(AuditVulnerability.task_id.in_(opencode_task_ids))
+        if opencode_task_ids
+        else select(AuditVulnerability).where(False)
+    )
+    opencode_vulns = opencode_vulns_result.scalars().all()
+
+    # 合并统计（旧任务 + Agent 任务 + OpenCode 任务）
+    total_tasks = len(tasks) + len(agent_tasks) + len(opencode_tasks)
+    completed_tasks = (
+        len([t for t in tasks if t.status == "completed"])
+        + len([t for t in agent_tasks if t.status == AgentTaskStatus.COMPLETED])
+        + len([t for t in opencode_tasks if t.status == OpenCodeAuditTaskStatus.COMPLETED])
+    )
+    total_issues = len(issues) + len(agent_findings) + len(opencode_vulns)
+    resolved_issues = (
+        len([i for i in issues if i.status == "resolved"])
+        + len([f for f in agent_findings if f.status in ("fixed", "wont_fix", "false_positive")])
+        + len(
+            [
+                v
+                for v in opencode_vulns
+                if v.status in ("fixed", "resolved", "wont_fix", "false_positive")
+            ]
+        )
     )
 
     # 计算平均质量分（只统计已完成且有质量分的任务）
-    quality_scores = [
-        t.quality_score
-        for t in tasks
-        if t.status == "completed" and t.quality_score and t.quality_score > 0
-    ] + [
-        t.quality_score
-        for t in agent_tasks
-        if t.status == AgentTaskStatus.COMPLETED and t.quality_score and t.quality_score > 0
-    ]
+    quality_scores = (
+        [
+            t.quality_score
+            for t in tasks
+            if t.status == "completed" and t.quality_score and t.quality_score > 0
+        ]
+        + [
+            t.quality_score
+            for t in agent_tasks
+            if t.status == AgentTaskStatus.COMPLETED and t.quality_score and t.quality_score > 0
+        ]
+        + [
+            t.quality_score
+            for t in opencode_tasks
+            if t.status == OpenCodeAuditTaskStatus.COMPLETED
+            and t.quality_score
+            and t.quality_score > 0
+        ]
+    )
     avg_quality_score = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
 
     return {
