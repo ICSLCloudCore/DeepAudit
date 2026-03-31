@@ -22,7 +22,7 @@ from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskS
 from app.models.project import Project
 from app.models.user import User
 from app.models.audit_vulnerabilities import AuditVulnerability
-from app.services.opencode_session_service import OpenCodeSessionService
+from app.services.opencode_session_service import OpenCodeSessionService, _calculate_security_score
 
 router = APIRouter()
 
@@ -595,6 +595,16 @@ async def import_vulnerabilities(
             + severity_summary.get("low", 0)
             + severity_summary.get("info", 0)
         )
+
+        # 收集漏洞列表用于计算分数
+        findings_list = []
+        for vuln_data in vulnerabilities:
+            findings_list.append({"severity": vuln_data.get("severity", "low")})
+
+        # 计算质量评分
+        score = _calculate_security_score(findings_list)
+        task.quality_score = score
+        task.security_score = score
 
         await db.commit()
 

@@ -1669,7 +1669,9 @@ class OpenCodeSessionService:
                                         )
 
                                     # 计算质量评分
-                                    task.quality_score = _calculate_security_score(findings_list)
+                                    score = _calculate_security_score(findings_list)
+                                    task.quality_score = score
+                                    task.security_score = score
                                     await db.commit()
                                 logger.info(
                                     f"[OpenCode] Successfully auto imported {imported_count} vulnerabilities"
