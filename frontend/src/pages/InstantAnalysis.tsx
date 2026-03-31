@@ -38,6 +38,8 @@ import { api } from "@/shared/config/database";
 import type { CodeAnalysisResult, InstantAnalysis as InstantAnalysisType } from "@/shared/types";
 import { toast } from "sonner";
 import InstantExportDialog from "@/components/reports/InstantExportDialog";
+import { getPromptTemplates, type PromptTemplate } from "@/shared/api/prompts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // AI explanation parser
 function parseAIExplanation(aiExplanation: string) {
@@ -68,9 +70,32 @@ export default function InstantAnalysis() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
-  // Custom prompt state
+  // Prompt config state
+  // promptMode: 'default' | 'template' | 'custom'
+  const [promptMode, setPromptMode] = useState<'default' | 'template' | 'custom'>('default');
+  const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
-  const [showPromptInput, setShowPromptInput] = useState(false);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
+  const [selectedPromptTemplateId, setSelectedPromptTemplateId] = useState<string>("");
+
+  // Load prompt templates on mount
+  useEffect(() => {
+    const loadPromptTemplates = async () => {
+      try {
+        const res = await getPromptTemplates({ is_active: true });
+        setPromptTemplates(res.items);
+        const defaultTemplate = res.items.find(t => t.is_default);
+        if (defaultTemplate) {
+          setSelectedPromptTemplateId(defaultTemplate.id);
+        } else if (res.items.length > 0) {
+          setSelectedPromptTemplateId(res.items[0].id);
+        }
+      } catch (error) {
+        console.error("加载提示词模板失败:", error);
+      }
+    };
+    loadPromptTemplates();
+  }, []);
 
   // Load history
   const loadHistory = async () => {
@@ -252,8 +277,8 @@ int main() {
       const analysisResult = await CodeAnalysisEngine.analyzeCode(
         code,
         language,
-        undefined,
-        customPrompt.trim() || undefined
+        promptMode === 'template' ? (selectedPromptTemplateId || undefined) : undefined,
+        promptMode === 'custom' ? (customPrompt.trim() || undefined) : undefined
       );
       const endTime = Date.now();
       const duration = (endTime - startTime) / 1000;
@@ -319,6 +344,8 @@ int main() {
     setResult(null);
     setAnalysisTime(0);
     setCustomPrompt("");
+    setPromptMode('default');
+    setShowPromptConfig(false);
   };
 
   // Render issue with cyberpunk style
@@ -585,13 +612,15 @@ int main() {
             <div className="flex items-end gap-2 ml-auto">
               <Button
                 variant="outline"
-                onClick={() => setShowPromptInput(!showPromptInput)}
+                onClick={() => setShowPromptConfig(!showPromptConfig)}
                 disabled={analyzing}
-                className="cyber-btn-outline h-10"
+                className={`cyber-btn-outline h-10 ${promptMode !== 'default' ? 'border-violet-500/50 text-violet-400' : ''}`}
               >
-                <MessageSquare className="w-4 h-4 mr-2 text-violet-400" />
-                自定义提示词
-                {showPromptInput ? <ChevronUp className="w-3 h-3 ml-2" /> : <ChevronDown className="w-3 h-3 ml-2" />}
+                <MessageSquare className={`w-4 h-4 mr-2 ${promptMode !== 'default' ? 'text-violet-400' : 'text-muted-foreground'}`} />
+                提示词配置
+                {promptMode === 'template' && <span className="ml-1 text-xs text-violet-400">（模板）</span>}
+                {promptMode === 'custom' && <span className="ml-1 text-xs text-violet-400">（自定义）</span>}
+                {showPromptConfig ? <ChevronUp className="w-3 h-3 ml-2" /> : <ChevronDown className="w-3 h-3 ml-2" />}
               </Button>
               <Button
                 variant="outline"
@@ -612,20 +641,76 @@ int main() {
             />
           </div>
 
-          {/* Custom Prompt Input */}
-          {showPromptInput && (
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1">
-                <MessageSquare className="w-3 h-3 text-violet-400" />
-                自定义提示词（可选，留空则使用默认审计提示词）
-              </label>
-              <Textarea
-                placeholder="输入自定义提示词，例如：请重点检测SQL注入和XSS漏洞，并给出详细的修复建议..."
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                className="min-h-[100px] font-mono text-sm cyber-input text-violet-300 placeholder:text-muted-foreground"
-                disabled={analyzing}
-              />
+          {/* Prompt Config Panel */}
+          {showPromptConfig && (
+            <div className="border border-violet-500/30 rounded-lg bg-violet-500/5 p-4 space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <MessageSquare className="w-4 h-4 text-violet-400" />
+                <span className="text-xs font-bold text-violet-400 uppercase">提示词配置</span>
+              </div>
+              {/* Mode selector */}
+              <div className="flex gap-2">
+                {[
+                  { key: 'default', label: '默认', desc: '使用系统默认审计提示词' },
+                  { key: 'template', label: '选择模板', desc: '从提示词管理中选择' },
+                  { key: 'custom', label: '自定义', desc: '直接输入提示词内容' },
+                ].map(({ key, label, desc }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPromptMode(key as typeof promptMode)}
+                    disabled={analyzing}
+                    className={`flex-1 px-3 py-2 rounded border text-xs font-mono font-bold uppercase transition-all ${
+                      promptMode === key
+                        ? 'bg-violet-500/20 border-violet-500/60 text-violet-300'
+                        : 'bg-muted border-border text-muted-foreground hover:border-violet-500/30'
+                    }`}
+                    title={desc}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Template selector */}
+              {promptMode === 'template' && (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">选择提示词模板</label>
+                  {promptTemplates.length === 0 ? (
+                    <p className="text-xs text-muted-foreground font-mono py-2">暂无可用模板，请前往提示词管理添加</p>
+                  ) : (
+                    <Select value={selectedPromptTemplateId} onValueChange={setSelectedPromptTemplateId} disabled={analyzing}>
+                      <SelectTrigger className="cyber-input h-10">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-violet-400 shrink-0" />
+                          <SelectValue placeholder="选择提示词模板" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="cyber-dialog border-border">
+                        {promptTemplates.map((pt) => (
+                          <SelectItem key={pt.id} value={pt.id}>
+                            {pt.name}{pt.is_default && ' （默认）'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+
+              {/* Custom prompt textarea */}
+              {promptMode === 'custom' && (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">输入自定义提示词</label>
+                  <Textarea
+                    placeholder="输入自定义提示词，例如：请重点检测SQL注入和XSS漏洞，并给出详细的修复建议..."
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    className="min-h-[100px] font-mono text-sm cyber-input text-violet-300 placeholder:text-muted-foreground"
+                    disabled={analyzing}
+                  />
+                </div>
+              )}
             </div>
           )}
 
