@@ -48,8 +48,8 @@ export function ProjectTasksTab(props: {
 
             // 确定详情跳转链接
             let detailLink = "";
-            if (isOpenCodeTask && task.opencode_session_id) {
-              detailLink = `/opencode-audit/${task.opencode_session_id}`;
+             if (isOpenCodeTask && task.opencode_session_id) {
+               detailLink = `/opencode-audit/${task.opencode_session_id}/tasks/${task.id}`;
             } else if (isAgentTask) {
               detailLink = `/agent-audit/${task.id}`;
             } else {

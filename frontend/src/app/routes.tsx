@@ -46,8 +46,8 @@ const routes: RouteConfig[] = [
     visible: false,
   },
   {
-    name: "OpenCode审计会话",
-    path: "/opencode-audit/:sessionId",
+    name: "OpenCode审计会话和任务",
+    path: "/opencode-audit/:sessionId/tasks/:taskId",
     element: <OpenCodeAudit />,
     visible: false,
   },

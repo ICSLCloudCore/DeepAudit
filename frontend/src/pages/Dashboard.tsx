@@ -470,7 +470,8 @@ export default function Dashboard() {
                   if (isAgent) {
                     taskLink = `/agent-audit/${task.id}`;
                   } else if (isOpenCode) {
-                    taskLink = `/opencode-audit/${task.id}`;
+                    const openCodeTask = task as OpenCodeAuditTask;
+                    taskLink = `/opencode-audit/${openCodeTask.opencode_session_id}/tasks/${openCodeTask.id}`;
                   } else {
                     taskLink = `/tasks/${task.id}`;
                   }
@@ -650,7 +651,8 @@ export default function Dashboard() {
                   if (isAgent) {
                     taskLink = `/agent-audit/${task.id}`;
                   } else if (isOpenCode) {
-                    taskLink = `/opencode-audit/${task.id}`;
+                    const openCodeTask = task as OpenCodeAuditTask;
+                    taskLink = `/opencode-audit/${openCodeTask.opencode_session_id}/tasks/${openCodeTask.id}`;
                   } else {
                     taskLink = `/tasks/${task.id}`;
                   }

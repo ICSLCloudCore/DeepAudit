@@ -90,10 +90,13 @@ export interface StatsPanelProps {
   session: OpenCodeSession | null;
 }
 
+import type { OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";
+
 export interface HeaderProps {
   session: OpenCodeSession | null;
   isRunning: boolean;
   onNewAudit: () => void;
+  auditTask?: OpenCodeAuditTask | null;
 }
 
 export interface ActivityLogProps {

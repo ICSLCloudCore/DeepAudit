@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { HeaderProps } from "../types";
 import { SESSION_STATUS_CONFIG, SERVER_STATUS_CONFIG } from "../constants";
 
-export function Header({ session, isRunning, onNewAudit }: HeaderProps) {
+export function Header({ session, isRunning, onNewAudit, auditTask }: HeaderProps) {
   return (
     <header className="flex-shrink-0 h-16 border-b border-border/50 flex items-center justify-between px-6 bg-card/80 backdrop-blur-md relative overflow-hidden">
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
@@ -51,6 +51,23 @@ export function Header({ session, isRunning, onNewAudit }: HeaderProps) {
                     ({SERVER_STATUS_CONFIG[session.opencode_server_status]?.text || session.opencode_server_status})
                   </span>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+        {auditTask && (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-muted/50 border border-border/50">
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Task</span>
+            </div>
+            <div className="flex items-center gap-3">
+               <span className="text-foreground text-sm font-mono truncate max-w-[200px] font-medium">
+                 {auditTask.id.slice(0, 8)}
+               </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono uppercase tracking-wider">
+                  {auditTask.status}
+                </span>
               </div>
             </div>
           </div>

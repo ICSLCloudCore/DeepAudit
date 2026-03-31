@@ -859,8 +859,8 @@ export default function ProjectDetail() {
                     {unifiedTasks.slice(0, 5).map((t) => {
                     // 确定跳转链接
                     let linkTo = "";
-                    if (t.kind === 'opencode' && (t.task as any).opencode_session_id) {
-                      linkTo = `/opencode-audit/${(t.task as any).opencode_session_id}`;
+                     if (t.kind === 'opencode' && (t.task as any).opencode_session_id) {
+                       linkTo = `/opencode-audit/${(t.task as any).opencode_session_id}/tasks/${(t.task as any).id}`;
                     } else if (t.kind === 'agent') {
                       linkTo = `/agent-audit/${t.task.id}`;
                     } else {

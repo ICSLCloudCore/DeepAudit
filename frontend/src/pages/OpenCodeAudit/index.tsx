@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { exportOpenCodeToMD, exportOpenCodeToJSON } from "@/features/reports/services/reportExport";
+import { getOpenCodeAuditTask, type OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";
 
 import { SplashScreen, Header, LogEntry, StatsPanel, MessageList } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
@@ -19,7 +20,7 @@ import { ACTION_VERBS } from "./constants";
 import { opencodeApi } from "@/shared/api/opencode";
 
 function OpenCodeAuditPageContent() {
-  const { sessionId, projectId } = useParams<{ sessionId?: string; projectId?: string }>();
+  const { sessionId, taskId, projectId } = useParams<{ sessionId?: string; taskId?: string; projectId?: string }>();
   const navigate = useNavigate();
   
   const {
@@ -36,6 +37,8 @@ function OpenCodeAuditPageContent() {
   const [firstRun, setFirstRun] = useState(true);
   const [exportingMD, setExportingMD] = useState(false);
   const [exportingJSON, setExportingJSON] = useState(false);
+  const [auditTask, setAuditTask] = useState<OpenCodeAuditTask | null>(null);
+  const [loadingAuditTask, setLoadingAuditTask] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -91,6 +94,26 @@ function OpenCodeAuditPageContent() {
     setShowSplash(false);
     loadSession();
   }, [sessionId, loadSession]);
+
+  // 加载 Audit Task 数据
+  useEffect(() => {
+    if (!taskId) return;
+
+    const loadAuditTask = async () => {
+      setLoadingAuditTask(true);
+      try {
+        const taskData = await getOpenCodeAuditTask(taskId);
+        setAuditTask(taskData);
+      } catch (err) {
+        console.error("Failed to load audit task:", err);
+        toast.error("Failed to load audit task");
+      } finally {
+        setLoadingAuditTask(false);
+      }
+    };
+
+    loadAuditTask();
+  }, [taskId]);
 
   // SSE Stream Effect
   useEffect(() => {
@@ -229,6 +252,7 @@ function OpenCodeAuditPageContent() {
         session={session}
         isRunning={isRunning}
         onNewAudit={handleNewAudit}
+        auditTask={auditTask}
       />
 
       <div className="flex-1 flex overflow-hidden relative">
@@ -337,13 +361,11 @@ function OpenCodeAuditPageContent() {
           </div>
           
           {/* 查看问题按钮 - 仅在任务完成时显示 */}
-          {session && isComplete && (
+          {auditTask?.status === 'completed' && (
             <div className="flex-shrink-0 p-4 border-t border-border space-y-3">
               <Button
                 className="w-full gap-2"
                 onClick={() => {
-                  // 这里需要根据实际情况获取taskId，暂时使用sessionId
-                  const taskId = session.id || session.task_id || sessionId;
                   if (taskId) {
                     navigate(`/tasks/opencode/${taskId}/vulnerabilities`);
                   }
