@@ -1498,11 +1498,31 @@ class OpenCodeSessionService:
         db: AsyncSession,
         audit_task_id: str,
         project_id: str,
-    ):
-        """自动导入审计报告中的漏洞"""
+        report_data: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """自动导入审计报告中的漏洞
+
+        Args:
+            db: 数据库会话
+            audit_task_id: 审计任务ID
+            project_id: 项目ID
+            report_data: 可选的报告数据，如果提供则直接使用，否则从文件系统查找
+
+        Returns:
+            导入结果统计字典
+        """
         import traceback
 
         logger.info(f"[OpenCode] Auto importing vulnerabilities for task {audit_task_id}")
+        result_stats = {
+            "imported_count": 0,
+            "total_in_report": 0,
+            "findings_count": 0,
+            "critical_count": 0,
+            "high_count": 0,
+            "medium_count": 0,
+            "low_count": 0,
+        }
 
         try:
             # 查找项目路径
@@ -1511,9 +1531,9 @@ class OpenCodeSessionService:
 
             if not project:
                 logger.info(f"[OpenCode] Project not found for auto import: {project_id}")
-                return
+                return result_stats
 
-            # 查找审计任务，获取 opencode_session_id
+            # 查找审计任务
             result_task = await db.execute(
                 select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == audit_task_id)
             )
@@ -1521,171 +1541,179 @@ class OpenCodeSessionService:
 
             if not audit_task:
                 logger.info(f"[OpenCode] Audit task not found for auto import: {audit_task_id}")
-                return
+                return result_stats
 
-            opencode_session_id = audit_task.opencode_session_id
-            if not opencode_session_id:
-                logger.info(
-                    f"[OpenCode] No opencode_session_id found for audit task: {audit_task_id}"
-                )
-                return
-
-            # 打印调试信息
-            logger.info(f"[OpenCode] Project ID: {project.id}")
-            logger.info(f"[OpenCode] Project source_type: {project.source_type}")
-            logger.info(f"[OpenCode] Task ID: {audit_task_id}")
-            logger.info(f"[OpenCode] OpenCode Session ID: {opencode_session_id}")
-
-            # 使用公共方法查找 JSON 报告文件
-            report_files = self.find_report_files(
-                opencode_session_id=opencode_session_id,
-                project_id=project_id,
-                project_source_type=project.source_type,
-                extension=".json",
-            )
-
-            # 如果找到报告文件，尝试导入
-            if report_files:
-                logger.info(f"[OpenCode] Found {len(report_files)} potential report files")
-
-                # 尝试导入最近的报告文件
-                for report_file in report_files[:3]:
-                    try:
-                        with open(report_file, "r", encoding="utf-8") as f:
-                            report_data = json.load(f)
-
-                        if "vulnerabilities" in report_data:
-                            vulnerabilities = report_data["vulnerabilities"]
-                            logger.info(
-                                f"[OpenCode] Found {len(vulnerabilities)} vulnerabilities in {report_file}"
-                            )
-
-                            imported_count = 0
-                            for vuln_data in vulnerabilities:
-                                try:
-                                    current_vuln_id = vuln_data.get("vuln_id", str(uuid.uuid4()))
-
-                                    # 检查是否已存在
-                                    result = await db.execute(
-                                        select(AuditVulnerability).where(
-                                            (AuditVulnerability.task_id == audit_task_id)
-                                            & (AuditVulnerability.vuln_id == current_vuln_id)
-                                        )
-                                    )
-                                    existing_vuln = result.scalar_one_or_none()
-
-                                    if existing_vuln:
-                                        logger.info(
-                                            f"[OpenCode] Vulnerability {current_vuln_id} already exists, skipping"
-                                        )
-                                        continue
-
-                                    vuln = AuditVulnerability(
-                                        id=str(uuid.uuid4()),
-                                        task_id=audit_task_id,
-                                        vuln_id=current_vuln_id,
-                                        severity=vuln_data.get("severity", "medium"),
-                                        cvss_score=vuln_data.get("cvss_score"),
-                                        cvss_vector=vuln_data.get("cvss_vector"),
-                                        cwe=vuln_data.get("cwe"),
-                                        confidence=vuln_data.get("confidence"),
-                                        location=vuln_data.get("location"),
-                                        file_path=vuln_data.get("file_path"),
-                                        line_start=vuln_data.get("line_start"),
-                                        line_end=vuln_data.get("line_end"),
-                                        vulnerability_title=vuln_data.get(
-                                            "vulnerability_title", "未知漏洞"
-                                        ),
-                                        vulnerability_essence=vuln_data.get(
-                                            "vulnerability_essence"
-                                        ),
-                                        root_cause=vuln_data.get("root_cause"),
-                                        security_impact=vuln_data.get("security_impact"),
-                                        vulnerable_code=vuln_data.get("vulnerable_code"),
-                                        dataflow=vuln_data.get("dataflow"),
-                                        exploit_steps=vuln_data.get("exploit_steps"),
-                                        exploit_poc=vuln_data.get("exploit_poc"),
-                                        impact_confidentiality=vuln_data.get(
-                                            "impact_confidentiality"
-                                        ),
-                                        impact_integrity=vuln_data.get("impact_integrity"),
-                                        impact_availability=vuln_data.get("impact_availability"),
-                                        fix_description=vuln_data.get("fix_description"),
-                                        fix_code_before=vuln_data.get("fix_code_before"),
-                                        fix_code_after=vuln_data.get("fix_code_after"),
-                                        manual_confirmation=vuln_data.get("manual_confirmation"),
-                                        manual_confirmation_status=vuln_data.get(
-                                            "manual_confirmation_status", "待确认"
-                                        ),
-                                        manual_confirmation_notes=vuln_data.get(
-                                            "manual_confirmation_notes"
-                                        ),
-                                        confirmed_by=vuln_data.get("confirmed_by"),
-                                        confirmed_at=vuln_data.get("confirmed_at"),
-                                        status=vuln_data.get("status", "new"),
-                                    )
-                                    db.add(vuln)
-                                    imported_count += 1
-                                except Exception as e:
-                                    logger.info(f"[OpenCode] Failed to import vulnerability: {e}")
-                                    import traceback
-
-                                    traceback.print_exc()
-                                    # 回滚当前事务，避免影响后续导入
-                                    await db.rollback()
-                                    continue
-
-                            if imported_count > 0:
-                                # 更新任务的漏洞统计
-                                result_task = await db.execute(
-                                    select(OpenCodeAuditTask).where(
-                                        OpenCodeAuditTask.id == audit_task_id
-                                    )
-                                )
-                                task = result_task.scalar_one_or_none()
-                                if task:
-                                    task.findings_count = imported_count
-                                    severity_summary = report_data.get("severity_summary", {})
-                                    task.critical_count = severity_summary.get(
-                                        "致命", 0
-                                    ) + severity_summary.get("critical", 0)
-                                    task.high_count = severity_summary.get(
-                                        "严重", 0
-                                    ) + severity_summary.get("high", 0)
-                                    task.medium_count = severity_summary.get(
-                                        "一般", 0
-                                    ) + severity_summary.get("medium", 0)
-                                    task.low_count = (
-                                        severity_summary.get("提示", 0)
-                                        + severity_summary.get("low", 0)
-                                        + severity_summary.get("info", 0)
-                                    )
-
-                                    # 收集漏洞列表用于计算分数
-                                    findings_list = []
-                                    for vuln_data in vulnerabilities:
-                                        findings_list.append(
-                                            {"severity": vuln_data.get("severity", "low")}
-                                        )
-
-                                    # 计算质量评分
-                                    score = _calculate_security_score(findings_list)
-                                    task.quality_score = score
-                                    task.security_score = score
-                                    await db.commit()
-                                logger.info(
-                                    f"[OpenCode] Successfully auto imported {imported_count} vulnerabilities"
-                                )
-                                return
-                    except Exception as e:
-                        logger.info(f"[OpenCode] Failed to read report file {report_file}: {e}")
-                        continue
+            # 如果提供了 report_data，直接使用；否则从文件系统查找
+            report_data_list = []
+            if report_data:
+                report_data_list = [report_data]
+                logger.info(f"[OpenCode] Using provided report_data directly")
             else:
-                logger.info(f"[OpenCode] No report files found for auto import")
+                # 需要 opencode_session_id 来查找文件
+                opencode_session_id = audit_task.opencode_session_id
+                if not opencode_session_id:
+                    logger.info(
+                        f"[OpenCode] No opencode_session_id found for audit task: {audit_task_id}"
+                    )
+                    return result_stats
+
+                # 打印调试信息
+                logger.info(f"[OpenCode] Project ID: {project.id}")
+                logger.info(f"[OpenCode] Project source_type: {project.source_type}")
+                logger.info(f"[OpenCode] Task ID: {audit_task_id}")
+                logger.info(f"[OpenCode] OpenCode Session ID: {opencode_session_id}")
+
+                # 使用公共方法查找 JSON 报告文件
+                report_files = self.find_report_files(
+                    opencode_session_id=opencode_session_id,
+                    project_id=project_id,
+                    project_source_type=project.source_type,
+                    extension=".json",
+                )
+
+                if report_files:
+                    logger.info(f"[OpenCode] Found {len(report_files)} potential report files")
+                    # 读取报告文件
+                    for report_file in report_files[:3]:
+                        try:
+                            with open(report_file, "r", encoding="utf-8") as f:
+                                report_data_list.append(json.load(f))
+                        except Exception as e:
+                            logger.info(f"[OpenCode] Failed to read report file {report_file}: {e}")
+                            continue
+                else:
+                    logger.info(f"[OpenCode] No report files found for auto import")
+                    return result_stats
+
+            # 处理报告数据
+            for current_report_data in report_data_list:
+                if "vulnerabilities" not in current_report_data:
+                    continue
+
+                vulnerabilities = current_report_data["vulnerabilities"]
+                result_stats["total_in_report"] = len(vulnerabilities)
+                logger.info(f"[OpenCode] Found {len(vulnerabilities)} vulnerabilities in report")
+
+                imported_count = 0
+                for vuln_data in vulnerabilities:
+                    try:
+                        current_vuln_id = vuln_data.get("vuln_id", str(uuid.uuid4()))
+
+                        # 检查是否已存在
+                        result = await db.execute(
+                            select(AuditVulnerability).where(
+                                (AuditVulnerability.task_id == audit_task_id)
+                                & (AuditVulnerability.vuln_id == current_vuln_id)
+                            )
+                        )
+                        existing_vuln = result.scalar_one_or_none()
+
+                        if existing_vuln:
+                            logger.info(
+                                f"[OpenCode] Vulnerability {current_vuln_id} already exists, skipping"
+                            )
+                            continue
+
+                        vuln = AuditVulnerability(
+                            id=str(uuid.uuid4()),
+                            task_id=audit_task_id,
+                            vuln_id=current_vuln_id,
+                            severity=vuln_data.get("severity", "medium"),
+                            cvss_score=vuln_data.get("cvss_score"),
+                            cvss_vector=vuln_data.get("cvss_vector"),
+                            cwe=vuln_data.get("cwe"),
+                            confidence=vuln_data.get("confidence"),
+                            location=vuln_data.get("location"),
+                            file_path=vuln_data.get("file_path"),
+                            line_start=vuln_data.get("line_start"),
+                            line_end=vuln_data.get("line_end"),
+                            vulnerability_title=vuln_data.get("vulnerability_title", "未知漏洞"),
+                            vulnerability_essence=vuln_data.get("vulnerability_essence"),
+                            root_cause=vuln_data.get("root_cause"),
+                            security_impact=vuln_data.get("security_impact"),
+                            vulnerable_code=vuln_data.get("vulnerable_code"),
+                            dataflow=vuln_data.get("dataflow"),
+                            exploit_steps=vuln_data.get("exploit_steps"),
+                            exploit_poc=vuln_data.get("exploit_poc"),
+                            impact_confidentiality=vuln_data.get("impact_confidentiality"),
+                            impact_integrity=vuln_data.get("impact_integrity"),
+                            impact_availability=vuln_data.get("impact_availability"),
+                            fix_description=vuln_data.get("fix_description"),
+                            fix_code_before=vuln_data.get("fix_code_before"),
+                            fix_code_after=vuln_data.get("fix_code_after"),
+                            manual_confirmation=vuln_data.get("manual_confirmation"),
+                            manual_confirmation_status=vuln_data.get(
+                                "manual_confirmation_status", "待确认"
+                            ),
+                            manual_confirmation_notes=vuln_data.get("manual_confirmation_notes"),
+                            confirmed_by=vuln_data.get("confirmed_by"),
+                            confirmed_at=vuln_data.get("confirmed_at"),
+                            status=vuln_data.get("status", "new"),
+                        )
+                        db.add(vuln)
+                        imported_count += 1
+                    except Exception as e:
+                        logger.info(f"[OpenCode] Failed to import vulnerability: {e}")
+                        import traceback
+
+                        traceback.print_exc()
+                        # 回滚当前事务，避免影响后续导入
+                        await db.rollback()
+                        continue
+
+                if imported_count > 0:
+                    # 更新任务的漏洞统计
+                    result_task = await db.execute(
+                        select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == audit_task_id)
+                    )
+                    task = result_task.scalar_one_or_none()
+                    if task:
+                        task.findings_count = imported_count
+                        severity_summary = current_report_data.get("severity_summary", {})
+                        task.critical_count = severity_summary.get(
+                            "致命", 0
+                        ) + severity_summary.get("critical", 0)
+                        task.high_count = severity_summary.get("严重", 0) + severity_summary.get(
+                            "high", 0
+                        )
+                        task.medium_count = severity_summary.get("一般", 0) + severity_summary.get(
+                            "medium", 0
+                        )
+                        task.low_count = (
+                            severity_summary.get("提示", 0)
+                            + severity_summary.get("low", 0)
+                            + severity_summary.get("info", 0)
+                        )
+
+                        # 收集漏洞列表用于计算分数
+                        findings_list = []
+                        for vuln_data in vulnerabilities:
+                            findings_list.append({"severity": vuln_data.get("severity", "low")})
+
+                        # 计算质量评分
+                        score = _calculate_security_score(findings_list)
+                        task.quality_score = score
+                        task.security_score = score
+                        await db.commit()
+
+                        # 更新返回统计
+                        result_stats["imported_count"] = imported_count
+                        result_stats["findings_count"] = task.findings_count
+                        result_stats["critical_count"] = task.critical_count
+                        result_stats["high_count"] = task.high_count
+                        result_stats["medium_count"] = task.medium_count
+                        result_stats["low_count"] = task.low_count
+
+                    logger.info(
+                        f"[OpenCode] Successfully auto imported {imported_count} vulnerabilities"
+                    )
+                    break  # 成功导入一个报告后就停止
 
         except Exception as e:
             logger.info(f"[OpenCode] Auto import vulnerabilities failed: {e}")
             logger.info(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+
+        return result_stats
 
     async def stop_opencode_server(self, project: Project) -> bool:
         """

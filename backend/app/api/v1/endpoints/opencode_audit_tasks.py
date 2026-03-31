@@ -22,7 +22,7 @@ from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskS
 from app.models.project import Project
 from app.models.user import User
 from app.models.audit_vulnerabilities import AuditVulnerability
-from app.services.opencode_session_service import OpenCodeSessionService, _calculate_security_score
+from app.services.opencode_session_service import OpenCodeSessionService
 
 router = APIRouter()
 
@@ -531,87 +531,30 @@ async def import_vulnerabilities(
     if not report_data:
         raise HTTPException(status_code=400, detail="报告数据不能为空")
 
-    # 解析漏洞数据
-    vulnerabilities = report_data.get("vulnerabilities", [])
-    if not vulnerabilities:
-        return {"message": "报告中没有漏洞数据", "imported_count": 0}
+    # 调用服务层统一导入方法
+    service = OpenCodeSessionService(db)
+    result_stats = await service.auto_import_vulnerabilities(
+        db, task_id, task.project_id, report_data
+    )
 
-    # 批量导入漏洞
-    imported_count = 0
-    for vuln_data in vulnerabilities:
-        try:
-            vuln = AuditVulnerability(
-                id=str(uuid4()),
-                task_id=task_id,
-                vuln_id=vuln_data.get("vuln_id", f"VULN-{imported_count + 1:03d}"),
-                severity=vuln_data.get("severity", "medium"),
-                cvss_score=vuln_data.get("cvss_score"),
-                cvss_vector=vuln_data.get("cvss_vector"),
-                cwe=vuln_data.get("cwe"),
-                confidence=vuln_data.get("confidence"),
-                location=vuln_data.get("location"),
-                file_path=vuln_data.get("file_path"),
-                line_start=vuln_data.get("line_start"),
-                line_end=vuln_data.get("line_end"),
-                vulnerability_title=vuln_data.get("vulnerability_title", "未知漏洞"),
-                vulnerability_essence=vuln_data.get("vulnerability_essence"),
-                root_cause=vuln_data.get("root_cause"),
-                security_impact=vuln_data.get("security_impact"),
-                vulnerable_code=vuln_data.get("vulnerable_code"),
-                dataflow=vuln_data.get("dataflow"),
-                exploit_steps=vuln_data.get("exploit_steps"),
-                exploit_poc=vuln_data.get("exploit_poc"),
-                impact_confidentiality=vuln_data.get("impact_confidentiality"),
-                impact_integrity=vuln_data.get("impact_integrity"),
-                impact_availability=vuln_data.get("impact_availability"),
-                fix_description=vuln_data.get("fix_description"),
-                fix_code_before=vuln_data.get("fix_code_before"),
-                fix_code_after=vuln_data.get("fix_code_after"),
-                manual_confirmation=vuln_data.get("manual_confirmation"),
-                manual_confirmation_status=vuln_data.get("manual_confirmation_status", "待确认"),
-                manual_confirmation_notes=vuln_data.get("manual_confirmation_notes"),
-                confirmed_by=vuln_data.get("confirmed_by"),
-                confirmed_at=vuln_data.get("confirmed_at"),
-                status=vuln_data.get("status", "new"),
-            )
-            db.add(vuln)
-            imported_count += 1
-        except Exception as e:
-            continue  # 跳过解析失败的漏洞
+    # 重新查询任务获取更新后的统计
+    await db.refresh(task)
 
-    await db.commit()
-
-    # 更新任务的漏洞统计
-    if imported_count > 0:
-        task.findings_count = imported_count
-
-        # 统计各严重程度数量
-        severity_summary = report_data.get("severity_summary", {})
-        task.critical_count = severity_summary.get("致命", 0) + severity_summary.get("critical", 0)
-        task.high_count = severity_summary.get("严重", 0) + severity_summary.get("high", 0)
-        task.medium_count = severity_summary.get("一般", 0) + severity_summary.get("medium", 0)
-        task.low_count = (
-            severity_summary.get("提示", 0)
-            + severity_summary.get("low", 0)
-            + severity_summary.get("info", 0)
-        )
-
-        # 收集漏洞列表用于计算分数
-        findings_list = []
-        for vuln_data in vulnerabilities:
-            findings_list.append({"severity": vuln_data.get("severity", "low")})
-
-        # 计算质量评分
-        score = _calculate_security_score(findings_list)
-        task.quality_score = score
-        task.security_score = score
-
-        await db.commit()
+    message = (
+        f"成功导入 {result_stats['imported_count']} 个漏洞"
+        if result_stats["imported_count"] > 0
+        else "报告中没有漏洞数据或全部已存在"
+    )
 
     return {
-        "message": f"成功导入 {imported_count} 个漏洞",
-        "imported_count": imported_count,
-        "total_in_report": len(vulnerabilities),
+        "message": message,
+        "imported_count": result_stats["imported_count"],
+        "total_in_report": result_stats["total_in_report"],
+        "findings_count": result_stats["findings_count"],
+        "critical_count": result_stats["critical_count"],
+        "high_count": result_stats["high_count"],
+        "medium_count": result_stats["medium_count"],
+        "low_count": result_stats["low_count"],
     }
 
 
