@@ -192,11 +192,18 @@ function OpenCodeAuditPageContent() {
   };
 
   const handleExportMD = async () => {
-    const taskId = session?.id || session?.task_id || sessionId;
+    const taskId = auditTask?.id;
+    console.log('[OpenCode Export] handleExportMD called');
+    console.log('[OpenCode Export] auditTask:', auditTask);
+    console.log('[OpenCode Export] auditTask.id:', auditTask?.id);
+    
     if (!taskId) {
-      toast.error("任务 ID 不存在");
+      console.error('[OpenCode Export] No taskId available!');
+      toast.error("任务 ID 不存在，无法导出报告");
       return;
     }
+    
+    console.log('[OpenCode Export] Using taskId:', taskId);
     setExportingMD(true);
     try {
       await exportOpenCodeToMD(taskId);
@@ -210,11 +217,18 @@ function OpenCodeAuditPageContent() {
   };
 
   const handleExportJSON = async () => {
-    const taskId = session?.id || session?.task_id || sessionId;
+    const taskId = auditTask?.id;
+    console.log('[OpenCode Export] handleExportJSON called');
+    console.log('[OpenCode Export] auditTask:', auditTask);
+    console.log('[OpenCode Export] auditTask.id:', auditTask?.id);
+    
     if (!taskId) {
-      toast.error("任务 ID 不存在");
+      console.error('[OpenCode Export] No taskId available!');
+      toast.error("任务 ID 不存在，无法导出报告");
       return;
     }
+    
+    console.log('[OpenCode Export] Using taskId:', taskId);
     setExportingJSON(true);
     try {
       await exportOpenCodeToJSON(taskId);
