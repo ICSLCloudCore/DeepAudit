@@ -1128,6 +1128,33 @@ class OpenCodeSessionService:
         async def save_data_to_database(msg_index: int, msg_type: str, msg_content: str) -> None:
             async with AsyncSessionLocal() as db_session_local:
                 try:
+                    logger.info(f"[OpenCode] Saving message to database:")
+                    logger.info(f"[OpenCode]   - audit_task_id: {audit_task_id}")
+                    logger.info(f"[OpenCode]   - msg_index: {msg_index}")
+                    logger.info(f"[OpenCode]   - msg_type: {msg_type}")
+                    logger.info(f"[OpenCode]   - Content length: {len(msg_content)} chars")
+
+                    # 先检查是否已经存在相同的消息
+                    # 同时检查 session_id、message_index 和 content_type
+                    existing_result = await db_session_local.execute(
+                        select(OpenCodeMessageContent)
+                        .where(OpenCodeMessageContent.session_id == db_session_id)
+                        .where(OpenCodeMessageContent.message_index == msg_index)
+                        .where(OpenCodeMessageContent.content_type == msg_type)
+                    )
+                    existing_message = existing_result.scalar_one_or_none()
+
+                    if existing_message:
+                        logger.info(
+                            f"[OpenCode] Message already exists (same session_id, index, and content_type), skipping save"
+                        )
+                        logger.info(f"[OpenCode]   - Existing message ID: {existing_message.id}")
+                        logger.info(
+                            f"[OpenCode]   - Existing audit_task_id: {existing_message.audit_task_id}"
+                        )
+                        return
+
+                    # 如果不存在，才保存新消息
                     message_content = OpenCodeMessageContent(
                         session_id=db_session_id,
                         message_index=msg_index,
@@ -1138,6 +1165,7 @@ class OpenCodeSessionService:
                     )
                     db_session_local.add(message_content)
                     await db_session_local.commit()
+                    logger.info(f"[OpenCode] Message saved successfully!")
                 except Exception as e:
                     logger.info(f"[OpenCode] Failed to save response content: {e}")
                     await db_session_local.rollback()
