@@ -1147,28 +1147,35 @@ class OpenCodeSessionService:
         url = self.get_opencode_server_url(project)
         message_url = f"{url}/session/{server_session_id}/message"
 
-        async def save_data_to_database(msg_index: int, msg_type: str, msg_content: str) -> None:
+        async def save_data_to_database(msg_index: int, msg_type, msg_content: str) -> None:
             async with AsyncSessionLocal() as db_session_local:
                 try:
+                    # 将枚举转为字符串值，确保与数据库中的存储格式一致
+                    content_type_str = (
+                        msg_type.value
+                        if isinstance(msg_type, OpenCodeMessageContentType)
+                        else str(msg_type)
+                    )
+
                     logger.info(f"[OpenCode] Saving message to database:")
                     logger.info(f"[OpenCode]   - audit_task_id: {audit_task_id}")
                     logger.info(f"[OpenCode]   - msg_index: {msg_index}")
-                    logger.info(f"[OpenCode]   - msg_type: {msg_type}")
+                    logger.info(f"[OpenCode]   - msg_type: {content_type_str}")
                     logger.info(f"[OpenCode]   - Content length: {len(msg_content)} chars")
 
                     # 先检查是否已经存在相同的消息
-                    # 同时检查 session_id、message_index 和 content_type
+                    # 同时检查 session_id、message_index、content_type
                     existing_result = await db_session_local.execute(
                         select(OpenCodeMessageContent)
                         .where(OpenCodeMessageContent.session_id == db_session_id)
                         .where(OpenCodeMessageContent.message_index == msg_index)
-                        .where(OpenCodeMessageContent.content_type == msg_type)
+                        .where(OpenCodeMessageContent.content_type == content_type_str)
                     )
                     existing_message = existing_result.scalar_one_or_none()
 
                     if existing_message:
                         logger.info(
-                            f"[OpenCode] Message already exists (same session_id, index, and content_type), skipping save"
+                            f"[OpenCode] Message already exists (same session_id, index, content_type, and audit_task_id), skipping save"
                         )
                         logger.info(f"[OpenCode]   - Existing message ID: {existing_message.id}")
                         logger.info(
@@ -1180,7 +1187,7 @@ class OpenCodeSessionService:
                     message_content = OpenCodeMessageContent(
                         session_id=db_session_id,
                         message_index=msg_index,
-                        content_type=msg_type,
+                        content_type=content_type_str,
                         text_content=msg_content,
                         opencode_message_id=message_id,
                         audit_task_id=audit_task_id,
@@ -1189,7 +1196,6 @@ class OpenCodeSessionService:
                     await db_session_local.commit()
                     logger.info(f"[OpenCode] Message saved successfully!")
                 except Exception as e:
-                    logger.info(f"[OpenCode] Failed to save response content: {e}")
                     await db_session_local.rollback()
 
         for poll_count in range(max_polls):
@@ -1347,7 +1353,7 @@ class OpenCodeSessionService:
                     db_session = result_db.scalar_one_or_none()
                     if db_session:
                         db_session.status = OpenCodeSessionStatus.ERROR
-                        db_session.response_content = f"Error: {str(e)}"
+                        db_session.response_content += f"\nError: {str(e)}"
                         await db_session_local.commit()
 
                     # 更新审计任务状态为失败
