@@ -347,7 +347,7 @@ async def session_stream(
                             "content_type": msg.content_type,
                             "text_content": msg.text_content,
                             "message_index": msg.message_index,
-                            "time": msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                            "time": msg.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                         }
                         for msg in messages
                     ]
@@ -378,11 +378,20 @@ async def session_stream(
                     OpenCodeSessionStatus.CLOSED,
                     OpenCodeSessionStatus.ERROR,
                 ]:
+                    # 获取时间 - 如果有消息使用最后一个消息的时间，否则使用当前时间
+                    done_time = None
+                    if messages_data:
+                        done_time = messages_data[-1]["time"]
+                    else:
+                        from datetime import datetime
+
+                        done_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
                     yield {
                         "event": "done",
-                        "data": json.dumps({
-                            "content_type": current_session_data["status"],
-                            "time": msg.created_at.strftime("%Y-%m-%d %H:%M:%S")}),
+                        "data": json.dumps(
+                            {"content_type": current_session_data["status"], "time": done_time}
+                        ),
                     }
                     should_continue = False
                     break
@@ -392,7 +401,9 @@ async def session_stream(
                     try:
                         await asyncio.sleep(1)
                     except asyncio.CancelledError:
-                        logger.error(f"[SSE] Client disconnected from stream for session {session_id}")
+                        logger.error(
+                            f"[SSE] Client disconnected from stream for session {session_id}"
+                        )
                         should_continue = False
                         break
 
