@@ -374,8 +374,8 @@ export default function CreateTaskDialog({
         resetOpencodeState();
 
         // 跳转到 OpenCode 审计页面
-        if (response.session_id) {
-          navigate(`/opencode-audit/${response.session_id}`);
+        if (response.session_id && response.task_id) {
+          navigate(`/opencode-audit/${response.session_id}/tasks/${response.task_id}`);
         }
         return;
       }

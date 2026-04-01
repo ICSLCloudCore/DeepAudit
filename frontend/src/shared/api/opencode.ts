@@ -162,6 +162,7 @@ export interface StartAuditWithPromptRequest {
 
 export interface StartAuditWithPromptResponse {
   session_id: string;
+  task_id: string;
   project_id: string;
   status: OpenCodeSessionStatus;
   opencode_server_status: OpenCodeServerStatus;

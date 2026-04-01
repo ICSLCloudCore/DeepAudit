@@ -44,6 +44,7 @@ class StartAuditWithPromptResponse(BaseModel):
     """启动OpenCode审计响应"""
 
     session_id: str
+    task_id: str
     project_id: str
     status: OpenCodeSessionStatus
     opencode_server_status: OpenCodeServerStatus

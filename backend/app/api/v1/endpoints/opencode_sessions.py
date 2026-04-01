@@ -440,7 +440,7 @@ async def start_audit_with_prompt(
     """启动OpenCode审计（带Prompt选择）"""
     try:
         service = OpenCodeSessionService(db)
-        session, server_status = await service.start_audit_with_prompt(
+        session, server_status, audit_task = await service.start_audit_with_prompt(
             project_id=project_id,
             prompt_template_id=audit_in.prompt_template_id,
             prompt_content=audit_in.prompt_content,
@@ -450,6 +450,7 @@ async def start_audit_with_prompt(
 
         return StartAuditWithPromptResponse(
             session_id=session.id,
+            task_id=audit_task.id,
             project_id=session.project_id,
             status=session.status,
             opencode_server_status=server_status,

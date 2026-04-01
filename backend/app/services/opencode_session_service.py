@@ -998,7 +998,7 @@ class OpenCodeSessionService:
         prompt_content: Optional[str],
         variables: Optional[Dict[str, str]],
         current_user: User,
-    ) -> tuple[OpenCodeSession, OpenCodeServerStatus]:
+    ) -> tuple[OpenCodeSession, OpenCodeServerStatus, Any]:
         """
         启动带提示词的OpenCode审计
         """
@@ -1096,7 +1096,7 @@ class OpenCodeSessionService:
         logger.info(
             f"[OpenCode] Audit started successfully, session ID: {db_session.id}, task ID: {audit_task.id}"
         )
-        return db_session, server_status
+        return db_session, server_status, audit_task
 
     async def poll_opencode_result_with_updates(
         self,
