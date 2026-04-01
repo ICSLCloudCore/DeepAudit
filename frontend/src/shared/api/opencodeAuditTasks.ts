@@ -301,18 +301,42 @@ export async function updateVulnerability(
  * 导出 Markdown 格式报告
  */
 export async function exportReportMD(taskId: string): Promise<Blob> {
-  const response = await apiClient.get(`/opencode-audit-tasks/${taskId}/export-report-md`, {
-    responseType: 'blob'
-  });
-  return response.data;
+  console.log('[OpenCode Report Export API] exportReportMD called with taskId:', taskId);
+  console.log('[OpenCode Report Export API] Request URL:', `/opencode-audit-tasks/${taskId}/export-report-md`);
+  
+  try {
+    const response = await apiClient.get(`/opencode-audit-tasks/${taskId}/export-report-md`, {
+      responseType: 'blob'
+    });
+    console.log('[OpenCode Report Export API] exportReportMD response received');
+    console.log('[OpenCode Report Export API] Response status:', response.status);
+    console.log('[OpenCode Report Export API] Response data type:', typeof response.data);
+    console.log('[OpenCode Report Export API] Response data size:', response.data.size, 'bytes');
+    return response.data;
+  } catch (error) {
+    console.error('[OpenCode Report Export API] exportReportMD failed:', error);
+    throw error;
+  }
 }
 
 /**
  * 导出 JSON 格式报告
  */
 export async function exportReportJSON(taskId: string): Promise<Blob> {
-  const response = await apiClient.get(`/opencode-audit-tasks/${taskId}/export-report-json`, {
-    responseType: 'blob'
-  });
-  return response.data;
+  console.log('[OpenCode Report Export API] exportReportJSON called with taskId:', taskId);
+  console.log('[OpenCode Report Export API] Request URL:', `/opencode-audit-tasks/${taskId}/export-report-json`);
+  
+  try {
+    const response = await apiClient.get(`/opencode-audit-tasks/${taskId}/export-report-json`, {
+      responseType: 'blob'
+    });
+    console.log('[OpenCode Report Export API] exportReportJSON response received');
+    console.log('[OpenCode Report Export API] Response status:', response.status);
+    console.log('[OpenCode Report Export API] Response data type:', typeof response.data);
+    console.log('[OpenCode Report Export API] Response data size:', response.data.size, 'bytes');
+    return response.data;
+  } catch (error) {
+    console.error('[OpenCode Report Export API] exportReportJSON failed:', error);
+    throw error;
+  }
 }

@@ -132,22 +132,50 @@ function downloadBlob(blob: Blob, filename: string) {
 
 // 导出 OpenCode 审计任务 Markdown 报告
 export async function exportOpenCodeToMD(taskId: string) {
+  console.log('[OpenCode Report Export] ========== EXPORT MD REPORT START ==========');
+  console.log('[OpenCode Report Export] Task ID:', taskId);
+  
   try {
+    console.log('[OpenCode Report Export] Calling exportReportMD API...');
     const blob = await exportReportMD(taskId);
-    downloadBlob(blob, `opencode-audit-report-${taskId.slice(0, 8)}.md`);
+    console.log('[OpenCode Report Export] Received blob, size:', blob.size, 'bytes');
+    console.log('[OpenCode Report Export] Blob type:', blob.type);
+    
+    const filename = `opencode-audit-report-${taskId.slice(0, 8)}.md`;
+    console.log('[OpenCode Report Export] Download filename:', filename);
+    
+    downloadBlob(blob, filename);
+    console.log('[OpenCode Report Export] Download triggered successfully');
+    console.log('[OpenCode Report Export] ========== EXPORT MD REPORT END ==========');
   } catch (error) {
-    console.error('Failed to export OpenCode MD report:', error);
+    console.error('[OpenCode Report Export] Failed to export OpenCode MD report:', error);
+    console.error('[OpenCode Report Export] Error details:', JSON.stringify(error, null, 2));
+    console.log('[OpenCode Report Export] ========== EXPORT MD REPORT FAILED ==========');
     throw new Error('Markdown 报告导出失败，请稍后重试');
   }
 }
 
 // 导出 OpenCode 审计任务 JSON 报告
 export async function exportOpenCodeToJSON(taskId: string) {
+  console.log('[OpenCode Report Export] ========== EXPORT JSON REPORT START ==========');
+  console.log('[OpenCode Report Export] Task ID:', taskId);
+  
   try {
+    console.log('[OpenCode Report Export] Calling exportReportJSON API...');
     const blob = await exportReportJSON(taskId);
-    downloadBlob(blob, `opencode-audit-report-${taskId.slice(0, 8)}.json`);
+    console.log('[OpenCode Report Export] Received blob, size:', blob.size, 'bytes');
+    console.log('[OpenCode Report Export] Blob type:', blob.type);
+    
+    const filename = `opencode-audit-report-${taskId.slice(0, 8)}.json`;
+    console.log('[OpenCode Report Export] Download filename:', filename);
+    
+    downloadBlob(blob, filename);
+    console.log('[OpenCode Report Export] Download triggered successfully');
+    console.log('[OpenCode Report Export] ========== EXPORT JSON REPORT END ==========');
   } catch (error) {
-    console.error('Failed to export OpenCode JSON report:', error);
+    console.error('[OpenCode Report Export] Failed to export OpenCode JSON report:', error);
+    console.error('[OpenCode Report Export] Error details:', JSON.stringify(error, null, 2));
+    console.log('[OpenCode Report Export] ========== EXPORT JSON REPORT FAILED ==========');
     throw new Error('JSON 报告导出失败，请稍后重试');
   }
 }

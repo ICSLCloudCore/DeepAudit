@@ -144,6 +144,10 @@ async def list_opencode_audit_tasks(
     """
     获取OpenCode审计任务列表
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Listing tasks for user {current_user.id}")
+
     # 先获取当前用户的项目ID列表
     projects_result = await db.execute(
         select(Project.id).where(Project.owner_id == current_user.id)
@@ -174,7 +178,10 @@ async def list_opencode_audit_tasks(
 
     query = query.order_by(OpenCodeAuditTask.created_at.desc())
     result = await db.execute(query)
-    return result.scalars().all()
+    tasks = result.scalars().all()
+
+    logger.info(f"[OpenCode Audit Tasks] Found {len(tasks)} tasks")
+    return tasks
 
 
 @router.post("/", response_model=OpenCodeAuditTaskResponse)
@@ -186,13 +193,17 @@ async def create_opencode_audit_task(
     """
     创建OpenCode审计任务
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Creating task for project {task_data.project_id}")
+
     # 验证项目存在且属于当前用户
     project_result = await db.execute(
         select(Project).where(
             Project.id == task_data.project_id, Project.owner_id == current_user.id
         )
     )
-    project = project_result.scalars().first()
+    project = project_result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在或无权访问")
 
@@ -243,6 +254,8 @@ async def create_opencode_audit_task(
     await db.commit()
     await db.refresh(task)
 
+    logger.info(f"[OpenCode Audit Tasks] Task created: {task.id}")
+
     # 重新查询以加载关联的项目
     result = await db.execute(
         select(OpenCodeAuditTask)
@@ -261,6 +274,10 @@ async def get_opencode_audit_task(
     """
     获取单个OpenCode审计任务
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Getting task: {task_id}")
+
     result = await db.execute(
         select(OpenCodeAuditTask)
         .options(selectinload(OpenCodeAuditTask.project))
@@ -274,6 +291,7 @@ async def get_opencode_audit_task(
     if task.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="无权查看此任务")
 
+    logger.info(f"[OpenCode Audit Tasks] Found task: {task.id}, status: {task.status}")
     return task
 
 
@@ -287,6 +305,10 @@ async def update_opencode_audit_task(
     """
     更新OpenCode审计任务
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Updating task: {task_id}")
+
     result = await db.execute(
         select(OpenCodeAuditTask)
         .options(selectinload(OpenCodeAuditTask.project))
@@ -306,6 +328,9 @@ async def update_opencode_audit_task(
         task.description = task_data.description
 
     await db.commit()
+
+    logger.info(f"[OpenCode Audit Tasks] Task updated: {task.id}")
+
     # 重新查询以确保关联的项目数据被正确加载
     result = await db.execute(
         select(OpenCodeAuditTask)
@@ -325,6 +350,10 @@ async def update_opencode_audit_task_status(
     """
     更新OpenCode审计任务状态
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Updating task status: {task_id} -> {status_data.status}")
+
     result = await db.execute(
         select(OpenCodeAuditTask)
         .options(selectinload(OpenCodeAuditTask.project))
@@ -372,6 +401,9 @@ async def update_opencode_audit_task_status(
         task.low_count = status_data.low_count
 
     await db.commit()
+
+    logger.info(f"[OpenCode Audit Tasks] Task status updated: {task.id} -> {task.status}")
+
     # 重新查询以确保关联的项目数据被正确加载
     result = await db.execute(
         select(OpenCodeAuditTask)
@@ -390,6 +422,10 @@ async def cancel_opencode_audit_task(
     """
     取消OpenCode审计任务
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Cancelling task: {task_id}")
+
     result = await db.execute(select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == task_id))
     task = result.scalars().first()
     if not task:
@@ -407,6 +443,8 @@ async def cancel_opencode_audit_task(
     task.completed_at = datetime.now(timezone.utc)
     await db.commit()
 
+    logger.info(f"[OpenCode Audit Tasks] Task cancelled: {task_id}")
+
     return {"message": "任务已取消", "task_id": task_id}
 
 
@@ -419,6 +457,10 @@ async def delete_opencode_audit_task(
     """
     删除OpenCode审计任务
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Deleting task: {task_id}")
+
     result = await db.execute(select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == task_id))
     task = result.scalars().first()
     if not task:
@@ -430,6 +472,8 @@ async def delete_opencode_audit_task(
 
     await db.delete(task)
     await db.commit()
+
+    logger.info(f"[OpenCode Audit Tasks] Task deleted: {task_id}")
 
     return {"message": "任务已删除", "task_id": task_id}
 
@@ -509,6 +553,10 @@ async def import_vulnerabilities(
     """
     导入审计报告中的漏洞到数据库
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Importing vulnerabilities for task: {task_id}")
+
     # 验证任务存在且属于当前用户
     task_result = await db.execute(
         select(OpenCodeAuditTask).where(
@@ -526,6 +574,7 @@ async def import_vulnerabilities(
             with open(request.report_path, "r", encoding="utf-8") as f:
                 report_data = json.load(f)
         except Exception as e:
+            logger.error(f"[OpenCode Audit Tasks] Failed to read report file: {e}")
             raise HTTPException(status_code=400, detail=f"读取报告文件失败: {str(e)}")
 
     if not report_data:
@@ -535,6 +584,10 @@ async def import_vulnerabilities(
     service = OpenCodeSessionService(db)
     result_stats = await service.auto_import_vulnerabilities(
         db, task_id, task.project_id, report_data
+    )
+
+    logger.info(
+        f"[OpenCode Audit Tasks] Import completed: {result_stats['imported_count']} vulnerabilities"
     )
 
     # 重新查询任务获取更新后的统计
@@ -568,6 +621,12 @@ async def scan_import_vulnerabilities(
     扫描并导入审计报告中的漏洞
     用户在调用 skill 导出 JSON 报告后，调用此接口触发扫描和导入
     """
+    from app.utils.log import logger
+
+    logger.info(
+        f"[OpenCode Audit Tasks] Scanning and importing vulnerabilities for task: {task_id}"
+    )
+
     # 验证任务存在且属于当前用户
     task_result = await db.execute(
         select(OpenCodeAuditTask).where(
@@ -581,6 +640,8 @@ async def scan_import_vulnerabilities(
     # 调用服务层扫描导入
     service = OpenCodeSessionService(db)
     await service.auto_import_vulnerabilities(db, task_id, task.project_id)
+
+    logger.info(f"[OpenCode Audit Tasks] Scan and import completed for task: {task_id}")
 
     # 重新查询任务获取更新后的统计
     await db.refresh(task)
@@ -608,6 +669,10 @@ async def list_vulnerabilities(
     """
     获取任务的漏洞列表
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Listing vulnerabilities for task: {task_id}")
+
     # 验证任务存在且属于当前用户
     task_result = await db.execute(
         select(OpenCodeAuditTask).where(
@@ -651,6 +716,8 @@ async def list_vulnerabilities(
     # 计算总页数
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
 
+    logger.info(f"[OpenCode Audit Tasks] Found {len(items)} vulnerabilities (total: {total})")
+
     return PaginatedVulnerabilitiesResponse(
         items=items, total=total, page=page, page_size=page_size, total_pages=total_pages
     )
@@ -666,6 +733,10 @@ async def get_vulnerability(
     """
     获取单个漏洞详情
     """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Getting vulnerability: {vuln_id} for task: {task_id}")
+
     # 验证任务存在且属于当前用户
     task_result = await db.execute(
         select(OpenCodeAuditTask).where(
@@ -685,6 +756,8 @@ async def get_vulnerability(
     vuln = vuln_result.scalars().first()
     if not vuln:
         raise HTTPException(status_code=404, detail="漏洞不存在")
+
+    logger.info(f"[OpenCode Audit Tasks] Found vulnerability: {vuln_id}")
 
     return vuln
 
@@ -707,6 +780,12 @@ async def update_vulnerability_status(
     """
     更新漏洞状态
     """
+    from app.utils.log import logger
+
+    logger.info(
+        f"[OpenCode Audit Tasks] Updating vulnerability status: {vuln_id} -> {request.status}"
+    )
+
     # 验证任务存在且属于当前用户
     task_result = await db.execute(
         select(OpenCodeAuditTask).where(
@@ -753,6 +832,8 @@ async def update_vulnerability_status(
     await db.commit()
     await db.refresh(vuln)
 
+    logger.info(f"[OpenCode Audit Tasks] Vulnerability status updated: {vuln_id} -> {vuln.status}")
+
     return {
         "message": "状态已更新",
         "vuln_id": vuln_id,
@@ -775,6 +856,10 @@ async def export_report_md(
     """
     from app.utils.log import logger
 
+    logger.info(f"[OpenCode Report Export] ========== EXPORT MD REPORT START ==========")
+    logger.info(f"[OpenCode Report Export] Task ID: {task_id}")
+    logger.info(f"[OpenCode Report Export] User ID: {current_user.id}")
+
     task_result = await db.execute(
         select(OpenCodeAuditTask).where(
             OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
@@ -782,27 +867,49 @@ async def export_report_md(
     )
     task = task_result.scalars().first()
     if not task:
+        logger.error(f"[OpenCode Report Export] Task not found or not authorized: {task_id}")
         raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    logger.info(f"[OpenCode Report Export] Task found: {task.id}")
+    logger.info(f"[OpenCode Report Export] Task status: {task.status}")
+    logger.info(f"[OpenCode Report Export] OpenCode session ID: {task.opencode_session_id}")
+    logger.info(f"[OpenCode Report Export] Project ID: {task.project_id}")
 
     project_result = await db.execute(select(Project).where(Project.id == task.project_id))
     project = project_result.scalar_one_or_none()
 
+    project_source_type = project.source_type if project else None
+    logger.info(f"[OpenCode Report Export] Project source type: {project_source_type}")
+
     # 使用服务层的公共方法查找报告文件
+    logger.info(f"[OpenCode Report Export] Starting to find MD report files...")
     service = OpenCodeSessionService(db)
     report_files = service.find_report_files(
         opencode_session_id=task.opencode_session_id,
         project_id=task.project_id,
-        project_source_type=project.source_type if project else None,
+        project_source_type=project_source_type,
         extension=".md",
     )
 
+    logger.info(f"[OpenCode Report Export] Found {len(report_files)} MD report files")
+    for i, f in enumerate(report_files):
+        logger.info(f"[OpenCode Report Export] MD file {i + 1}: {f}")
+
     if not report_files:
+        logger.error(f"[OpenCode Report Export] No MD report files found!")
         raise HTTPException(status_code=404, detail="未找到 Markdown 报告文件")
 
     latest_file = report_files[0]
-    logger.info(f"[OpenCode Report Download] Serving MD file: {latest_file}")
+    logger.info(f"[OpenCode Report Export] Serving latest MD file: {latest_file}")
+    logger.info(f"[OpenCode Report Export] File exists: {latest_file.exists()}")
+    logger.info(
+        f"[OpenCode Report Export] File size: {latest_file.stat().st_size if latest_file.exists() else 0} bytes"
+    )
 
     filename = f"opencode-audit-report-{task_id[:8]}.md"
+    logger.info(f"[OpenCode Report Export] Download filename: {filename}")
+    logger.info(f"[OpenCode Report Export] ========== EXPORT MD REPORT END ==========")
+
     return FileResponse(path=str(latest_file), media_type="text/markdown", filename=filename)
 
 
@@ -817,6 +924,10 @@ async def export_report_json(
     """
     from app.utils.log import logger
 
+    logger.info(f"[OpenCode Report Export] ========== EXPORT JSON REPORT START ==========")
+    logger.info(f"[OpenCode Report Export] Task ID: {task_id}")
+    logger.info(f"[OpenCode Report Export] User ID: {current_user.id}")
+
     task_result = await db.execute(
         select(OpenCodeAuditTask).where(
             OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
@@ -824,165 +935,47 @@ async def export_report_json(
     )
     task = task_result.scalars().first()
     if not task:
+        logger.error(f"[OpenCode Report Export] Task not found or not authorized: {task_id}")
         raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+
+    logger.info(f"[OpenCode Report Export] Task found: {task.id}")
+    logger.info(f"[OpenCode Report Export] Task status: {task.status}")
+    logger.info(f"[OpenCode Report Export] OpenCode session ID: {task.opencode_session_id}")
+    logger.info(f"[OpenCode Report Export] Project ID: {task.project_id}")
 
     project_result = await db.execute(select(Project).where(Project.id == task.project_id))
     project = project_result.scalar_one_or_none()
 
+    project_source_type = project.source_type if project else None
+    logger.info(f"[OpenCode Report Export] Project source type: {project_source_type}")
+
     # 使用服务层的公共方法查找报告文件
+    logger.info(f"[OpenCode Report Export] Starting to find JSON report files...")
     service = OpenCodeSessionService(db)
     report_files = service.find_report_files(
         opencode_session_id=task.opencode_session_id,
         project_id=task.project_id,
-        project_source_type=project.source_type if project else None,
+        project_source_type=project_source_type,
         extension=".json",
     )
 
+    logger.info(f"[OpenCode Report Export] Found {len(report_files)} JSON report files")
+    for i, f in enumerate(report_files):
+        logger.info(f"[OpenCode Report Export] JSON file {i + 1}: {f}")
+
     if not report_files:
+        logger.error(f"[OpenCode Report Export] No JSON report files found!")
         raise HTTPException(status_code=404, detail="未找到 JSON 报告文件")
 
     latest_file = report_files[0]
-    logger.info(f"[OpenCode Report Download] Serving JSON file: {latest_file}")
+    logger.info(f"[OpenCode Report Export] Serving latest JSON file: {latest_file}")
+    logger.info(f"[OpenCode Report Export] File exists: {latest_file.exists()}")
+    logger.info(
+        f"[OpenCode Report Export] File size: {latest_file.stat().st_size if latest_file.exists() else 0} bytes"
+    )
 
     filename = f"opencode-audit-report-{task_id[:8]}.json"
-    return FileResponse(path=str(latest_file), media_type="application/json", filename=filename)
+    logger.info(f"[OpenCode Report Export] Download filename: {filename}")
+    logger.info(f"[OpenCode Report Export] ========== EXPORT JSON REPORT END ==========")
 
-    if project_source_type == "zip":
-        possible_paths.extend(
-            [
-                Path(f"/tmp/opencode_project_{project_id}") / "reports",
-                Path(f"C:/temp/opencode_project_{project_id}") / "reports",
-            ]
-        )
-    elif project_source_type == "repository":
-        possible_paths.extend(
-            [
-                Path(f"/tmp/{project_id}") / "reports",
-                Path(f"C:/temp/{project_id}") / "reports",
-            ]
-        )
-
-    if opencode_session_id:
-        possible_paths.extend(
-            [
-                Path(f"/tmp/opencode_{opencode_session_id}") / "reports",
-                Path(f"C:/temp/opencode_{opencode_session_id}") / "reports",
-            ]
-        )
-
-    home_dir = Path.home()
-    possible_paths.extend(
-        [
-            home_dir / "DeepAudit" / "reports",
-            home_dir / "Documents" / "DeepAudit" / "reports",
-            home_dir / "opencode" / "reports",
-        ]
-    )
-
-    current_dir = Path.cwd()
-    possible_paths.extend(
-        [
-            current_dir / "reports",
-            current_dir / "docs" / "example",
-        ]
-    )
-
-    possible_paths.extend(
-        [
-            Path("/tmp/opencode_project") / "reports",
-            Path("/tmp/opencode_workspace") / "reports",
-            Path("C:/temp/opencode_project") / "reports",
-            Path("C:/temp/opencode_workspace") / "reports",
-        ]
-    )
-
-    report_files = []
-    for reports_dir in possible_paths:
-        if reports_dir.exists() and reports_dir.is_dir():
-            logger.info(f"[OpenCode Report Download] Found directory: {reports_dir}")
-            for file in reports_dir.rglob(f"*{extension}"):
-                report_files.append(file)
-                logger.info(f"[OpenCode Report Download] Found {extension} file: {file}")
-
-    report_files.sort(key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True)
-    return report_files
-
-
-@router.get("/{task_id}/export-report-md")
-async def export_report_md(
-    task_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    """
-    导出 Markdown 格式的审计报告
-    """
-    from app.utils.log import logger
-
-    task_result = await db.execute(
-        select(OpenCodeAuditTask).where(
-            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
-        )
-    )
-    task = task_result.scalars().first()
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
-
-    project_result = await db.execute(select(Project).where(Project.id == task.project_id))
-    project = project_result.scalar_one_or_none()
-
-    report_files = _find_report_files(
-        opencode_session_id=task.opencode_session_id,
-        project_id=task.project_id,
-        project_source_type=project.source_type if project else None,
-        extension=".md",
-    )
-
-    if not report_files:
-        raise HTTPException(status_code=404, detail="未找到 Markdown 报告文件")
-
-    latest_file = report_files[0]
-    logger.info(f"[OpenCode Report Download] Serving MD file: {latest_file}")
-
-    filename = f"opencode-audit-report-{task_id[:8]}.md"
-    return FileResponse(path=str(latest_file), media_type="text/markdown", filename=filename)
-
-
-@router.get("/{task_id}/export-report-json")
-async def export_report_json(
-    task_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    """
-    导出 JSON 格式的审计报告
-    """
-    from app.utils.log import logger
-
-    task_result = await db.execute(
-        select(OpenCodeAuditTask).where(
-            OpenCodeAuditTask.id == task_id, OpenCodeAuditTask.created_by == current_user.id
-        )
-    )
-    task = task_result.scalars().first()
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
-
-    project_result = await db.execute(select(Project).where(Project.id == task.project_id))
-    project = project_result.scalar_one_or_none()
-
-    report_files = _find_report_files(
-        opencode_session_id=task.opencode_session_id,
-        project_id=task.project_id,
-        project_source_type=project.source_type if project else None,
-        extension=".json",
-    )
-
-    if not report_files:
-        raise HTTPException(status_code=404, detail="未找到 JSON 报告文件")
-
-    latest_file = report_files[0]
-    logger.info(f"[OpenCode Report Download] Serving JSON file: {latest_file}")
-
-    filename = f"opencode-audit-report-{task_id[:8]}.json"
     return FileResponse(path=str(latest_file), media_type="application/json", filename=filename)
