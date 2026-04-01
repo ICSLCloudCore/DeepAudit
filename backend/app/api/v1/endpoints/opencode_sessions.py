@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import json
 import asyncio
 from datetime import datetime, timezone
+from typing import Dict
 
 from app.utils.log import logger
 from app.db.session import get_db
@@ -38,6 +39,9 @@ from app.services.opencode_session_service import OpenCodeSessionService
 from app.models.opencode_audit_task import OpenCodeAuditTaskStatus
 
 router = APIRouter()
+
+# 跟踪活跃的 SSE 流，用于在任务完成时主动停止
+_active_streams: Dict[str, asyncio.Event] = {}
 
 
 def process_prompt_variables(content: str, variables: dict) -> str:
@@ -287,6 +291,16 @@ async def close_session(
     return {"message": "Session closed successfully"}
 
 
+def stop_session_stream(session_id: str):
+    """通知指定会话的 SSE 流停止（在任务完成时调用）"""
+    stop_event = _active_streams.pop(session_id, None)
+    if stop_event:
+        stop_event.set()
+        logger.info(f"[SSE] Notified stream to stop for session {session_id}")
+    else:
+        logger.debug(f"[SSE] No active stream found for session {session_id}")
+
+
 @router.get("/sessions/{session_id}/stream")
 async def session_stream(
     session_id: str,
@@ -309,120 +323,144 @@ async def session_stream(
         if project and project.owner_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
+    # 创建停止事件，用于在任务完成时主动停止流
+    stop_event = asyncio.Event()
+    _active_streams[session_id] = stop_event
+
     async def event_generator():
         total_num = 0
         should_continue = True
 
-        while should_continue:
-            # 用于存储从数据库获取的数据
-            current_session_data = None
-            messages_data = []
-
-            try:
-                # 1. 先在数据库会话中获取所有需要的数据
-                async with async_session_factory() as db:
-                    # 重新获取会话状态
-                    result = await db.execute(
-                        select(OpenCodeSession).where(OpenCodeSession.id == session_id)
-                    )
-                    current_session = result.scalar_one_or_none()
-
-                    if not current_session:
-                        should_continue = False
-                        break
-
-                    # 获取消息
-                    query = (
-                        select(OpenCodeMessageContent)
-                        .where(and_(OpenCodeMessageContent.session_id == session_id))
-                        .order_by(OpenCodeMessageContent.message_index)
-                    )
-                    result = await db.execute(query)
-                    messages = result.scalars().all()
-
-                    # 将数据复制到局部变量，以便在会话外部使用
-                    current_session_data = {"status": current_session.status}
-                    messages_data = [
-                        {
-                            "content_type": msg.content_type,
-                            "text_content": msg.text_content,
-                            "message_index": msg.message_index,
-                            "time": msg.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                        }
-                        for msg in messages
-                    ]
-
-                # 2. 现在在数据库会话外部处理数据和yield
-                # 发送新消息
-                for msg in messages_data[total_num:]:
-                    yield {
-                        "event": "message",
-                        "data": json.dumps(msg),
-                    }
-                    try:
-                        await asyncio.sleep(0.5)
-                    except asyncio.CancelledError:
-                        logger.error(
-                            f"[SSE] Client disconnected during message send for session {session_id}"
-                        )
-                        should_continue = False
-                        break
-
-                if not should_continue:
-                    break
-
-                total_num = len(messages_data)
-
-                # 检查会话是否结束
-                if current_session_data and current_session_data["status"] in [
-                    OpenCodeSessionStatus.CLOSED,
-                    OpenCodeSessionStatus.ERROR,
-                ]:
-                    # 获取时间 - 如果有消息使用最后一个消息的时间，否则使用当前时间
-                    done_time = None
-                    if messages_data:
-                        done_time = messages_data[-1]["time"]
-                    else:
-                        from datetime import datetime
-
-                        done_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                    yield {
-                        "event": "done",
-                        "data": json.dumps(
-                            {"content_type": current_session_data["status"], "time": done_time}
-                        ),
-                    }
+        try:
+            while should_continue:
+                # 检查是否收到停止信号（任务已完成）
+                if stop_event.is_set():
+                    logger.info(f"[SSE] Stop event received for session {session_id}")
                     should_continue = False
                     break
 
-                # 3. 在数据库会话外部等待
-                if should_continue:
-                    try:
-                        await asyncio.sleep(1)
-                    except asyncio.CancelledError:
-                        logger.error(
-                            f"[SSE] Client disconnected from stream for session {session_id}"
-                        )
-                        should_continue = False
-                        break
+                # 用于存储从数据库获取的数据
+                current_session_data = None
+                messages_data = []
 
-            except asyncio.CancelledError:
-                logger.error(f"[SSE] Client disconnected from stream for session {session_id}")
-                should_continue = False
-                break
-            except Exception as e:
-                # 记录错误但不抛出，避免影响连接池
-                logger.error(f"[SSE] Error in stream for session {session_id}: {e}")
-                import traceback
-
-                traceback.print_exc()
-                # 出错时等待一下再继续，避免快速重试
                 try:
-                    await asyncio.sleep(2)
+                    # 1. 先在数据库会话中获取所有需要的数据
+                    async with async_session_factory() as db:
+                        # 重新获取会话状态
+                        result = await db.execute(
+                            select(OpenCodeSession).where(OpenCodeSession.id == session_id)
+                        )
+                        current_session = result.scalar_one_or_none()
+
+                        if not current_session:
+                            should_continue = False
+                            break
+
+                        # 获取消息
+                        query = (
+                            select(OpenCodeMessageContent)
+                            .where(and_(OpenCodeMessageContent.session_id == session_id))
+                            .order_by(OpenCodeMessageContent.message_index)
+                        )
+                        result = await db.execute(query)
+                        messages = result.scalars().all()
+
+                        # 将数据复制到局部变量，以便在会话外部使用
+                        current_session_data = {"status": current_session.status}
+                        messages_data = [
+                            {
+                                "content_type": msg.content_type,
+                                "text_content": msg.text_content,
+                                "message_index": msg.message_index,
+                                "time": msg.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                            }
+                            for msg in messages
+                        ]
+
+                    # 2. 现在在数据库会话外部处理数据和yield
+                    # 发送新消息
+                    for msg in messages_data[total_num:]:
+                        # 检查停止信号
+                        if stop_event.is_set():
+                            logger.info(
+                                f"[SSE] Stop event during message send for session {session_id}"
+                            )
+                            should_continue = False
+                            break
+
+                        yield {
+                            "event": "message",
+                            "data": json.dumps(msg),
+                        }
+                        try:
+                            await asyncio.sleep(0.5)
+                        except asyncio.CancelledError:
+                            logger.error(
+                                f"[SSE] Client disconnected during message send for session {session_id}"
+                            )
+                            should_continue = False
+                            break
+
+                    if not should_continue:
+                        break
+
+                    total_num = len(messages_data)
+
+                    # 检查会话是否结束
+                    if current_session_data and current_session_data["status"] in [
+                        OpenCodeSessionStatus.CLOSED,
+                        OpenCodeSessionStatus.ERROR,
+                    ]:
+                        # 获取时间 - 如果有消息使用最后一个消息的时间，否则使用当前时间
+                        done_time = None
+                        if messages_data:
+                            done_time = messages_data[-1]["time"]
+                        else:
+                            from datetime import datetime
+
+                            done_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                        yield {
+                            "event": "done",
+                            "data": json.dumps(
+                                {"content_type": current_session_data["status"], "time": done_time}
+                            ),
+                        }
+                        should_continue = False
+                        break
+
+                    # 3. 在数据库会话外部等待，使用 wait_for 支持停止事件
+                    if should_continue:
+                        try:
+                            await asyncio.wait_for(stop_event.wait(), timeout=1.0)
+                            # 如果到这里，说明 stop_event 被设置了
+                            logger.info(f"[SSE] Stop event during wait for session {session_id}")
+                            should_continue = False
+                            break
+                        except asyncio.TimeoutError:
+                            # 正常超时，继续下一轮轮询
+                            pass
+
                 except asyncio.CancelledError:
+                    logger.error(f"[SSE] Client disconnected from stream for session {session_id}")
                     should_continue = False
                     break
+                except Exception as e:
+                    # 记录错误但不抛出，避免影响连接池
+                    logger.error(f"[SSE] Error in stream for session {session_id}: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+                    # 出错时等待一下再继续，避免快速重试
+                    try:
+                        await asyncio.sleep(2)
+                    except asyncio.CancelledError:
+                        should_continue = False
+                        break
+        finally:
+            # 清理：确保从活跃流列表中移除
+            _active_streams.pop(session_id, None)
+            logger.info(f"[SSE] Stream cleanup completed for session {session_id}")
 
     return EventSourceResponse(event_generator())
 

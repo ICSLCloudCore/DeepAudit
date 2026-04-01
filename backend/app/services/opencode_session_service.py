@@ -1325,6 +1325,17 @@ class OpenCodeSessionService:
                     logger.info(
                         f"[OpenCode] Background poll completed with status: {db_session.status}"
                     )
+
+                    # 通知 SSE 流停止，避免继续轮询数据库
+                    try:
+                        from app.api.v1.endpoints.opencode_sessions import stop_session_stream
+
+                        stop_session_stream(db_session_id)
+                        logger.info(
+                            f"[OpenCode] Notified SSE stream to stop for session {db_session_id}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[OpenCode] Failed to stop SSE stream: {e}")
         except Exception as e:
             logger.info(f"[OpenCode] Background poll failed: {e}")
 
@@ -1352,6 +1363,17 @@ class OpenCodeSessionService:
                         await db_session_local.commit()
             except Exception:
                 pass
+            finally:
+                # 即使出错也要通知 SSE 流停止
+                try:
+                    from app.api.v1.endpoints.opencode_sessions import stop_session_stream
+
+                    stop_session_stream(db_session_id)
+                    logger.info(
+                        f"[OpenCode] Notified SSE stream to stop on error for session {db_session_id}"
+                    )
+                except Exception:
+                    pass
 
     async def get_session_status(
         self, session_id: str, current_user: User
