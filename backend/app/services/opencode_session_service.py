@@ -1046,6 +1046,28 @@ class OpenCodeSessionService:
             db_session_id=db_session.id,
         )
 
+        # 保存用户发送的 prompt 到 OpenCodeMessageContent
+        from app.models.opencode_message_content import (
+            OpenCodeMessageContent,
+            OpenCodeMessageContentType,
+        )
+
+        logger.info(f"[OpenCode] Saving user prompt to database...")
+        logger.info(f"[OpenCode]   - session_id: {db_session.id}")
+        logger.info(f"[OpenCode]   - audit_task_id: {audit_task.id}")
+        logger.info(f"[OpenCode]   - prompt length: {len(final_prompt_content)} chars")
+
+        user_prompt = OpenCodeMessageContent(
+            session_id=db_session.id,
+            message_index=0,
+            content_type=OpenCodeMessageContentType.USER_PROMPT,
+            text_content=final_prompt_content,
+            audit_task_id=audit_task.id,
+        )
+        self.db.add(user_prompt)
+        await self.db.commit()
+        logger.info(f"[OpenCode] User prompt saved successfully! Message ID: {user_prompt.id}")
+
         message_id = None
 
         if server_session_id:

@@ -138,8 +138,9 @@ function OpenCodeAuditPageContent() {
         const { content_type, text_content, time } = JSON.parse(event.data);
         addLog({
           type: content_type === 'response' ? 'response' : 
-                content_type === 'reasoning' ? 'progress' : 'info',
-          title: "",
+                content_type === 'reasoning' ? 'progress' :
+                content_type === 'user_prompt' ? 'prompt' : 'info',
+          title: content_type === 'user_prompt' ? '用户发送的 Prompt' : "",
           content: text_content,
           isStreaming: false,
           time,
