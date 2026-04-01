@@ -285,20 +285,6 @@ function VulnerabilitiesList({
   };
 
   const currentState = tabStates[activeTab];
-  if (currentState.total === 0) {
-    return (
-      <div className="cyber-card p-16 text-center border-dashed">
-        <CheckCircle className="w-16 h-16 text-emerald-600 dark:text-emerald-400 mx-auto mb-4" />
-        <h3 className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mb-2 uppercase">代码质量优秀！</h3>
-        <p className="text-emerald-600 dark:text-emerald-400/80 mb-4 font-mono">恭喜！没有发现任何问题</p>
-        <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 max-w-md mx-auto rounded">
-          <p className="text-emerald-700 dark:text-emerald-300/80 text-sm font-mono">
-            您的代码通过了所有质量检查，包括安全性、性能、可维护性等各个方面的评估。
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -322,7 +308,51 @@ function VulnerabilitiesList({
         </TabsList>
 
         <TabsContent value={activeTab} className="space-y-4 mt-6">
-          {currentState.items.map((vuln, index) => renderVulnerability(vuln, index))}
+          {currentState.total === 0 ? (
+            (() => {
+              // 判断是否所有 tab 都没有漏洞
+              const allTabsEmpty = 
+                tabStates.all.total === 0 &&
+                tabStates.critical.total === 0 &&
+                tabStates.high.total === 0 &&
+                tabStates.medium.total === 0 &&
+                tabStates.low.total === 0;
+              
+              // 判断当前 tab 是否是"全部"
+              const isAllTab = activeTab === 'all';
+              
+              if (isAllTab && allTabsEmpty) {
+                // 全部 tab 且所有都为空：显示原来的"代码质量优秀"
+                return (
+                  <div className="cyber-card p-16 text-center border-dashed">
+                    <CheckCircle className="w-16 h-16 text-emerald-600 dark:text-emerald-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mb-2 uppercase">代码质量优秀！</h3>
+                    <p className="text-emerald-600 dark:text-emerald-400/80 mb-4 font-mono">恭喜！没有发现任何问题</p>
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 max-w-md mx-auto rounded">
+                      <p className="text-emerald-700 dark:text-emerald-300/80 text-sm font-mono">
+                        您的代码通过了所有质量检查，包括安全性、性能、可维护性等各个方面的评估。
+                      </p>
+                    </div>
+                  </div>
+                );
+              } else {
+                // 只是当前 tab 为空：显示简单提示
+                return (
+                  <div className="cyber-card p-8 text-center border-dashed">
+                    <Info className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                    <h4 className="text-lg font-bold text-muted-foreground mb-2 uppercase">
+                      该分类没有发现漏洞
+                    </h4>
+                    <p className="text-muted-foreground/80 font-mono">
+                      请查看其他分类或全部列表
+                    </p>
+                  </div>
+                );
+              }
+            })()
+          ) : (
+            currentState.items.map((vuln, index) => renderVulnerability(vuln, index))
+          )}
         </TabsContent>
       </Tabs>
       {renderPagination()}
