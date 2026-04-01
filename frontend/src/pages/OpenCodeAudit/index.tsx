@@ -115,9 +115,19 @@ function OpenCodeAuditPageContent() {
     loadAuditTask();
   }, [taskId]);
 
+  // 监听 taskId 变化，切换 task 时重置状态
+  useEffect(() => {
+    if (taskId) {
+      console.log('[OpenCode Audit] Task ID changed, resetting state...');
+      reset();
+      setFirstRun(true);
+      setShowSplash(false);
+    }
+  }, [taskId, reset]);
+
   // SSE Stream Effect
   useEffect(() => {
-    if (!sessionId || !firstRun) {
+    if (!sessionId || !taskId || !firstRun) {
       return;
     }
     try {
