@@ -167,10 +167,16 @@ RUN tar -xzf /tmp/gitleaks_8.18.2_linux_x64.tar.gz -C /usr/local/bin/ gitleaks &
     rm /tmp/gitleaks_8.18.2_linux_x64.tar.gz
 
 # 安装 TruffleHog
-COPY bin/install.sh /tmp/
-RUN chmod +x /tmp/install.sh && \
-    /tmp/install.sh -b /usr/local/bin && \
-    rm /tmp/install.sh
+COPY bin/trufflehog_3.95.2_checksums.txt /tmp/
+COPY bin/trufflehog_3.95.2_linux_amd64.tar.gz /tmp/
+RUN cd /tmp && \
+    # 验证 SHA256（安全检查）
+    sha256sum -c trufflehog_3.95.2_checksums.txt 2>&1 | grep "trufflehog_3.95.2_linux_amd64.tar.gz: OK" && \
+    # 解压并安装
+    tar -xzf trufflehog_3.95.2_linux_amd64.tar.gz -C /usr/local/bin/ trufflehog && \
+    chmod +x /usr/local/bin/trufflehog && \
+    # 清理
+    rm -f trufflehog_3.95.2_checksums.txt trufflehog_3.95.2_linux_amd64.tar.gz
 
 # 安装 OSV-Scanner
 COPY bin/osv-scanner_1.6.2_linux_amd64 /usr/local/bin/osv-scanner
