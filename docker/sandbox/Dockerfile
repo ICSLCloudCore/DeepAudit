@@ -76,17 +76,20 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
     safety
 
 # 安装 Gitleaks
-RUN curl -L https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz -o gitleaks.tar.gz && \
-    tar -xzf gitleaks.tar.gz && \
-    mv gitleaks /usr/local/bin/ && \
-    rm gitleaks.tar.gz
+COPY bin/gitleaks_8.18.2_linux_x64.tar.gz /tmp/
+RUN tar -xzf /tmp/gitleaks_8.18.2_linux_x64.tar.gz -C /usr/local/bin/ gitleaks && \
+    chmod +x /usr/local/bin/gitleaks && \
+    rm /tmp/gitleaks_8.18.2_linux_x64.tar.gz
 
 # 安装 TruffleHog
-RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+COPY bin/install.sh /tmp/
+RUN chmod +x /tmp/install.sh && \
+    /tmp/install.sh -b /usr/local/bin && \
+    rm /tmp/install.sh
 
 # 安装 OSV-Scanner
-RUN curl -L https://github.com/google/osv-scanner/releases/download/v1.6.2/osv-scanner_1.6.2_linux_amd64 -o /usr/local/bin/osv-scanner && \
-    chmod +x /usr/local/bin/osv-scanner
+COPY bin/osv-scanner_1.6.2_linux_amd64 /usr/local/bin/osv-scanner
+RUN chmod +x /usr/local/bin/osv-scanner
 
 # 创建非 root 用户
 RUN groupadd -g 1000 sandbox && \
