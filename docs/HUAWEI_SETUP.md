@@ -21,20 +21,37 @@
 
 ### 必填文件（如果使用本地安装）
 
+**重要说明**：
+由于 Dockerfile 的 `COPY` 指令不支持条件判断，使用 Huawei 本地文件需要：
+1. 先把文件放到 `docker/sandbox/bin/` 目录
+2. 修改 `docker/sandbox/Dockerfile`，取消相关 `COPY` 行的注释
+
+需要准备的文件：
+
 1. **Node.js 安装包**
    - 文件名：`node-v22.22.2-linux-x64.tar.xz`
    - 下载地址：华为内部镜像站
+   - Dockerfile 中需要取消注释：`# COPY ./bin/${NODE_VERSION}.tar.xz /tmp/nodejs.tar.xz`
 
 2. **Go 安装包**
    - 文件名：`go1.25.8.linux-amd64.tar.gz`
    - 下载地址：华为内部镜像站
+   - Dockerfile 中需要取消注释：`# COPY ./bin/go1.25.8.linux-amd64.tar.gz /tmp/go.tar.gz`
 
 3. **证书文件**
    - `HuaweiITRootCA.crt`
    - `HWITEnterpriseCA1.crt`
+   - Dockerfile 中需要取消注释相关 COPY 行
 
 4. **pip 配置文件**
    - `pip.conf` - 包含华为内部 PyPI 源配置
+   - Dockerfile 中需要取消注释相关 COPY 行
+
+### 简化方案（推荐）
+
+如果不想修改 Dockerfile，可以：
+1. 只设置 `Huawei=true` 来使用华为镜像源
+2. 不使用本地安装包，让工具通过华为镜像在线安装
 
 ### 可选文件
 

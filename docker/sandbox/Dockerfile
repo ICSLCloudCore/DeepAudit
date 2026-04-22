@@ -16,16 +16,17 @@ ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.
 # Huawei: 证书和全局pip源配置
 ARG CERT_DIR="/usr/local/share/ca-certificates/"
 
-# Huawei: 复制证书和 pip 配置（仅在 Huawei=true 时）
+# Huawei: 创建证书目录
 RUN if [ "$Huawei" = "true" ]; then \
       echo "Applying Huawei configuration..."; \
       mkdir -p ${CERT_DIR}; \
     fi
 
-# 尝试复制 Huawei 证书文件（如果存在）
-COPY ./bin/HuaweiITRootCA.crt ${CERT_DIR} 2>/dev/null || true
-COPY ./bin/HWITEnterpriseCA1.crt ${CERT_DIR} 2>/dev/null || true
-COPY ./bin/pip.conf /etc/ 2>/dev/null || true
+# 注意：Huawei 证书文件需要通过其他方式（如 volume 挂载）提供
+# 或在构建前手动放置到 bin 目录并取消下面的注释
+# COPY ./bin/HuaweiITRootCA.crt ${CERT_DIR}/
+# COPY ./bin/HWITEnterpriseCA1.crt ${CERT_DIR}/
+# COPY ./bin/pip.conf /etc/
 
 # 安装基本工具
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
@@ -61,21 +62,21 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
 # Huawei: Node.js 配置
 ARG NODE_VERSION="node-v22.22.2-linux-x64"
 
-# Huawei: 先复制本地 Node.js 文件（如果存在）
-COPY ./bin/${NODE_VERSION}.tar.xz /tmp/ 2>/dev/null || true
+# 注意：Huawei Node.js 本地文件需要手动放置到 bin 目录
+# 并取消下面的注释来启用：
+# COPY ./bin/${NODE_VERSION}.tar.xz /tmp/nodejs.tar.xz
 
 # 统一安装 Node.js
-RUN if [ "$Huawei" = "true" ] && [ -f /tmp/${NODE_VERSION}.tar.xz ]; then \
+RUN if [ "$Huawei" = "true" ] && [ -f /tmp/nodejs.tar.xz ]; then \
       echo "Installing Node.js from Huawei local file..."; \
       mkdir -p /usr/local && \
-      tar -xJf /tmp/${NODE_VERSION}.tar.xz -C /usr/local/ && \
+      tar -xJf /tmp/nodejs.tar.xz -C /usr/local/ && \
       cp -r /usr/local/${NODE_VERSION}/* /usr/local/ 2>/dev/null || true && \
-      rm -rf /usr/local/${NODE_VERSION} /tmp/${NODE_VERSION}.tar.xz && \
+      rm -rf /usr/local/${NODE_VERSION} /tmp/nodejs.tar.xz && \
       npm config set registry "https://mirrors.tools.huawei.com/npm" -g && \
       npm config set strict-ssl false -g; \
     else \
       echo "Installing Node.js from NodeSource..."; \
-      rm -f /tmp/${NODE_VERSION}.tar.xz && \
       unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
       curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
       && apt-get install -y nodejs \
@@ -87,18 +88,19 @@ RUN if [ "$Huawei" = "true" ] && [ -f /tmp/${NODE_VERSION}.tar.xz ]; then \
 # 先设置基础 Go 环境变量
 ENV PATH=$PATH:/usr/local/go/bin
 
-# Huawei: 先复制本地 Go 文件（如果存在）
-COPY ./bin/go1.25.8.linux-amd64.tar.gz /tmp/ 2>/dev/null || true
+# 注意：Huawei Go 本地文件需要手动放置到 bin 目录
+# 并取消下面的注释来启用：
+# COPY ./bin/go1.25.8.linux-amd64.tar.gz /tmp/go.tar.gz
 
 # 统一安装 Go
-RUN if [ "$Huawei" = "true" ] && [ -f /tmp/go1.25.8.linux-amd64.tar.gz ]; then \
+RUN if [ "$Huawei" = "true" ] && [ -f /tmp/go.tar.gz ]; then \
       echo "Installing Go from Huawei local file..."; \
-      tar -C /usr/local -xzf /tmp/go1.25.8.linux-amd64.tar.gz && \
-      rm /tmp/go1.25.8.linux-amd64.tar.gz && \
+      tar -C /usr/local -xzf /tmp/go.tar.gz && \
+      rm /tmp/go.tar.gz && \
       echo 'export GOPROXY=http://mirrors.tools.huawei.com/goproxy/' >> /etc/profile; \
     else \
       echo "Installing Go from Alibaba mirror..."; \
-      rm -f /tmp/go1.25.8.linux-amd64.tar.gz && \
+      rm -f /tmp/go.tar.gz 2>/dev/null || true && \
       unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
       curl -L https://mirrors.aliyun.com/golang/go1.21.6.linux-amd64.tar.gz -o go.tar.gz && \
       tar -C /usr/local -xzf go.tar.gz && \
