@@ -11,7 +11,7 @@ services:
   # =============================================
 
   db:
-    image: postgres:15-alpine
+    image: docker.m.daocloud.io/library/postgres:15-alpine
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -42,7 +42,9 @@ services:
     restart: unless-stopped
     volumes:
       # - ./backend/app:/app/app:ro  # 挂载代码目录，修改后自动生效
-      - backend_uploads:/app/uploads
+      - /opt/storage/backend_uploads/:/app/uploads/ # 保存skill以及源码等原始zip文件
+      - /opt/storage/tmp/:/tmp/ # 保存源码解压目录用于共享joern分析
+      - /opt/storage/opencode/:/root/.config/opencode/ # 保存已加载的agents、skills和全局配置
       - /var/run/docker.sock:/var/run/docker.sock # 沙箱执行必须
     ports:
       - "8000:8000"
@@ -105,7 +107,7 @@ services:
 
   # Redis (Agent 任务队列 - 必须)
   redis:
-    image: redis:7-alpine
+    image: docker.m.daocloud.io/library/redis:7-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
