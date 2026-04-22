@@ -1,26 +1,29 @@
 # ============================================
 # 多阶段构建 - 构建阶段
 # ============================================
-FROM python:3.12-slim AS builder
+FROM docker.m.daocloud.io/library/python:3.12-trixie AS builder
+
+# Huawei 可选配置
+ARG Huawei=false
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 彻底清除代理设置
-ENV http_proxy=""
-ENV https_proxy=""
-ENV HTTP_PROXY=""
-ENV HTTPS_PROXY=""
-ENV all_proxy=""
-ENV ALL_PROXY=""
-ENV no_proxy="*"
-ENV NO_PROXY="*"
+# 配置时区
+RUN rm -f /etc/localtime && ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
-# 清除 apt 代理配置并配置重试，使用阿里云镜像
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true && \
+# 条件配置 apt 源
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei apt mirror..."; \
+      sed -i 's|deb.debian.org|mirrors.tools.huawei.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+      sed -i 's|deb.debian.org|mirrors.tools.huawei.com|g' /etc/apt/sources.list 2>/dev/null || true; \
+    else \
+      echo "Using Alibaba apt mirror..."; \
+      sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+      sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true; \
+    fi && \
     rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true && \
     echo 'Acquire::http::Proxy "false";' > /etc/apt/apt.conf.d/99-no-proxy && \
     echo 'Acquire::https::Proxy "false";' >> /etc/apt/apt.conf.d/99-no-proxy && \
@@ -36,47 +39,79 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.m.daocloud.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# 配置 uv 使用官方 PyPI（国内镜像不稳定时使用）
+# 条件配置 PyPI 源
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei PyPI mirror..."; \
+      echo 'export UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/' >> /etc/profile; \
+    else \
+      echo "Using official PyPI..."; \
+      echo 'export UV_INDEX_URL=https://pypi.org/simple/' >> /etc/profile; \
+    fi
+
+# 设置默认 UV_INDEX_URL（会被 /etc/profile 覆盖）
 ENV UV_INDEX_URL=https://pypi.org/simple/
+
 
 # 复制依赖文件
 COPY pyproject.toml uv.lock README.md ./
 
-# 安装 Python 依赖到虚拟环境
-RUN uv sync --frozen --no-dev
+# 安装 Python 依赖到虚拟环境 Mr.Zhou need openai httpx
+RUN uv add openai httpx && uv sync --no-dev
 
 # ============================================
 # 多阶段构建 - 运行阶段
 # ============================================
-FROM python:3.12-slim AS runtime
+FROM docker.m.daocloud.io/library/python:3.12-trixie AS runtime
+
+# 继承 Huawei 参数
+ARG Huawei=false
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 彻底清除代理设置
-ENV http_proxy=""
-ENV https_proxy=""
-ENV HTTP_PROXY=""
-ENV HTTPS_PROXY=""
-ENV all_proxy=""
-ENV ALL_PROXY=""
-ENV no_proxy="*"
-ENV NO_PROXY="*"
+# Huawei: 证书和全局pip源配置
+ARG CERT_DIR="/usr/local/share/ca-certificates/"
 
-# 配置使用阿里云 Debian 镜像源
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
+# Huawei: 创建证书目录
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Applying Huawei configuration..."; \
+      mkdir -p ${CERT_DIR}; \
+    fi
 
-# 清除 apt 代理配置
-RUN rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true && \
-    echo 'Acquire::http::Proxy "false";' > /etc/apt/apt.conf.d/99-no-proxy && \
-    echo 'Acquire::https::Proxy "false";' >> /etc/apt/apt.conf.d/99-no-proxy && \
-    echo 'Acquire::Retries "5";' >> /etc/apt/apt.conf.d/99-no-proxy && \
-    echo 'Acquire::http::Timeout "60";' >> /etc/apt/apt.conf.d/99-no-proxy
+# 注意：Huawei 证书文件需要通过其他方式（如 volume 挂载）提供
+# 或在构建前手动放置到 bin 目录并取消下面的注释
+# COPY ./bin/HuaweiITRootCA.crt ${CERT_DIR}/
+# COPY ./bin/HWITEnterpriseCA1.crt ${CERT_DIR}/
+
+# 条件配置 PyPI 源
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei PyPI mirror..."; \
+      echo 'export UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/' >> /etc/profile; \
+    else \
+      echo "Using official PyPI..."; \
+      echo 'export UV_INDEX_URL=https://pypi.org/simple/' >> /etc/profile; \
+    fi
+
+# 设置默认 UV_INDEX_URL（会被 /etc/profile 覆盖）
+ENV UV_INDEX_URL=https://pypi.org/simple/
+
+# 配置时区
+RUN rm -f /etc/localtime && ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+
+# 条件配置 apt 源
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei apt mirror..."; \
+      sed -i 's|deb.debian.org|mirrors.tools.huawei.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+      sed -i 's|deb.debian.org|mirrors.tools.huawei.com|g' /etc/apt/sources.list 2>/dev/null || true; \
+    else \
+      echo "Using Alibaba apt mirror..."; \
+      sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+      sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true; \
+    fi
 
 # 只安装运行时依赖（不需要 gcc）
 RUN apt-get update && \
@@ -95,7 +130,53 @@ RUN apt-get update && \
         fonts-noto-cjk \
     && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/* \
+    && update-ca-certificates \
     && apt-get clean
+
+# 安装comment-checker
+COPY bin/comment-checker /usr/local/bin
+
+# 安装cppcheck
+ADD --chown=0:0 bin/cppcheck.tar.gz /usr/local
+
+# 安装 gh
+ARG GH_VERSION="gh_2.89.0_linux_amd64"
+ADD --chown=0:0 bin/${GH_VERSION}.tar.gz /usr/local
+
+# 安装nodejs
+ARG NODE_VERSION="node-v22.22.2-linux-x64"
+ADD --chown=0:0 bin/${NODE_VERSION}.tar.xz /usr/local
+
+RUN cp -r /usr/local/${NODE_VERSION}/* /usr/local/ \
+    && cp -r /usr/local/${GH_VERSION}/* /usr/local/ \
+    && rm -rf /usr/local/${NODE_VERSION} \
+    && rm -rf /usr/local/${GH_VERSION} \
+    && chmod +x /usr/local/bin/comment-checker
+
+# 条件配置 npm 源
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei npm mirror..."; \
+      npm config set registry https://mirrors.tools.huawei.com/npm -g && \
+      npm config set strict-ssl false -g; \
+    else \
+      echo "Using npmmirror..."; \
+      npm config set registry https://registry.npmmirror.com -g; \
+    fi
+
+# 环境变量
+ENV PATH="/root/.bun/bin:${PATH}"
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+ENV OPENCODE_DISABLE_MODELS_FETCH=true
+ENV OPENCODE_DISABLE_AUTOUPDATE=true
+
+# Huawei: 临时代理（仅在 Huawei=true 时启用）
+ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.0/8,169.254.0.0/16,172.2.255.254,192.50.0.0/24,70.181.0.0/16,.huawei.com https_proxy=http://172.25.10.10:8181 https_proxy=http://172.25.10.10:8181"
+
+# 安装 opencode 和 oh-my-openagent
+RUN npm install -g bun \
+    && ${TEMP_PROXY} \
+    && bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim
+
 
 # 从构建阶段复制虚拟环境和 uv
 COPY --from=builder /app/.venv /app/.venv
