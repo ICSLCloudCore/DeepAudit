@@ -7,12 +7,37 @@ FROM docker.m.daocloud.io/python:3.11-bullseye
 LABEL maintainer="XCodeReviewer Team"
 LABEL description="Secure sandbox environment for vulnerability verification and security scanning"
 
+# Huawei 可选配置
+ARG Huawei=false
+
+# Huawei: 临时代理（仅在 Huawei=true 时启用）
+ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.0/8,169.254.0.0/16,172.2.255.254,192.50.0.0/24,70.181.0.0/16,.huawei.com https_proxy=http://172.25.10.10:8181 https_proxy=http://172.25.10.10:8181"
+
+# Huawei: 证书和全局pip源配置
+ARG CERT_DIR="/usr/local/share/ca-certificates/"
+
+# Huawei: 复制证书和 pip 配置（仅在 Huawei=true 时）
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Applying Huawei configuration..."; \
+      mkdir -p ${CERT_DIR}; \
+    fi
+
+# 尝试复制 Huawei 证书文件（如果存在）
+COPY ./bin/HuaweiITRootCA.crt ${CERT_DIR} 2>/dev/null || true
+COPY ./bin/HWITEnterpriseCA1.crt ${CERT_DIR} 2>/dev/null || true
+COPY ./bin/pip.conf /etc/ 2>/dev/null || true
+
 # 安装基本工具
-# 安装基本工具
-# 使用阿里云镜像加速 apt
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
-    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei apt mirror..."; \
+      sed -i 's/deb.debian.org/mirrors.tools.huawei.com/g' /etc/apt/sources.list; \
+      sed -i 's/security.debian.org/mirrors.tools.huawei.com/g' /etc/apt/sources.list; \
+    else \
+      echo "Using Alibaba apt mirror..."; \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+      sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list; \
+    fi && \
     apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
@@ -30,33 +55,91 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
     cmake \
     clang \
     llvm \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Node.js (用于 JavaScript/TypeScript 代码执行 和 npm audit)
-# 使用淘宝/阿里云镜像加速
-RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && npm config set registry https://registry.npmmirror.com \
-    && rm -rf /var/lib/apt/lists/*
+# Huawei: Node.js 配置
+ARG NODE_VERSION="node-v22.22.2-linux-x64"
 
-# 安装 Go (使用阿里云镜像)
+# Huawei: 先复制本地 Node.js 文件（如果存在）
+COPY ./bin/${NODE_VERSION}.tar.xz /tmp/ 2>/dev/null || true
+
+# 统一安装 Node.js
+RUN if [ "$Huawei" = "true" ] && [ -f /tmp/${NODE_VERSION}.tar.xz ]; then \
+      echo "Installing Node.js from Huawei local file..."; \
+      mkdir -p /usr/local && \
+      tar -xJf /tmp/${NODE_VERSION}.tar.xz -C /usr/local/ && \
+      cp -r /usr/local/${NODE_VERSION}/* /usr/local/ 2>/dev/null || true && \
+      rm -rf /usr/local/${NODE_VERSION} /tmp/${NODE_VERSION}.tar.xz && \
+      npm config set registry "https://mirrors.tools.huawei.com/npm" -g && \
+      npm config set strict-ssl false -g; \
+    else \
+      echo "Installing Node.js from NodeSource..."; \
+      rm -f /tmp/${NODE_VERSION}.tar.xz && \
+      unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+      curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+      && apt-get install -y nodejs \
+      && npm config set registry https://registry.npmmirror.com \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# Huawei: Go 配置
+# 先设置基础 Go 环境变量
 ENV PATH=$PATH:/usr/local/go/bin
-ENV GOPROXY=https://goproxy.cn,direct
-RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    curl -L https://mirrors.aliyun.com/golang/go1.21.6.linux-amd64.tar.gz -o go.tar.gz && \
-    tar -C /usr/local -xzf go.tar.gz && \
-    rm go.tar.gz
 
-# 安装 Rust (使用 rsproxy 镜像)
+# Huawei: 先复制本地 Go 文件（如果存在）
+COPY ./bin/go1.25.8.linux-amd64.tar.gz /tmp/ 2>/dev/null || true
+
+# 统一安装 Go
+RUN if [ "$Huawei" = "true" ] && [ -f /tmp/go1.25.8.linux-amd64.tar.gz ]; then \
+      echo "Installing Go from Huawei local file..."; \
+      tar -C /usr/local -xzf /tmp/go1.25.8.linux-amd64.tar.gz && \
+      rm /tmp/go1.25.8.linux-amd64.tar.gz && \
+      echo 'export GOPROXY=http://mirrors.tools.huawei.com/goproxy/' >> /etc/profile; \
+    else \
+      echo "Installing Go from Alibaba mirror..."; \
+      rm -f /tmp/go1.25.8.linux-amd64.tar.gz && \
+      unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+      curl -L https://mirrors.aliyun.com/golang/go1.21.6.linux-amd64.tar.gz -o go.tar.gz && \
+      tar -C /usr/local -xzf go.tar.gz && \
+      rm go.tar.gz && \
+      echo 'export GOPROXY=https://goproxy.cn,direct' >> /etc/profile; \
+    fi
+
+# 设置默认 GOPROXY（会被 /etc/profile 覆盖）
+ENV GOPROXY=https://goproxy.cn,direct
+
+# Huawei: Rust 配置
+# 设置基础 Rust 环境变量
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH \
-    RUSTUP_DIST_SERVER=https://rsproxy.cn \
+    PATH=/usr/local/cargo/bin:$PATH
+
+# 安装 Rust
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Installing Rust from Huawei mirror..."; \
+      export RUSTUP_DIST_SERVER=https://mirrors.tools.huawei.com/rustup && \
+      export RUSTUP_UPDATE_ROOT=https://mirrors.tools.huawei.com/rustup/rustup && \
+      unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+      curl -k https://mirrors.tools.huawei.com/rustup/rustup/rustup-init.sh | sh -s -- -y --default-toolchain stable --profile minimal && \
+      chmod -R a+w /usr/local/cargo; \
+    else \
+      echo "Installing Rust from rsproxy mirror..."; \
+      export RUSTUP_DIST_SERVER=https://rsproxy.cn && \
+      export RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup && \
+      unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+      curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh -s -- -y --default-toolchain stable --profile minimal && \
+      chmod -R a+w /usr/local/cargo; \
+    fi
+
+# 设置最终的 Rust 镜像源（Huawei 或默认）
+ENV RUSTUP_DIST_SERVER=https://rsproxy.cn \
     RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
-RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh -s -- -y --default-toolchain stable --profile minimal && \
-    chmod -R a+w /usr/local/cargo
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Setting Huawei Rust mirror..."; \
+      echo 'export RUSTUP_DIST_SERVER=https://mirrors.tools.huawei.com/rustup' >> /etc/profile && \
+      echo 'export RUSTUP_UPDATE_ROOT=https://mirrors.tools.huawei.com/rustup/rustup' >> /etc/profile; \
+    fi
 
 # 安装 Python 安全工具
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
