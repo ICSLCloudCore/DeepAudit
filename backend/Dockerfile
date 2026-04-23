@@ -159,7 +159,7 @@ RUN if [ "$Huawei" = "true" ]; then \
       npm config set registry https://mirrors.tools.huawei.com/npm -g && \
       npm config set strict-ssl false -g; \
     else \
-      echo "Using npmmirror..."; \
+      echo "Using Taobao npm mirror..."; \
       npm config set registry https://registry.npmmirror.com -g; \
     fi
 
@@ -175,9 +175,10 @@ ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.
 # 安装 opencode 和 oh-my-openagent
 RUN npm install -g bun \
     && if [ "$Huawei" = "true" ]; then \
-        ${TEMP_PROXY}; \
-    fi \
-    && bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim
+        eval "${TEMP_PROXY}" && bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
+    else \
+        bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
+    fi
 
 
 # 从构建阶段复制虚拟环境和 uv
