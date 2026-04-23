@@ -47,11 +47,9 @@ COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
 # 安装 Python 依赖到虚拟环境（根据 Huawei 参数选择 PyPI 源）
 RUN if [ "$Huawei" = "true" ]; then \
       echo "Using Huawei PyPI mirror..."; \
-      UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/ uv add openai httpx && \
       UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/ uv sync --no-dev; \
     else \
-      echo "Using Taobao PyPI mirror..."; \
-      UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv add openai httpx && \
+      echo "Using Tsinghua PyPI mirror..."; \
       UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv sync --no-dev; \
     fi
 
