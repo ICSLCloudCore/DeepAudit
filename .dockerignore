@@ -1,5 +1,15 @@
 # 依赖
 node_modules
+backend/.venv
+backend/__pycache__
+backend/*.pyc
+backend/.pytest_cache
+backend/.mypy_cache
+backend/.tox
+backend/dist
+backend/build
+backend/.coverage
+backend/.coverage.*
 
 # 构建产物
 dist

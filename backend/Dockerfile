@@ -169,13 +169,12 @@ RUN npm install -g bun \
         bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
     fi
 
+# 先复制应用代码
+COPY backend/ .
 
-# 从构建阶段复制虚拟环境和 uv
+# 再复制虚拟环境和 uv
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
-
-# 复制应用代码
-COPY backend/ .
 
 # 创建上传目录并设置启动脚本权限
 RUN mkdir -p /app/uploads/zip_files && \
