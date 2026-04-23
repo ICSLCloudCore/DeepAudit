@@ -41,24 +41,19 @@ RUN apt-get update && \
 # 安装 uv
 COPY --from=ghcr.m.daocloud.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# 条件配置 PyPI 源
-RUN if [ "$Huawei" = "true" ]; then \
-      echo "Using Huawei PyPI mirror..."; \
-      echo 'export UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/' >> /etc/profile; \
-    else \
-      echo "Using official PyPI..."; \
-      echo 'export UV_INDEX_URL=https://pypi.org/simple/' >> /etc/profile; \
-    fi
-
-# 设置默认 UV_INDEX_URL（会被 /etc/profile 覆盖）
-ENV UV_INDEX_URL=https://pypi.org/simple/
-
-
 # 复制依赖文件
 COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
 
-# 安装 Python 依赖到虚拟环境 Mr.Zhou need openai httpx
-RUN uv add openai httpx && uv sync --no-dev
+# 安装 Python 依赖到虚拟环境（根据 Huawei 参数选择 PyPI 源）
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei PyPI mirror..."; \
+      UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/ uv add openai httpx && \
+      UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/ uv sync --no-dev; \
+    else \
+      echo "Using Taobao PyPI mirror..."; \
+      UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv add openai httpx && \
+      UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv sync --no-dev; \
+    fi
 
 # ============================================
 # 多阶段构建 - 运行阶段
@@ -88,16 +83,12 @@ RUN if [ "$Huawei" = "true" ]; then \
 # COPY ./bin/HWITEnterpriseCA1.crt ${CERT_DIR}/
 
 # 条件配置 PyPI 源
+ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 RUN if [ "$Huawei" = "true" ]; then \
       echo "Using Huawei PyPI mirror..."; \
-      echo 'export UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/' >> /etc/profile; \
     else \
-      echo "Using official PyPI..."; \
-      echo 'export UV_INDEX_URL=https://pypi.org/simple/' >> /etc/profile; \
+      echo "Using Tsinghua PyPI mirror..."; \
     fi
-
-# 设置默认 UV_INDEX_URL（会被 /etc/profile 覆盖）
-ENV UV_INDEX_URL=https://pypi.org/simple/
 
 # 配置时区
 RUN rm -f /etc/localtime && ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
