@@ -174,7 +174,9 @@ ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.
 
 # 安装 opencode 和 oh-my-openagent
 RUN npm install -g bun \
-    && ${TEMP_PROXY} \
+    && if [ "$Huawei" = "true" ]; then \
+        ${TEMP_PROXY}; \
+    fi \
     && bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim
 
 
