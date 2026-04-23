@@ -852,7 +852,7 @@ class OpenCodeSessionService:
                 return {"file_count": 0, "total_lines": 0}
 
             if project.source_type == "zip":
-                from app.services.zip_storage import load_project_zip
+                from app.services.project.zip_storage import load_project_zip
 
                 zip_path = await load_project_zip(project_id)
                 if zip_path and os.path.exists(zip_path):

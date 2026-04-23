@@ -13,7 +13,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.services.insight_config_service import load_insight_config
+from app.services.insight.insight_config_service import load_insight_config
 from app.utils.log import logger
 
 _scheduler_task: Optional[asyncio.Task] = None
@@ -32,7 +32,7 @@ async def _scheduler_loop() -> None:
 
 async def _check_and_run() -> None:
     """检查是否需要执行洞察，必要时触发（不阻塞调度循环）。"""
-    from app.services.insight_runner_service import run_insight, get_insight_status
+    from app.services.insight.insight_runner_service import run_insight, get_insight_status
 
     config = load_insight_config()
     if not config.get("enabled"):

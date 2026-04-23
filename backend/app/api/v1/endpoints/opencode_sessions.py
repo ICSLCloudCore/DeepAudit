@@ -35,7 +35,7 @@ from app.schemas.opencode_session import (
     OpenCodeInteractionListResponse,
     OpenCodeServerStatus,
 )
-from app.services.opencode_session_service import OpenCodeSessionService
+from app.services.opencode.opencode_session_service import OpenCodeSessionService
 from app.models.opencode_audit_task import OpenCodeAuditTaskStatus
 
 router = APIRouter()

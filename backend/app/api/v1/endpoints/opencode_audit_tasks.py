@@ -22,7 +22,7 @@ from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskS
 from app.models.project import Project
 from app.models.user import User
 from app.models.audit_vulnerabilities import AuditVulnerability
-from app.services.opencode_session_service import OpenCodeSessionService
+from app.services.opencode.opencode_session_service import OpenCodeSessionService
 
 router = APIRouter()
 

@@ -21,7 +21,7 @@ from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskS
 from app.models.audit_vulnerabilities import AuditVulnerability
 from app.models.user_config import UserConfig
 import zipfile
-from app.services.scanner import (
+from app.services.audit.scanner import (
     scan_repo_task,
     get_github_files,
     get_gitlab_files,
@@ -31,7 +31,7 @@ from app.services.scanner import (
     should_exclude,
     is_text_file,
 )
-from app.services.zip_storage import (
+from app.services.project.zip_storage import (
     save_project_zip,
     load_project_zip,
     get_project_zip_meta,
@@ -500,7 +500,7 @@ async def get_project_files(
         from sqlalchemy.future import select
         from app.core.encryption import decrypt_sensitive_data
         from app.core.config import settings
-        from app.services.git_ssh_service import GitSSHOperations
+        from app.services.project.git_ssh_service import GitSSHOperations
 
         SENSITIVE_OTHER_FIELDS = ["githubToken", "gitlabToken", "sshPrivateKey"]
 

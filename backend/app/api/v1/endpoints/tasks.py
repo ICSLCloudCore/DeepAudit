@@ -11,7 +11,7 @@ from app.db.session import get_db
 from app.models.audit import AuditTask, AuditIssue
 from app.models.project import Project
 from app.models.user import User
-from app.services.scanner import task_control
+from app.services.audit.scanner import task_control
 
 router = APIRouter()
 
@@ -240,7 +240,7 @@ async def export_task_report_pdf(
     Export task audit report as PDF.
     """
     from fastapi.responses import Response
-    from app.services.report_generator import ReportGenerator
+    from app.services.audit.report_generator import ReportGenerator
     
     # 获取任务
     result = await db.execute(

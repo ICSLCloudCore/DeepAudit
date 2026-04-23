@@ -34,7 +34,7 @@ from app.models.user import User
 from app.models.user_config import UserConfig
 from app.services.agent.event_manager import EventManager
 from app.services.agent.streaming import StreamHandler, StreamEvent, StreamEventType
-from app.services.git_ssh_service import GitSSHOperations
+from app.services.project.git_ssh_service import GitSSHOperations
 from app.core.encryption import decrypt_sensitive_data
 
 logger = logging.getLogger(__name__)
@@ -2435,7 +2435,7 @@ async def _get_project_root(
         # 🔥 ZIP 项目：解压 ZIP 文件
         check_cancelled()  # 🔥 解压前检查
         await emit(f"📦 正在解压项目文件...")
-        from app.services.zip_storage import load_project_zip
+        from app.services.project.zip_storage import load_project_zip
 
         zip_path = await load_project_zip(project.id)
 

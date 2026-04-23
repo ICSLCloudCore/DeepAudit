@@ -276,7 +276,7 @@ async def init_db(db: AsyncSession) -> None:
     
     # 初始化系统模板和规则
     try:
-        from app.services.init_templates import init_templates_and_rules
+        from app.services.core.init_templates import init_templates_and_rules
         await init_templates_and_rules(db)
     except Exception as e:
         logger.warning(f"初始化模板和规则跳过: {e}")

@@ -459,7 +459,7 @@ class GitSSHOperations:
                 raise Exception(f"克隆仓库失败: {clone_result.get('error', '')}")
 
             # 扫描目录获取文件列表
-            from app.services.scanner import is_text_file, should_exclude
+            from app.services.audit.scanner import is_text_file, should_exclude
 
             files = []
             for root, dirs, filenames in os.walk(temp_clone_dir):

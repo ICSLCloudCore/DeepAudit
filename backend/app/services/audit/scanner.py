@@ -366,7 +366,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
             extracted_gitlab_token = None
 
             # 检查是否为SSH URL
-            from app.services.git_ssh_service import GitSSHOperations
+            from app.services.project.git_ssh_service import GitSSHOperations
             is_ssh_url = GitSSHOperations.is_ssh_url(repo_url)
 
             if is_ssh_url:

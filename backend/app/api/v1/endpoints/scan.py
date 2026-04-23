@@ -21,8 +21,8 @@ from app.models.project import Project
 from app.models.analysis import InstantAnalysis
 from app.models.user_config import UserConfig
 from app.services.llm.service import LLMService
-from app.services.scanner import task_control, is_text_file, should_exclude, get_language_from_path, get_analysis_config
-from app.services.zip_storage import load_project_zip, save_project_zip, has_project_zip
+from app.services.audit.scanner import task_control, is_text_file, should_exclude, get_language_from_path, get_analysis_config
+from app.services.project.zip_storage import load_project_zip, save_project_zip, has_project_zip
 from app.core.config import settings
 
 router = APIRouter()
@@ -569,7 +569,7 @@ async def export_instant_report_pdf(
     Export instant analysis report as PDF by analysis ID.
     """
     from fastapi.responses import Response
-    from app.services.report_generator import ReportGenerator
+    from app.services.audit.report_generator import ReportGenerator
     
     # 获取即时分析记录
     result = await db.execute(

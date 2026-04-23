@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.models.security_kb import GoAttackPatternEntry, GoVulnerabilityEntry
-from app.services.insight_config_service import load_insight_config, save_insight_config
+from app.services.insight.insight_config_service import load_insight_config, save_insight_config
 from app.utils.log import logger
 
 # ─── 运行状态（进程内单例） ────────────────────────────────────────────────────

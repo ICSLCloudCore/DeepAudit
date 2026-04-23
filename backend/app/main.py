@@ -104,7 +104,8 @@ async def lifespan(app: FastAPI):
 
     # 启动安全知识库洞察调度器
     try:
-        from app.services.insight_scheduler import start_scheduler
+        from app.services.insight.insight_scheduler import start_scheduler
+
         start_scheduler()
         logger.info("  - 安全知识库洞察调度器已启动")
     except Exception as e:
@@ -114,7 +115,8 @@ async def lifespan(app: FastAPI):
 
     # 关闭洞察调度器
     try:
-        from app.services.insight_scheduler import stop_scheduler
+        from app.services.insight.insight_scheduler import stop_scheduler
+
         stop_scheduler()
     except Exception:
         pass

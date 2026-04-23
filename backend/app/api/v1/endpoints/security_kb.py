@@ -24,7 +24,7 @@ from sqlalchemy.future import select
 from app.api import deps
 from app.db.session import get_db
 from app.models.security_kb import GoAttackPatternEntry, GoVulnerabilityEntry, BusinessKbEntry
-from app.services.insight_config_service import (
+from app.services.insight.insight_config_service import (
     load_insight_config,
     save_insight_config,
     get_source_options,
@@ -1039,7 +1039,7 @@ async def run_insight_now(
 ) -> Any:
     """立即触发一次洞察执行（后台异步运行）"""
     import asyncio as _asyncio
-    from app.services.insight_runner_service import run_insight, get_insight_status
+    from app.services.insight.insight_runner_service import run_insight, get_insight_status
 
     status = get_insight_status()
     if status["running"]:
@@ -1054,7 +1054,7 @@ async def get_insight_run_status(
     current_user: Any = Depends(deps.get_current_user),
 ) -> Any:
     """获取洞察执行状态"""
-    from app.services.insight_runner_service import get_insight_status
+    from app.services.insight.insight_runner_service import get_insight_status
     return get_insight_status()
 
 
@@ -1063,7 +1063,7 @@ async def abort_insight_run(
     current_user: Any = Depends(deps.get_current_user),
 ) -> Any:
     """中止当前正在运行的洞察任务"""
-    from app.services.insight_runner_service import abort_insight
+    from app.services.insight.insight_runner_service import abort_insight
     return abort_insight()
 
 
@@ -1386,7 +1386,7 @@ async def get_business_kb_types(
     current_user: Any = Depends(deps.get_current_user),
 ) -> Any:
     """返回业务知识库类型选项（从配置文件读取）"""
-    from app.services.business_kb_type_service import load_business_kb_types
+    from app.services.project.business_kb_type_service import load_business_kb_types
     return load_business_kb_types()
 
 
