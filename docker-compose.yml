@@ -84,6 +84,7 @@ services:
         - HTTPS_PROXY=
         - all_proxy=
         - ALL_PROXY=
+        - Huawei=${Huawei:-false}
     restart: unless-stopped
     volumes:
       # - ./frontend/dist:/usr/share/nginx/html:ro  # 挂载构建产物，本地 pnpm build 后自动生效

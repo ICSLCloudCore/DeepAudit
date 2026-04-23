@@ -3,7 +3,10 @@
 # =============================================
 # 使用 Nginx 提供静态文件和反向代理 (支持 SSE 流式传输)
 
-FROM node:20-slim AS builder
+FROM docker.m.daocloud.io/library/node:20-slim AS builder
+
+# Huawei 可选配置
+ARG Huawei=false
 
 WORKDIR /app
 
@@ -17,10 +20,20 @@ ENV ALL_PROXY=""
 ENV no_proxy="*"
 ENV NO_PROXY="*"
 
-# 配置国内 npm 镜像源
-RUN npm config set registry https://registry.npmmirror.com && \
-    npm install -g pnpm && \
-    pnpm config set registry https://registry.npmmirror.com
+# 条件配置 npm 镜像源
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei npm mirror..."; \
+      npm config set registry https://mirrors.tools.huawei.com/npm && \
+      npm config set strict-ssl false && \
+      npm install -g pnpm && \
+      pnpm config set registry https://mirrors.tools.huawei.com/npm && \
+      pnpm config set strict-ssl false; \
+    else \
+      echo "Using Taobao npm mirror..."; \
+      npm config set registry https://registry.npmmirror.com && \
+      npm install -g pnpm && \
+      pnpm config set registry https://registry.npmmirror.com; \
+    fi
 
 # 复制依赖文件
 COPY package.json pnpm-lock.yaml ./
@@ -42,7 +55,7 @@ RUN pnpm build
 # =============================================
 # 生产镜像 - 使用 Nginx (支持 SSE 反向代理)
 # =============================================
-FROM nginx:alpine
+FROM docker.m.daocloud.io/library/nginx:alpine
 
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
