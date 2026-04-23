@@ -55,7 +55,7 @@ ENV UV_INDEX_URL=https://pypi.org/simple/
 
 
 # 复制依赖文件
-COPY pyproject.toml uv.lock README.md ./
+COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
 
 # 安装 Python 依赖到虚拟环境 Mr.Zhou need openai httpx
 RUN uv add openai httpx && uv sync --no-dev
@@ -134,18 +134,18 @@ RUN apt-get update && \
     && apt-get clean
 
 # 安装comment-checker
-COPY bin/comment-checker /usr/local/bin
+COPY docker/backend/bin/comment-checker /usr/local/bin
 
-# 安装cppcheck
-ADD --chown=0:0 bin/cppcheck.tar.gz /usr/local
+# 安装cppcheck（如果文件存在）
+# ADD --chown=0:0 docker/backend/bin/cppcheck.tar.gz /usr/local
 
 # 安装 gh
 ARG GH_VERSION="gh_2.89.0_linux_amd64"
-ADD --chown=0:0 bin/${GH_VERSION}.tar.gz /usr/local
+ADD --chown=0:0 docker/backend/bin/${GH_VERSION}.tar.gz /usr/local
 
 # 安装nodejs
 ARG NODE_VERSION="node-v22.22.2-linux-x64"
-ADD --chown=0:0 bin/${NODE_VERSION}.tar.xz /usr/local
+ADD --chown=0:0 docker/backend/bin/${NODE_VERSION}.tar.xz /usr/local
 
 RUN cp -r /usr/local/${NODE_VERSION}/* /usr/local/ \
     && cp -r /usr/local/${GH_VERSION}/* /usr/local/ \
@@ -183,7 +183,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 # 复制应用代码
-COPY . .
+COPY backend/ .
 
 # 创建上传目录并设置启动脚本权限
 RUN mkdir -p /app/uploads/zip_files && \
