@@ -251,7 +251,7 @@ class AgentStatePersistence:
         
         try:
             async with self.db_session_factory() as session:
-                from app.models.agent_task import AgentCheckpoint
+                from app.models.agent.agent_task import AgentCheckpoint
                 
                 checkpoint = AgentCheckpoint(
                     task_id=task_id,
@@ -296,7 +296,7 @@ class AgentStatePersistence:
         try:
             async with self.db_session_factory() as session:
                 from sqlalchemy import select
-                from app.models.agent_task import AgentCheckpoint
+                from app.models.agent.agent_task import AgentCheckpoint
                 
                 query = select(AgentCheckpoint).where(
                     AgentCheckpoint.task_id == task_id

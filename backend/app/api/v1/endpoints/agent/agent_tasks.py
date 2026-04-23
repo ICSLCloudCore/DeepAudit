@@ -24,14 +24,14 @@ from pydantic import BaseModel, Field
 
 from app.api import deps
 from app.db.session import get_db, async_session_factory
-from app.models.agent_task import (
+from app.models.agent.agent_task import (
     AgentTask, AgentEvent, AgentFinding,
     AgentTaskStatus, AgentTaskPhase, AgentEventType,
     VulnerabilitySeverity, FindingStatus,
 )
-from app.models.project import Project
-from app.models.user import User
-from app.models.user_config import UserConfig
+from app.models.project.project import Project
+from app.models.user.user import User
+from app.models.user.user_config import UserConfig
 from app.services.agent.event_manager import EventManager
 from app.services.agent.streaming import StreamHandler, StreamEvent, StreamEventType
 from app.services.project.git_ssh_service import GitSSHOperations
@@ -1174,7 +1174,7 @@ async def _save_findings(
     Returns:
         int: 实际保存的发现数量
     """
-    from app.models.agent_task import VulnerabilityType
+    from app.models.agent.agent_task import VulnerabilityType
 
     logger.info(f"[SaveFindings] Starting to save {len(findings)} findings for task {task_id}")
 
@@ -1445,7 +1445,7 @@ async def _save_agent_tree(db: AsyncSession, task_id: str) -> None:
 
     🔥 在任务完成前调用，将内存中的 Agent 树持久化到数据库
     """
-    from app.models.agent_task import AgentTreeNode
+    from app.models.agent.agent_task import AgentTreeNode
     from app.services.agent.core import agent_registry
 
     try:
@@ -2981,7 +2981,7 @@ async def get_agent_tree(
         )
     
     # 从数据库获取（已完成的任务）
-    from app.models.agent_task import AgentTreeNode
+    from app.models.agent.agent_task import AgentTreeNode
     
     result = await db.execute(
         select(AgentTreeNode)
@@ -3099,7 +3099,7 @@ async def list_checkpoints(
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
-    from app.models.agent_task import AgentCheckpoint
+    from app.models.agent.agent_task import AgentCheckpoint
     
     query = select(AgentCheckpoint).where(AgentCheckpoint.task_id == task_id)
     
@@ -3150,7 +3150,7 @@ async def get_checkpoint_detail(
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
-    from app.models.agent_task import AgentCheckpoint
+    from app.models.agent.agent_task import AgentCheckpoint
     
     checkpoint = await db.get(AgentCheckpoint, checkpoint_id)
     if not checkpoint or checkpoint.task_id != task_id:

@@ -1044,7 +1044,7 @@ Please analyze the following code:
         if db_session:
             from sqlalchemy.future import select
             from sqlalchemy.orm import selectinload
-            from app.models.prompt_template import PromptTemplate
+            from app.models.knowledge.prompt_template import PromptTemplate
             
             # 获取提示词模板
             if prompt_template_id:
@@ -1072,7 +1072,7 @@ Please analyze the following code:
             
             # 获取规则集
             if rule_set_id:
-                from app.models.audit_rule import AuditRuleSet
+                from app.models.audit.audit_rule import AuditRuleSet
                 result = await db_session.execute(
                     select(AuditRuleSet)
                     .options(selectinload(AuditRuleSet.rules))

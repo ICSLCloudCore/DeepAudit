@@ -13,13 +13,13 @@ import json
 
 from app.api import deps
 from app.db.session import get_db, AsyncSessionLocal
-from app.models.project import Project
-from app.models.user import User
-from app.models.audit import AuditTask, AuditIssue
-from app.models.agent_task import AgentTask, AgentTaskStatus, AgentFinding
-from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
-from app.models.audit_vulnerabilities import AuditVulnerability
-from app.models.user_config import UserConfig
+from app.models.project.project import Project
+from app.models.user.user import User
+from app.models.audit.audit import AuditTask, AuditIssue
+from app.models.agent.agent_task import AgentTask, AgentTaskStatus, AgentFinding
+from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+from app.models.audit.audit_vulnerabilities import AuditVulnerability
+from app.models.user.user_config import UserConfig
 import zipfile
 from app.services.audit.scanner import (
     scan_repo_task,

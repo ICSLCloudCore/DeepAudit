@@ -14,12 +14,12 @@ from typing import Dict
 
 from app.utils.log import logger
 from app.db.session import get_db
-from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
-from app.models.opencode_interaction import OpenCodeInteraction
-from app.models.opencode_message_content import OpenCodeMessageContent
-from app.models.prompt_template import PromptTemplate
-from app.models.project import Project
-from app.models.user import User
+from app.models.opencode.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+from app.models.opencode.opencode_interaction import OpenCodeInteraction
+from app.models.opencode.opencode_message_content import OpenCodeMessageContent
+from app.models.knowledge.prompt_template import PromptTemplate
+from app.models.project.project import Project
+from app.models.user.user import User
 from app.api.deps import get_current_user
 from app.schemas.opencode_session import (
     OpenCodeSessionCreate,
@@ -36,7 +36,7 @@ from app.schemas.opencode_session import (
     OpenCodeServerStatus,
 )
 from app.services.opencode.opencode_session_service import OpenCodeSessionService
-from app.models.opencode_audit_task import OpenCodeAuditTaskStatus
+from app.models.opencode.opencode_audit_task import OpenCodeAuditTaskStatus
 
 router = APIRouter()
 

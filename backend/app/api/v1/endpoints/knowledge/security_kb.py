@@ -23,13 +23,13 @@ from sqlalchemy.future import select
 
 from app.api import deps
 from app.db.session import get_db
-from app.models.security_kb import GoAttackPatternEntry, GoVulnerabilityEntry, BusinessKbEntry
+from app.models.knowledge.security_kb import GoAttackPatternEntry, GoVulnerabilityEntry, BusinessKbEntry
 from app.services.insight.insight_config_service import (
     load_insight_config,
     save_insight_config,
     get_source_options,
 )
-from app.models.user import User
+from app.models.user.user import User
 from pydantic import BaseModel
 
 from app.schemas.security_kb import (

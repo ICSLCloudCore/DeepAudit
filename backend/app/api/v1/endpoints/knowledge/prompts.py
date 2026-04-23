@@ -12,8 +12,8 @@ from sqlalchemy import func as sql_func
 
 from app.api import deps
 from app.db.session import get_db
-from app.models.prompt_template import PromptTemplate
-from app.models.user import User
+from app.models.knowledge.prompt_template import PromptTemplate
+from app.models.user.user import User
 from app.schemas.prompt_template import (
     PromptTemplateCreate,
     PromptTemplateUpdate,
@@ -282,7 +282,7 @@ async def test_prompt_template(
 ) -> Any:
     """测试提示词效果"""
     from app.services.llm.service import LLMService
-    from app.models.user_config import UserConfig
+    from app.models.user.user_config import UserConfig
     from app.core.encryption import decrypt_sensitive_data
 
     start_time = time.time()

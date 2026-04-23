@@ -7,8 +7,8 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.prompt_template import PromptTemplate
-from app.models.audit_rule import AuditRuleSet, AuditRule
+from app.models.knowledge.prompt_template import PromptTemplate
+from app.models.audit.audit_rule import AuditRuleSet, AuditRule
 
 logger = logging.getLogger(__name__)
 

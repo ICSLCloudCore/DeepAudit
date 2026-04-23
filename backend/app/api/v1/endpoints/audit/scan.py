@@ -15,11 +15,11 @@ import asyncio
 from app.api import deps
 from app.utils.log import logger
 from app.db.session import get_db, AsyncSessionLocal
-from app.models.audit import AuditTask, AuditIssue
-from app.models.user import User
-from app.models.project import Project
-from app.models.analysis import InstantAnalysis
-from app.models.user_config import UserConfig
+from app.models.audit.audit import AuditTask, AuditIssue
+from app.models.user.user import User
+from app.models.project.project import Project
+from app.models.audit.analysis import InstantAnalysis
+from app.models.user.user_config import UserConfig
 from app.services.llm.service import LLMService
 from app.services.audit.scanner import task_control, is_text_file, should_exclude, get_language_from_path, get_analysis_config
 from app.services.project.zip_storage import load_project_zip, save_project_zip, has_project_zip

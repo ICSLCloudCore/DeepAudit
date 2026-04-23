@@ -8,7 +8,7 @@ from sqlalchemy import func, or_
 from app.api import deps
 from app.core import security
 from app.db.session import get_db
-from app.models.user import User
+from app.models.user.user import User
 from app.schemas.user import User as UserSchema, UserCreate, UserUpdate, UserListResponse
 
 router = APIRouter()

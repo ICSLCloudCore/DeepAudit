@@ -10,8 +10,8 @@ from urllib.parse import urlparse, quote
 
 from app.utils.log import logger
 from app.utils.repo_utils import parse_repository_url
-from app.models.audit import AuditTask, AuditIssue
-from app.models.project import Project
+from app.models.audit.audit import AuditTask, AuditIssue
+from app.models.project.project import Project
 from app.services.llm.service import LLMService
 from app.core.config import settings
 

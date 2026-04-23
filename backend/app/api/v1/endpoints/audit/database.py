@@ -14,13 +14,13 @@ from datetime import datetime, timezone
 
 from app.api import deps
 from app.db.session import get_db
-from app.models.user import User
-from app.models.project import Project, ProjectMember
-from app.models.audit import AuditTask, AuditIssue
-from app.models.analysis import InstantAnalysis
-from app.models.user_config import UserConfig
-from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
-from app.models.audit_vulnerabilities import AuditVulnerability
+from app.models.user.user import User
+from app.models.project.project import Project, ProjectMember
+from app.models.audit.audit import AuditTask, AuditIssue
+from app.models.audit.analysis import InstantAnalysis
+from app.models.user.user_config import UserConfig
+from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+from app.models.audit.audit_vulnerabilities import AuditVulnerability
 from app.utils.log import logger
 
 router = APIRouter()

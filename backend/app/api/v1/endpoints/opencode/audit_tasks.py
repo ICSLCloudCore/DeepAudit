@@ -18,10 +18,10 @@ from uuid import uuid4
 
 from app.api import deps
 from app.db.session import get_db
-from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
-from app.models.project import Project
-from app.models.user import User
-from app.models.audit_vulnerabilities import AuditVulnerability
+from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+from app.models.project.project import Project
+from app.models.user.user import User
+from app.models.audit.audit_vulnerabilities import AuditVulnerability
 from app.services.opencode.opencode_session_service import OpenCodeSessionService
 
 router = APIRouter()

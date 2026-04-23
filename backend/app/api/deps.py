@@ -8,7 +8,7 @@ from sqlalchemy.future import select
 from app.core import security
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.user import User
+from app.models.user.user import User
 from app.schemas import token as token_schema
 
 reusable_oauth2 = OAuth2PasswordBearer(

@@ -26,14 +26,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # 禁用 httpx 的详细日志
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
-from app.models.opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType
-from app.models.opencode_message_content import OpenCodeMessageContent, OpenCodeMessageContentType
-from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
-from app.models.audit_vulnerabilities import AuditVulnerability
-from app.models.prompt_template import PromptTemplate
-from app.models.project import Project
-from app.models.user import User
+from app.models.opencode.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+from app.models.opencode.opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType
+from app.models.opencode.opencode_message_content import OpenCodeMessageContent, OpenCodeMessageContentType
+from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+from app.models.audit.audit_vulnerabilities import AuditVulnerability
+from app.models.knowledge.prompt_template import PromptTemplate
+from app.models.project.project import Project
+from app.models.user.user import User
 from app.schemas.opencode_session import OpenCodeServerStatus
 from app.db.session import AsyncSessionLocal
 
@@ -383,7 +383,7 @@ class OpenCodeSessionService:
 
     async def get_active_session(self, project: Project) -> Optional[OpenCodeSession]:
         """获取项目的活跃 OpenCodeSession"""
-        from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+        from app.models.opencode.opencode_session import OpenCodeSession, OpenCodeSessionStatus
 
         if not project.opencode_active_session_id:
             return None
@@ -817,7 +817,7 @@ class OpenCodeSessionService:
         Returns:
             如果有运行中的任务，返回该任务；否则返回 None
         """
-        from app.models.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+        from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
 
         result = await self.db.execute(
             select(OpenCodeAuditTask)
@@ -1047,7 +1047,7 @@ class OpenCodeSessionService:
         )
 
         # 保存用户发送的 prompt 到 OpenCodeMessageContent
-        from app.models.opencode_message_content import (
+        from app.models.opencode.opencode_message_content import (
             OpenCodeMessageContent,
             OpenCodeMessageContentType,
         )
@@ -1853,7 +1853,7 @@ class OpenCodeSessionService:
                     logger.info(f"[OpenCode] Cleaned up session directory: {session_dir}")
 
                 # 2. 更新 OpenCodeSession 状态为 CLOSED
-                from app.models.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+                from app.models.opencode.opencode_session import OpenCodeSession, OpenCodeSessionStatus
 
                 result = await self.db.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == session_id)

@@ -12,8 +12,8 @@ import json
 
 from app.api import deps
 from app.db.session import get_db
-from app.models.user import User
-from app.models.user_config import UserConfig
+from app.models.user.user import User
+from app.models.user.user_config import UserConfig
 from app.services.project.git_ssh_service import SSHKeyService, GitSSHOperations, clear_known_hosts
 from app.core.encryption import encrypt_sensitive_data, decrypt_sensitive_data
 

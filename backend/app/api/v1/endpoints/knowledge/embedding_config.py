@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.api import deps
-from app.models.user import User
-from app.models.user_config import UserConfig
+from app.models.user.user import User
+from app.models.user.user_config import UserConfig
 from app.core.config import settings
 from app.utils.log import logger
 

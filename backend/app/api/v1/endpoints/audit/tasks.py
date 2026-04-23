@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 
 from app.api import deps
 from app.db.session import get_db
-from app.models.audit import AuditTask, AuditIssue
-from app.models.project import Project
-from app.models.user import User
+from app.models.audit.audit import AuditTask, AuditIssue
+from app.models.project.project import Project
+from app.models.user.user import User
 from app.services.audit.scanner import task_control
 
 router = APIRouter()

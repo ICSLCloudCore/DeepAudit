@@ -8,8 +8,8 @@ from datetime import datetime
 
 from app.api import deps
 from app.db.session import get_db
-from app.models.project import Project, ProjectMember
-from app.models.user import User
+from app.models.project.project import Project, ProjectMember
+from app.models.user.user import User
 
 router = APIRouter()
 

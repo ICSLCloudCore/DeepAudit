@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.security import get_password_hash
-from app.models.user import User
-from app.models.project import Project, ProjectMember
-from app.models.audit import AuditTask, AuditIssue
-from app.models.analysis import InstantAnalysis
+from app.models.user.user import User
+from app.models.project.project import Project, ProjectMember
+from app.models.audit.audit import AuditTask, AuditIssue
+from app.models.audit.analysis import InstantAnalysis
 
 logger = logging.getLogger(__name__)
 
