@@ -28,7 +28,10 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 from app.models.opencode.opencode_session import OpenCodeSession, OpenCodeSessionStatus
 from app.models.opencode.opencode_interaction import OpenCodeInteraction, OpenCodeInteractionType
-from app.models.opencode.opencode_message_content import OpenCodeMessageContent, OpenCodeMessageContentType
+from app.models.opencode.opencode_message_content import (
+    OpenCodeMessageContent,
+    OpenCodeMessageContentType,
+)
 from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
 from app.models.audit.audit_vulnerabilities import AuditVulnerability
 from app.models.knowledge.prompt_template import PromptTemplate
@@ -472,6 +475,7 @@ class OpenCodeSessionService:
                 logger.info(f"[OpenCode] Handling ZIP source type")
                 try:
                     from app.core.config import settings
+                    from app.services.project.zip_storage import get_project_zip_password
 
                     zip_file_path = Path(settings.ZIP_STORAGE_PATH) / f"{project.id}.zip"
                     logger.info(f"[OpenCode] ZIP file path: {zip_file_path}")
@@ -479,8 +483,11 @@ class OpenCodeSessionService:
                         logger.info(f"[OpenCode] ZIP file exists, extracting...")
                         import zipfile
 
+                        zip_password = await get_project_zip_password(project.id)
+                        pwd_bytes = zip_password.encode("utf-8") if zip_password else None
+
                         with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
-                            zip_ref.extractall(extract_dir)
+                            zip_ref.extractall(extract_dir, pwd=pwd_bytes)
                         project_path = str(extract_dir)
                         logger.info(f"[OpenCode] Successfully extracted ZIP to: {project_path}")
                     else:
@@ -817,7 +824,10 @@ class OpenCodeSessionService:
         Returns:
             如果有运行中的任务，返回该任务；否则返回 None
         """
-        from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
+        from app.models.opencode.opencode_audit_task import (
+            OpenCodeAuditTask,
+            OpenCodeAuditTaskStatus,
+        )
 
         result = await self.db.execute(
             select(OpenCodeAuditTask)
@@ -1853,7 +1863,10 @@ class OpenCodeSessionService:
                     logger.info(f"[OpenCode] Cleaned up session directory: {session_dir}")
 
                 # 2. 更新 OpenCodeSession 状态为 CLOSED
-                from app.models.opencode.opencode_session import OpenCodeSession, OpenCodeSessionStatus
+                from app.models.opencode.opencode_session import (
+                    OpenCodeSession,
+                    OpenCodeSessionStatus,
+                )
 
                 result = await self.db.execute(
                     select(OpenCodeSession).where(OpenCodeSession.id == session_id)
