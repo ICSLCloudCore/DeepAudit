@@ -119,9 +119,11 @@ export default function ModelManager() {
   const handleSaveProvider = () => {
     if (!config) return
 
-    const modelList = providerForm.models.split(',')
-      .map(m => m.trim())
-      .filter(m => m)
+    const modelList = providerForm.models
+      ? providerForm.models.split(',')
+          .map(m => m.trim())
+          .filter(m => m)
+      : []
 
     const newProviders = { ...config.providers }
 
@@ -178,19 +180,22 @@ export default function ModelManager() {
   const handleSetDefaultProvider = (providerId: string) => {
     if (!config) return
     const providerConfig = config.providers[providerId]
+    const defaultModel = providerConfig?.models?.[0] || ''
     setConfig({
       ...config,
       provider: providerId,
-      model: providerConfig.models[0] || ''
+      model: defaultModel
     })
   }
 
-  const providerCount = Object.keys(config?.providers || {}).length
-  const modelCount = Object.values(config?.providers || {}).reduce(
-    (sum, p) => sum + p.models.length,
-    0
-  )
-  const currentDefaultModel = config?.model
+  const providerCount = config?.providers ? Object.keys(config.providers).length : 0
+  const modelCount = config?.providers
+    ? Object.values(config.providers).reduce(
+        (sum, p) => sum + (p.models?.length || 0),
+        0
+      )
+    : 0
+  const currentDefaultModel = config?.model && config?.provider
     ? `${config.provider}/${config.model}`
     : '未设置'
 
