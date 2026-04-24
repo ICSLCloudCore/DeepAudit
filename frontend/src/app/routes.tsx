@@ -137,6 +137,12 @@ const routes: RouteConfig[] = [
     visible: true,
   },
   {
+    name: "模型管理",
+    path: "/models",
+    element: <ModelManager />,
+    visible: true,
+  },
+  {
     name: "系统管理",
     path: "/admin",
     element: <AdminDashboard />,
@@ -153,12 +159,6 @@ const routes: RouteConfig[] = [
     path: "/account",
     element: <Account />,
     visible: false, // 不在主导航显示，在侧边栏底部单独显示
-  },
-  {
-    name: "Models",
-    path: "/models",
-    element: <ModelManager />,
-    visible: true,
   },
 ];
 
