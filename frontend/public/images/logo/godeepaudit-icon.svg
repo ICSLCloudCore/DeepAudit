@@ -9,7 +9,7 @@
 <g filter="url(#filter2_d_1884_16361)">
 <path d="M15.5 8C15.5 7.06982 16.254 6.31579 17.1842 6.31579C18.1144 6.31579 18.8684 7.06982 18.8684 8V23.5775C18.8684 24.5077 18.1144 25.2617 17.1842 25.2617C16.254 25.2617 15.5 24.5077 15.5 23.5775V8Z" fill="white" fill-opacity="0.7" shape-rendering="crispEdges"/>
 </g>
-<text x="22" y="20" font-family="JetBrains Mono, monospace" font-size="10" font-weight="bold" fill="white">G</text>
+<text x="22" y="20" font-family="Microsoft YaHei, 微软雅黑, monospace" font-size="10" font-weight="bold" fill="white">G</text>
 <defs>
 <filter id="filter0_d_1884_16361" x="4.5" y="6.2373" width="5.36841" height="20.5264" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
 <feFlood flood-opacity="0" result="BackgroundImageFix"/>

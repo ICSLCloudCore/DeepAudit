@@ -800,7 +800,7 @@
 
   /* ============ Data Display ============ */
   .data-value {
-    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+    font-family: '"Microsoft YaHei"', '"微软雅黑"', monospace;
     color: hsl(var(--secondary));
   }
 

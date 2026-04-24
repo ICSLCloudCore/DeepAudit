@@ -162,6 +162,7 @@ frontend/.svelte-kit/
 .Trashes
 ehthumbs.db
 Thumbs.db
+nul
 
 # Secrets and keys
 *.pem
