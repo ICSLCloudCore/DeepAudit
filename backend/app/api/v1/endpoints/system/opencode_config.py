@@ -1,4 +1,4 @@
-"""OpenCode 配置 API 端点"""
+"""OpenCode 配置 API 端点 - 基于实际 opencode.json 格式"""
 
 from typing import Any
 from pathlib import Path
@@ -30,27 +30,17 @@ def read_opencode_config() -> dict:
             config = json.load(f)
 
         # 只补充缺失的必需字段，不覆盖已有内容
-        if "model" not in config:
-            config["model"] = ""
+        if "$schema" not in config:
+            config["$schema"] = "https://opencode.ai/config.json"
         if "provider" not in config:
-            config["provider"] = ""
-        if "providers" not in config:
-            config["providers"] = {}
+            config["provider"] = {}
         if "mcp" not in config:
             config["mcp"] = {}
-
-        # 确保每个 provider 都有完整的结构
-        if "providers" in config:
-            for provider_id, provider_data in config["providers"].items():
-                if "models" not in provider_data:
-                    provider_data["models"] = []
-                if "api_key" not in provider_data:
-                    provider_data["api_key"] = ""
 
         return config
 
     # 返回默认配置结构
-    return {"model": "", "provider": "", "providers": {}, "mcp": {}}
+    return {"$schema": "https://opencode.ai/config.json", "provider": {}, "mcp": {}}
 
 
 def write_opencode_config(config: dict) -> None:
@@ -58,12 +48,6 @@ def write_opencode_config(config: dict) -> None:
     config_path = get_opencode_config_path()
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
-
-
-def mask_api_key(config: dict) -> dict:
-    """脱敏显示 API Key - 保持注释状态，API Key 明文显示"""
-    # 不进行脱敏，直接返回原始配置
-    return config
 
 
 @router.get("", response_model=OpenCodeConfigResponse)
@@ -83,13 +67,14 @@ async def update_config(config_in: OpenCodeConfig) -> Any:
     try:
         # 读取现有配置
         existing_config = read_opencode_config()
-        config_dict = config_in.model_dump()
+        config_dict = config_in.model_dump(by_alias=True)
 
         # 合并配置：保留所有 existing_config 的字段，只更新我们关心的字段
         merged_config = existing_config.copy()
-        merged_config["model"] = config_dict["model"]
-        merged_config["provider"] = config_dict["provider"]
-        merged_config["providers"] = config_dict["providers"]
+        if "provider" in config_dict:
+            merged_config["provider"] = config_dict["provider"]
+        if "$schema" in config_dict:
+            merged_config["$schema"] = config_dict["$schema"]
 
         # 写入配置
         write_opencode_config(merged_config)

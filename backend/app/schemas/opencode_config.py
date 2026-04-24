@@ -1,26 +1,19 @@
-"""OpenCode 配置 Schema"""
+"""
+OpenCode 配置 Schema - 基于实际 opencode.json 格式（简化版，更灵活）
+"""
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 
 
-class ProviderConfig(BaseModel):
-    """Provider 配置模型"""
-
-    api_key: str = Field(..., description="API Key")
-    base_url: Optional[str] = Field(None, description="Base URL")
-    models: List[str] = Field(default_factory=list, description="模型列表")
-
-
 class OpenCodeConfig(BaseModel):
-    """OpenCode 配置模型"""
+    """OpenCode 配置 - 使用灵活类型"""
 
-    model: str = Field(default="", description="默认模型")
-    provider: str = Field(default="", description="默认 provider")
-    providers: Dict[str, ProviderConfig] = Field(
-        default_factory=dict, description="所有 provider 配置"
-    )
-    mcp: Optional[Dict] = Field(default_factory=dict, description="MCP 配置（保留）")
+    schema_: Optional[str] = Field(None, alias="$schema", description="JSON Schema URL")
+    provider: Optional[Dict[str, Any]] = Field(None, description="所有提供商配置")
+    mcp: Optional[Dict[str, Any]] = Field(None, description="MCP 配置（保留）")
+    # 允许其他字段
+    model_config = {"extra": "allow"}
 
 
 class OpenCodeConfigResponse(BaseModel):

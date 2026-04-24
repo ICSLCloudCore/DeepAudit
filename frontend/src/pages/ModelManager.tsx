@@ -8,14 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { RefreshCw, Save, Settings, Cpu, CheckCircle2, Plus, Edit, Trash2 } from 'lucide-react'
+import { RefreshCw, Save, Settings, Cpu, Plus, Edit, Trash2, Package, Key, Globe } from 'lucide-react'
 import {
   getOpenCodeConfig,
   updateOpenCodeConfig,
   getRawOpenCodeConfig,
   updateRawOpenCodeConfig,
   type OpenCodeConfig,
-  type ProviderConfig
+  type ProviderConfig,
 } from '@/shared/api/opencodeConfig'
 
 export default function ModelManager() {
@@ -25,13 +25,25 @@ export default function ModelManager() {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('visual')
 
+  // 供应商对话框状态
   const [showProviderDialog, setShowProviderDialog] = useState(false)
-  const [editingProvider, setEditingProvider] = useState<string | null>(null)
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [providerForm, setProviderForm] = useState({
     id: '',
-    api_key: '',
-    base_url: '',
-    models: ''
+    npm: '@ai-sdk/openai-compatible',
+    name: '',
+    baseURL: '',
+    apiKey: '',
+    models: '',
+  })
+
+  // 模型对话框状态
+  const [showModelDialog, setShowModelDialog] = useState(false)
+  const [currentProviderId, setCurrentProviderId] = useState<string | null>(null)
+  const [editingModelId, setEditingModelId] = useState<string | null>(null)
+  const [modelForm, setModelForm] = useState({
+    id: '',
+    name: '',
   })
 
   const loadConfig = async () => {
@@ -39,7 +51,7 @@ export default function ModelManager() {
       setLoading(true)
       const [configRes, rawRes] = await Promise.all([
         getOpenCodeConfig(),
-        getRawOpenCodeConfig()
+        getRawOpenCodeConfig(),
       ])
 
       if (configRes.success && configRes.config) {
@@ -94,110 +106,182 @@ export default function ModelManager() {
     }
   }
 
+  // 打开添加供应商对话框
   const openAddProvider = () => {
     setProviderForm({
       id: '',
-      api_key: '',
-      base_url: '',
-      models: ''
+      npm: '@ai-sdk/openai-compatible',
+      name: '',
+      baseURL: '',
+      apiKey: '',
+      models: '',
     })
-    setEditingProvider(null)
+    setEditingProviderId(null)
     setShowProviderDialog(true)
   }
 
+  // 打开编辑供应商对话框
   const openEditProvider = (providerId: string, providerConfig: ProviderConfig) => {
+    const modelsString = providerConfig.models
+      ? Object.entries(providerConfig.models)
+          .map(([modelId, model]) => modelId)
+          .join(', ')
+      : ''
+
     setProviderForm({
       id: providerId,
-      api_key: providerConfig.api_key,
-      base_url: providerConfig.base_url || '',
-      models: providerConfig.models.join(', ')
+      npm: providerConfig.npm,
+      name: providerConfig.name,
+      baseURL: providerConfig.options?.baseURL || '',
+      apiKey: providerConfig.options?.apiKey || '',
+      models: modelsString,
     })
-    setEditingProvider(providerId)
+    setEditingProviderId(providerId)
     setShowProviderDialog(true)
   }
 
+  // 保存供应商
   const handleSaveProvider = () => {
     if (!config) return
 
-    const modelList = providerForm.models
-      ? providerForm.models.split(',')
-          .map(m => m.trim())
-          .filter(m => m)
+    // 解析模型列表
+    const modelIds = providerForm.models
+      ? providerForm.models.split(',').map((m) => m.trim()).filter((m) => m)
       : []
 
-    const newProviders = { ...config.providers }
+    const models: Record<string, { name: string }> = {}
+    modelIds.forEach((modelId) => {
+      models[modelId] = { name: modelId }
+    })
 
-    if (editingProvider && editingProvider !== providerForm.id) {
-      delete newProviders[editingProvider]
+    // 构建新的 provider
+    const newProvider: ProviderConfig = {
+      npm: providerForm.npm,
+      name: providerForm.name,
+      options: {
+        baseURL: providerForm.baseURL || undefined,
+        apiKey: providerForm.apiKey || undefined,
+      },
+      models: Object.keys(models).length > 0 ? models : undefined,
     }
 
-    newProviders[providerForm.id] = {
-      api_key: providerForm.api_key,
-      base_url: providerForm.base_url || undefined,
-      models: modelList
+    // 更新配置
+    const newProviders = { ...(config.provider || {}) }
+
+    // 如果是编辑且 ID 变了，先删除旧的
+    if (editingProviderId && editingProviderId !== providerForm.id) {
+      delete newProviders[editingProviderId]
     }
+
+    newProviders[providerForm.id] = newProvider
 
     setConfig({
       ...config,
-      providers: newProviders
+      provider: newProviders,
     })
 
     setShowProviderDialog(false)
   }
 
+  // 删除供应商
   const handleDeleteProvider = (providerId: string) => {
     if (!config) return
     if (!confirm(`确定要删除供应商 "${providerId}" 吗？`)) return
 
-    const newProviders = { ...config.providers }
+    const newProviders = { ...(config.provider || {}) }
     delete newProviders[providerId]
 
-    let newModel = config.model
-    let newProvider = config.provider
+    setConfig({
+      ...config,
+      provider: newProviders,
+    })
+  }
 
-    if (config.provider === providerId) {
-      newProvider = ''
-      newModel = ''
+  // 打开添加模型对话框
+  const openAddModel = (providerId: string) => {
+    setModelForm({
+      id: '',
+      name: '',
+    })
+    setCurrentProviderId(providerId)
+    setEditingModelId(null)
+    setShowModelDialog(true)
+  }
+
+  // 打开编辑模型对话框
+  const openEditModel = (providerId: string, modelId: string, modelName: string) => {
+    setModelForm({
+      id: modelId,
+      name: modelName,
+    })
+    setCurrentProviderId(providerId)
+    setEditingModelId(modelId)
+    setShowModelDialog(true)
+  }
+
+  // 保存模型
+  const handleSaveModel = () => {
+    if (!config || !currentProviderId) return
+
+    const providers = { ...(config.provider || {}) }
+    const providerConfig = providers[currentProviderId]
+    if (!providerConfig) return
+
+    // 确保 models 存在
+    const models = { ...(providerConfig.models || {}) }
+
+    // 如果是编辑且 ID 变了，先删除旧的
+    if (editingModelId && editingModelId !== modelForm.id) {
+      delete models[editingModelId]
+    }
+
+    models[modelForm.id] = { name: modelForm.name || modelForm.id }
+
+    // 更新
+    providers[currentProviderId] = {
+      ...providerConfig,
+      models,
     }
 
     setConfig({
       ...config,
-      provider: newProvider,
-      model: newModel,
-      providers: newProviders
+      provider: providers,
     })
+
+    setShowModelDialog(false)
   }
 
-  const handleSetDefaultModel = (providerId: string, modelName: string) => {
+  // 删除模型
+  const handleDeleteModel = (providerId: string, modelId: string) => {
     if (!config) return
+    if (!confirm(`确定要删除模型 "${modelId}" 吗？`)) return
+
+    const providers = { ...(config.provider || {}) }
+    const providerConfig = providers[providerId]
+    if (!providerConfig || !providerConfig.models) return
+
+    const newModels = { ...providerConfig.models }
+    delete newModels[modelId]
+
+    providers[providerId] = {
+      ...providerConfig,
+      models: newModels,
+    }
+
     setConfig({
       ...config,
-      provider: providerId,
-      model: modelName
+      provider: providers,
     })
   }
 
-  const handleSetDefaultProvider = (providerId: string) => {
-    if (!config) return
-    const providerConfig = config.providers[providerId]
-    const defaultModel = providerConfig?.models?.[0] || ''
-    setConfig({
-      ...config,
-      provider: providerId,
-      model: defaultModel
-    })
-  }
-
-  const providerCount = config?.providers ? Object.keys(config.providers).length : 0
-  const modelCount = config?.providers
-    ? Object.values(config.providers).reduce(
-        (sum, p) => sum + (p.models?.length || 0),
+  // 统计数据
+  const providerCount = config?.provider ? Object.keys(config.provider).length : 0
+  const modelCount = config?.provider
+    ? Object.values(config.provider).reduce(
+        (sum, p) => sum + (p.models ? Object.keys(p.models).length : 0),
         0
       )
     : 0
-  const currentDefaultModel = config?.model && config?.provider
-    ? `${config.provider}/${config.model}`
-    : '未设置'
 
   if (loading) {
     return (
@@ -214,7 +298,8 @@ export default function ModelManager() {
     <div className="space-y-6 p-6 cyber-bg-elevated min-h-screen font-mono relative">
       <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+      {/* 统计卡片 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
         <Card className="cyber-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">供应商数量</CardTitle>
@@ -232,17 +317,9 @@ export default function ModelManager() {
             <div className="text-3xl font-bold text-emerald-400">{modelCount}</div>
           </CardContent>
         </Card>
-
-        <Card className="cyber-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">当前默认模型</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-amber-400">{currentDefaultModel}</div>
-          </CardContent>
-        </Card>
       </div>
 
+      {/* 操作栏 */}
       <div className="cyber-card p-4 relative z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -290,6 +367,7 @@ export default function ModelManager() {
           </TabsTrigger>
         </TabsList>
 
+        {/* 可视化编辑 */}
         <TabsContent value="visual" className="mt-6 space-y-4">
           <div className="flex justify-end">
             <Button onClick={openAddProvider} className="cyber-btn-primary">
@@ -298,98 +376,116 @@ export default function ModelManager() {
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {Object.entries(config?.providers || {}).map(([providerId, providerConfig]) => {
-              const isDefaultProvider = config?.provider === providerId
+          <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
+            {config?.provider && Object.entries(config.provider).map(([providerId, providerConfig]) => (
+              <Card key={providerId} className="cyber-card overflow-hidden">
+                <CardHeader className="pb-3 border-b border-border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/20 rounded border border-primary/30">
+                        <Package className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">{providerConfig.name || providerId}</CardTitle>
+                        <p className="text-xs text-muted-foreground font-mono">{providerConfig.npm}</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
 
-              return (
-                <Card key={providerId} className="cyber-card overflow-hidden">
-                  <CardHeader className="pb-3 border-b border-border">
+                <CardContent className="pt-4 space-y-4">
+                  {/* 显示配置信息 */}
+                  {providerConfig.options?.baseURL && (
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-foreground font-mono truncate">{providerConfig.options.baseURL}</span>
+                    </div>
+                  )}
+                  {providerConfig.options?.apiKey && (
+                    <div className="flex items-center gap-2">
+                      <Key className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-foreground font-mono truncate">
+                        {providerConfig.options.apiKey.substring(0, 10)}...
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 模型列表 */}
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Cpu className="w-5 h-5 text-primary" />
-                        <CardTitle className="text-base">{providerId}</CardTitle>
-                      </div>
-                      {isDefaultProvider && (
-                        <Badge className="cyber-badge-success">默认供应商</Badge>
-                      )}
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="pt-4 space-y-4">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">API Key</Label>
-                      <div className="text-sm text-foreground font-mono truncate">
-                        {providerConfig.api_key}
-                      </div>
-                    </div>
-
-                    {providerConfig.base_url && (
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Base URL</Label>
-                        <div className="text-sm text-foreground font-mono truncate">
-                          {providerConfig.base_url}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground">模型列表</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {providerConfig.models.map((modelName) => {
-                          const isDefaultModel = isDefaultProvider && config?.model === modelName
-                          return (
-                            <Badge
-                              key={modelName}
-                              className={`${isDefaultModel ? 'cyber-badge-success' : 'cyber-badge-muted'} cursor-pointer`}
-                              onClick={() => handleSetDefaultModel(providerId, modelName)}
-                            >
-                              {modelName}
-                              {isDefaultModel && <CheckCircle2 className="w-3 h-3 ml-1" />}
-                            </Badge>
-                          )
-                        })}
-                        {providerConfig.models.length === 0 && (
-                          <span className="text-xs text-muted-foreground">暂无模型</span>
-                        )}
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openAddModel(providerId)}
+                        className="h-7 px-2 text-xs cyber-btn-ghost"
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        添加
+                      </Button>
                     </div>
-
-                    <div className="flex items-center gap-2 pt-2 border-t border-border">
-                      {!isDefaultProvider && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSetDefaultProvider(providerId)}
-                          className="flex-1 h-8 cyber-btn-ghost"
-                        >
-                          设为默认
-                        </Button>
+                    <div className="flex flex-wrap gap-2">
+                      {providerConfig.models &&
+                        Object.entries(providerConfig.models).map(([modelId, modelConfig]) => (
+                          <Badge
+                            key={modelId}
+                            className="cyber-badge-muted group cursor-pointer"
+                          >
+                            {modelConfig.name || modelId}
+                            <div className="ml-1 flex gap-1 opacity-0 group-hover:opacity-100">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openEditModel(providerId, modelId, modelConfig.name || modelId)
+                                }}
+                                className="hover:text-primary"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteModel(providerId, modelId)
+                                }}
+                                className="hover:text-rose-400"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </Badge>
+                        ))}
+                      {(!providerConfig.models || Object.keys(providerConfig.models).length === 0) && (
+                        <span className="text-xs text-muted-foreground">暂无模型</span>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditProvider(providerId, providerConfig)}
-                        className="flex-1 h-8 cyber-btn-ghost"
-                      >
-                        <Edit className="w-4 h-4 mr-1" />
-                        编辑
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteProvider(providerId)}
-                        className="h-8 px-2 hover:bg-rose-500/20 hover:text-rose-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
                     </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+                  </div>
 
-            {Object.keys(config?.providers || {}).length === 0 && (
+                  {/* 操作按钮 */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-border">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditProvider(providerId, providerConfig)}
+                      className="flex-1 h-8 cyber-btn-ghost"
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      编辑
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteProvider(providerId)}
+                      className="h-8 px-2 hover:bg-rose-500/20 hover:text-rose-400"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {/* 无供应商提示 */}
+            {(!config?.provider || Object.keys(config.provider).length === 0) && (
               <div className="col-span-full cyber-card p-12">
                 <div className="empty-state">
                   <Cpu className="empty-state-icon" />
@@ -405,6 +501,7 @@ export default function ModelManager() {
           </div>
         </TabsContent>
 
+        {/* 原始 JSON 编辑 */}
         <TabsContent value="raw" className="mt-6">
           <Card className="cyber-card">
             <CardContent className="pt-6">
@@ -419,6 +516,7 @@ export default function ModelManager() {
         </TabsContent>
       </Tabs>
 
+      {/* 供应商对话框 */}
       <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
         <DialogContent className="!w-[min(90vw,600px)] !max-w-none cyber-dialog border border-border rounded-lg">
           <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
@@ -428,7 +526,7 @@ export default function ModelManager() {
               </div>
               <div>
                 <span className="text-base font-bold uppercase tracking-wider">
-                  {editingProvider ? '编辑供应商' : '添加供应商'}
+                  {editingProviderId ? '编辑供应商' : '添加供应商'}
                 </span>
               </div>
             </DialogTitle>
@@ -440,18 +538,28 @@ export default function ModelManager() {
               <Input
                 value={providerForm.id}
                 onChange={(e) => setProviderForm({ ...providerForm, id: e.target.value })}
-                placeholder="例如: openai, anthropic, qwen"
+                placeholder="例如: openai, anthropic, llt"
                 className="cyber-input"
-                disabled={!!editingProvider}
+                disabled={!!editingProviderId}
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase">API Key *</Label>
+              <Label className="text-xs font-bold text-muted-foreground uppercase">显示名称 *</Label>
               <Input
-                value={providerForm.api_key}
-                onChange={(e) => setProviderForm({ ...providerForm, api_key: e.target.value })}
-                placeholder="输入 API Key"
+                value={providerForm.name}
+                onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
+                placeholder="例如: OpenAI, Anthropic"
+                className="cyber-input"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase">SDK 包 *</Label>
+              <Input
+                value={providerForm.npm}
+                onChange={(e) => setProviderForm({ ...providerForm, npm: e.target.value })}
+                placeholder="@ai-sdk/openai-compatible 或 @ai-sdk/openai"
                 className="cyber-input"
               />
             </div>
@@ -459,9 +567,20 @@ export default function ModelManager() {
             <div className="space-y-2">
               <Label className="text-xs font-bold text-muted-foreground uppercase">Base URL</Label>
               <Input
-                value={providerForm.base_url}
-                onChange={(e) => setProviderForm({ ...providerForm, base_url: e.target.value })}
-                placeholder="例如: https://api.openai.com/v1"
+                value={providerForm.baseURL}
+                onChange={(e) => setProviderForm({ ...providerForm, baseURL: e.target.value })}
+                placeholder="https://api.openai.com/v1"
+                className="cyber-input"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase">API Key</Label>
+              <Input
+                value={providerForm.apiKey}
+                onChange={(e) => setProviderForm({ ...providerForm, apiKey: e.target.value })}
+                placeholder="sk-..."
+                type="password"
                 className="cyber-input"
               />
             </div>
@@ -471,7 +590,7 @@ export default function ModelManager() {
               <Input
                 value={providerForm.models}
                 onChange={(e) => setProviderForm({ ...providerForm, models: e.target.value })}
-                placeholder="例如: gpt-4, gpt-3.5-turbo, gpt-4o"
+                placeholder="gpt-4, gpt-3.5-turbo, gpt-4o"
                 className="cyber-input"
               />
             </div>
@@ -482,7 +601,57 @@ export default function ModelManager() {
               取消
             </Button>
             <Button onClick={handleSaveProvider} className="cyber-btn-primary">
-              {editingProvider ? '更新' : '添加'}
+              {editingProviderId ? '更新' : '添加'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 模型对话框 */}
+      <Dialog open={showModelDialog} onOpenChange={setShowModelDialog}>
+        <DialogContent className="!w-[min(90vw,500px)] !max-w-none cyber-dialog border border-border rounded-lg">
+          <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
+            <DialogTitle className="flex items-center gap-3 font-mono text-foreground">
+              <div className="p-2 bg-primary/20 rounded border border-primary/30">
+                <Cpu className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <span className="text-base font-bold uppercase tracking-wider">
+                  {editingModelId ? '编辑模型' : '添加模型'}
+                </span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase">模型 ID *</Label>
+              <Input
+                value={modelForm.id}
+                onChange={(e) => setModelForm({ ...modelForm, id: e.target.value })}
+                placeholder="例如: gpt-4o"
+                className="cyber-input"
+                disabled={!!editingModelId}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase">显示名称</Label>
+              <Input
+                value={modelForm.name}
+                onChange={(e) => setModelForm({ ...modelForm, name: e.target.value })}
+                placeholder="例如: GPT-4o"
+                className="cyber-input"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+            <Button variant="outline" onClick={() => setShowModelDialog(false)} className="cyber-btn-outline">
+              取消
+            </Button>
+            <Button onClick={handleSaveModel} className="cyber-btn-primary">
+              {editingModelId ? '更新' : '添加'}
             </Button>
           </DialogFooter>
         </DialogContent>
