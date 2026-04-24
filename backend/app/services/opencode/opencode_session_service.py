@@ -1344,7 +1344,7 @@ class OpenCodeSessionService:
 
                     # 通知 SSE 流停止，避免继续轮询数据库
                     try:
-                        from app.api.v1.endpoints.opencode_sessions import stop_session_stream
+                        from app.api.v1.endpoints.opencode.sessions import stop_session_stream
 
                         stop_session_stream(db_session_id)
                         logger.info(
@@ -1382,7 +1382,7 @@ class OpenCodeSessionService:
             finally:
                 # 即使出错也要通知 SSE 流停止
                 try:
-                    from app.api.v1.endpoints.opencode_sessions import stop_session_stream
+                    from app.api.v1.endpoints.opencode.sessions import stop_session_stream
 
                     stop_session_stream(db_session_id)
                     logger.info(
