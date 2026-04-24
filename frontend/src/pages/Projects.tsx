@@ -83,10 +83,12 @@ export default function Projects() {
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [zipPassword, setZipPassword] = useState<string>("");
 
   // 编辑对话框中的ZIP文件状态
   const [editZipInfo, setEditZipInfo] = useState<ZipFileMeta | null>(null);
   const [editZipFile, setEditZipFile] = useState<File | null>(null);
+  const [editZipPassword, setEditZipPassword] = useState<string>("");
   const [loadingEditZipInfo, setLoadingEditZipInfo] = useState(false);
   const editZipInputRef = useRef<HTMLInputElement>(null);
 
@@ -177,6 +179,7 @@ export default function Projects() {
       programming_languages: []
     });
     setSelectedFile(null);
+    setZipPassword("");
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -229,7 +232,7 @@ export default function Projects() {
       } as any);
 
       try {
-        await uploadZipFile(project.id, selectedFile);
+        await uploadZipFile(project.id, selectedFile, zipPassword || undefined);
       } catch (error) {
         console.error('保存ZIP文件失败:', error);
       }
@@ -331,7 +334,7 @@ export default function Projects() {
       await api.updateProject(projectToEdit.id, editForm);
 
       if (editZipFile && editForm.source_type === 'zip') {
-        const result = await uploadZipFile(projectToEdit.id, editZipFile);
+        const result = await uploadZipFile(projectToEdit.id, editZipFile, editZipPassword || undefined);
         if (result.success) {
           toast.success(`ZIP文件已更新: ${result.original_filename}`);
         } else {
@@ -343,6 +346,7 @@ export default function Projects() {
       setShowEditDialog(false);
       setProjectToEdit(null);
       setEditZipFile(null);
+      setEditZipPassword("");
       setEditZipInfo(null);
       loadProjects();
     } catch (error) {
@@ -699,6 +703,23 @@ export default function Projects() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
+                    </div>
+                  )}
+
+                  {selectedFile && (
+                    <div className="space-y-2">
+                      <Label htmlFor="zip-password" className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                        ZIP 密码 (可选)
+                      </Label>
+                      <Input
+                        id="zip-password"
+                        type="password"
+                        value={zipPassword}
+                        onChange={(e) => setZipPassword(e.target.value)}
+                        placeholder="如果ZIP有密码，请输入..."
+                        className="cyber-input"
+                        disabled={uploading}
+                      />
                     </div>
                   )}
 
@@ -1139,22 +1160,38 @@ export default function Projects() {
                   />
 
                   {editZipFile ? (
-                    <div className="flex items-center justify-between p-3 bg-sky-500/10 border border-sky-500/30 rounded">
-                      <div className="flex items-center space-x-2">
-                        <FileText className="w-4 h-4 text-sky-400" />
-                        <span className="text-sm font-mono font-bold text-sky-300">{editZipFile.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          ({(editZipFile.size / 1024 / 1024).toFixed(2)} MB)
-                        </span>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-sky-500/10 border border-sky-500/30 rounded">
+                        <div className="flex items-center space-x-2">
+                          <FileText className="w-4 h-4 text-sky-400" />
+                          <span className="text-sm font-mono font-bold text-sky-300">{editZipFile.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({(editZipFile.size / 1024 / 1024).toFixed(2)} MB)
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditZipFile(null)}
+                          className="cyber-btn-ghost h-7 text-xs"
+                        >
+                          取消
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditZipFile(null)}
-                        className="cyber-btn-ghost h-7 text-xs"
-                      >
-                        取消
-                      </Button>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-zip-password" className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                          ZIP 密码 (可选)
+                        </Label>
+                        <Input
+                          id="edit-zip-password"
+                          type="password"
+                          value={editZipPassword}
+                          onChange={(e) => setEditZipPassword(e.target.value)}
+                          placeholder="如果ZIP有密码，请输入..."
+                          className="cyber-input"
+                        />
+                      </div>
                     </div>
                   ) : (
                     <Button

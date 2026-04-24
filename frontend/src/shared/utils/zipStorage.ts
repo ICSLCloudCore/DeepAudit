@@ -28,14 +28,17 @@ export async function getZipFileInfo(projectId: string): Promise<ZipFileMeta> {
 /**
  * 上传项目ZIP文件
  */
-export async function uploadZipFile(projectId: string, file: File): Promise<{
-  success: boolean;
-  message?: string;
-  original_filename?: string;
-  file_size?: number;
+export async function uploadZipFile(projectId: string, file: File, password?: string): Promise<{
+    success: boolean;
+    message?: string;
+    original_filename?: string;
+    file_size?: number;
 }> {
-  const formData = new FormData();
-  formData.append('file', file);
+    const formData = new FormData();
+    formData.append('file', file);
+    if (password) {
+        formData.append('password', password);
+    }
 
   try {
     const response = await apiClient.post(`/projects/${projectId}/zip`, formData, {

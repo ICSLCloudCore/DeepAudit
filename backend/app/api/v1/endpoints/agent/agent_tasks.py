@@ -25,9 +25,14 @@ from pydantic import BaseModel, Field
 from app.api import deps
 from app.db.session import get_db, async_session_factory
 from app.models.agent.agent_task import (
-    AgentTask, AgentEvent, AgentFinding,
-    AgentTaskStatus, AgentTaskPhase, AgentEventType,
-    VulnerabilitySeverity, FindingStatus,
+    AgentTask,
+    AgentEvent,
+    AgentFinding,
+    AgentTaskStatus,
+    AgentTaskPhase,
+    AgentEventType,
+    VulnerabilitySeverity,
+    FindingStatus,
 )
 from app.models.project.project import Project
 from app.models.user.user import User
@@ -49,35 +54,35 @@ _running_asyncio_tasks: Dict[str, asyncio.Task] = {}
 
 # ============ Schemas ============
 
+
 class AgentTaskCreate(BaseModel):
     """创建 Agent 任务请求"""
+
     project_id: str = Field(..., description="项目 ID")
     name: Optional[str] = Field(None, description="任务名称")
     description: Optional[str] = Field(None, description="任务描述")
-    
+
     # 审计配置
     audit_scope: Optional[dict] = Field(None, description="审计范围")
     target_vulnerabilities: Optional[List[str]] = Field(
         default=["sql_injection", "xss", "command_injection", "path_traversal", "ssrf"],
-        description="目标漏洞类型"
+        description="目标漏洞类型",
     )
     verification_level: str = Field(
-        "sandbox", 
-        description="验证级别: analysis_only, sandbox, generate_poc"
+        "sandbox", description="验证级别: analysis_only, sandbox, generate_poc"
     )
-    
+
     # 分支
     branch_name: Optional[str] = Field(None, description="分支名称")
-    
+
     # 排除模式
     exclude_patterns: Optional[List[str]] = Field(
-        default=["node_modules", "__pycache__", ".git", "*.min.js"],
-        description="排除模式"
+        default=["node_modules", "__pycache__", ".git", "*.min.js"], description="排除模式"
     )
-    
+
     # 文件范围
     target_files: Optional[List[str]] = Field(None, description="指定扫描的文件")
-    
+
     # Agent 配置
     max_iterations: int = Field(50, ge=1, le=200, description="最大迭代次数")
     timeout_seconds: int = Field(1800, ge=60, le=7200, description="超时时间（秒）")
@@ -85,6 +90,7 @@ class AgentTaskCreate(BaseModel):
 
 class AgentTaskResponse(BaseModel):
     """Agent 任务响应 - 包含所有前端需要的字段"""
+
     id: str
     project_id: str
     name: Optional[str]
@@ -93,59 +99,60 @@ class AgentTaskResponse(BaseModel):
     status: str
     current_phase: Optional[str]
     current_step: Optional[str] = None
-    
+
     # 进度统计
     total_files: int = 0
     indexed_files: int = 0
     analyzed_files: int = 0
     total_chunks: int = 0
-    
+
     # Agent 统计
     total_iterations: int = 0
     tool_calls_count: int = 0
     tokens_used: int = 0
-    
+
     # 发现统计（兼容两种命名）
     findings_count: int = 0
     total_findings: int = 0  # 兼容字段
     verified_count: int = 0
     verified_findings: int = 0  # 兼容字段
     false_positive_count: int = 0
-    
+
     # 严重程度统计
     critical_count: int = 0
     high_count: int = 0
     medium_count: int = 0
     low_count: int = 0
-    
+
     # 评分
     quality_score: float = 0.0
     security_score: Optional[float] = None
-    
+
     # 进度百分比
     progress_percentage: float = 0.0
-    
+
     # 时间
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    
+
     # 配置
     audit_scope: Optional[dict] = None
     target_vulnerabilities: Optional[List[str]] = None
     verification_level: Optional[str] = None
     exclude_patterns: Optional[List[str]] = None
     target_files: Optional[List[str]] = None
-    
+
     # 错误信息
     error_message: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
 
 class AgentEventResponse(BaseModel):
     """Agent 事件响应"""
+
     id: str
     task_id: str
     event_type: str
@@ -177,6 +184,7 @@ class AgentEventResponse(BaseModel):
 
 class AgentFindingResponse(BaseModel):
     """Agent 发现响应"""
+
     id: str
     task_id: str
     vulnerability_type: str
@@ -187,17 +195,17 @@ class AgentFindingResponse(BaseModel):
     line_start: Optional[int]
     line_end: Optional[int]
     code_snippet: Optional[str]
-    
+
     is_verified: bool
     # 🔥 FIX: Map from ai_confidence in ORM, make Optional with default
     confidence: Optional[float] = Field(default=0.5, validation_alias="ai_confidence")
     status: str
-    
+
     suggestion: Optional[str] = None
     poc: Optional[dict] = None
-    
+
     created_at: datetime
-    
+
     model_config = {
         "from_attributes": True,
         "populate_by_name": True,  # Allow both 'confidence' and 'ai_confidence'
@@ -206,16 +214,17 @@ class AgentFindingResponse(BaseModel):
 
 class TaskSummaryResponse(BaseModel):
     """任务摘要响应"""
+
     task_id: str
     status: str
     security_score: Optional[int]
-    
+
     total_findings: int
     verified_findings: int
-    
+
     severity_distribution: Dict[str, int]
     vulnerability_types: Dict[str, int]
-    
+
     duration_seconds: Optional[int]
     phases_completed: List[str]
 
@@ -238,26 +247,34 @@ def is_task_cancelled(task_id: str) -> bool:
 async def _execute_agent_task(task_id: str):
     """
     在后台执行 Agent 任务 - 使用动态 Agent 树架构
-    
+
     架构：OrchestratorAgent 作为大脑，动态调度子 Agent
     """
-    from app.services.agent.agents import OrchestratorAgent, ReconAgent, AnalysisAgent, VerificationAgent
+    from app.services.agent.agents import (
+        OrchestratorAgent,
+        ReconAgent,
+        AnalysisAgent,
+        VerificationAgent,
+    )
     from app.services.agent.event_manager import EventManager, AgentEventEmitter
     from app.services.llm.service import LLMService
     from app.services.agent.core import agent_registry
     from app.services.agent.tools import SandboxManager
     from app.core.config import settings
     import time
-    
+
     # 🔥 在任务最开始就初始化 Docker 沙箱管理器
     # 这样可以确保整个任务生命周期内使用同一个管理器，并且尽早发现 Docker 问题
     logger.info(f"🚀 Starting execution for task {task_id}")
     sandbox_manager = SandboxManager()
     await sandbox_manager.initialize()
-    logger.info(f"🐳 Global Sandbox Manager initialized (Available: {sandbox_manager.is_available})")
+    logger.info(
+        f"🐳 Global Sandbox Manager initialized (Available: {sandbox_manager.is_available})"
+    )
 
     # 🔥 提前创建事件管理器，以便在克隆仓库和索引时发送实时日志
     from app.services.agent.event_manager import EventManager, AgentEventEmitter
+
     event_manager = EventManager(db_session_factory=async_session_factory)
     event_manager.create_queue(task_id)
     event_emitter = AgentEventEmitter(task_id, event_manager)
@@ -293,16 +310,16 @@ async def _execute_agent_task(task_id: str):
             user_config = await _get_user_config(db, task.created_by)
 
             # 从用户配置中提取 token和SSH密钥（用于私有仓库克隆）
-            other_config = (user_config or {}).get('otherConfig', {})
-            github_token = other_config.get('githubToken') or settings.GITHUB_TOKEN
-            gitlab_token = other_config.get('gitlabToken') or settings.GITLAB_TOKEN
-            gitea_token = other_config.get('giteaToken') or settings.GITEA_TOKEN
+            other_config = (user_config or {}).get("otherConfig", {})
+            github_token = other_config.get("githubToken") or settings.GITHUB_TOKEN
+            gitlab_token = other_config.get("gitlabToken") or settings.GITLAB_TOKEN
+            gitea_token = other_config.get("giteaToken") or settings.GITEA_TOKEN
 
             # 解密SSH私钥
             ssh_private_key = None
-            if 'sshPrivateKey' in other_config:
+            if "sshPrivateKey" in other_config:
                 try:
-                    encrypted_key = other_config['sshPrivateKey']
+                    encrypted_key = other_config["sshPrivateKey"]
                     ssh_private_key = decrypt_sensitive_data(encrypted_key)
                     logger.info("成功解密SSH私钥")
                 except Exception as e:
@@ -332,25 +349,25 @@ async def _execute_agent_task(task_id: str):
                     if not os.path.exists(os.path.join(project_root, tf)):
                         all_exist = False
                         break
-                
+
                 if not all_exist:
                     logger.info(f"Target files path mismatch detected in {project_root}")
                     # 尝试通过路径匹配来修复
                     # 获取当前根目录的名称
                     root_name = os.path.basename(project_root)
-                    
+
                     new_target_files = []
                     fixed_count = 0
-                    
+
                     for tf in task.target_files:
                         # 检查文件是否以 root_name 开头（例如 "PHP-Project/index.php" 而 root 是 ".../PHP-Project"）
                         if tf.startswith(root_name + "/"):
-                            fixed_path = tf[len(root_name)+1:]
+                            fixed_path = tf[len(root_name) + 1 :]
                             if os.path.exists(os.path.join(project_root, fixed_path)):
                                 new_target_files.append(fixed_path)
                                 fixed_count += 1
                                 continue
-                        
+
                         # 如果上面的没匹配，尝试暴力搜索（只针对未找到的文件）
                         # 这种情况比较少见，先保留原样或标记为丢失
                         if os.path.exists(os.path.join(project_root, tf)):
@@ -364,12 +381,14 @@ async def _execute_agent_task(task_id: str):
                             else:
                                 # 实在找不到，保留原样，让后续流程报错或忽略
                                 new_target_files.append(tf)
-                    
+
                     if fixed_count > 0:
                         logger.info(f"🔧 Auto-fixed {fixed_count} target file paths")
-                        await event_emitter.emit_info(f"🔧 自动修正了 {fixed_count} 个目标文件的路径")
+                        await event_emitter.emit_info(
+                            f"🔧 自动修正了 {fixed_count} 个目标文件的路径"
+                        )
                         task.target_files = new_target_files
-                        
+
             # 🔥 重新验证修正后的文件
             valid_target_files = []
             if task.target_files:
@@ -378,13 +397,17 @@ async def _execute_agent_task(task_id: str):
                         valid_target_files.append(tf)
                     else:
                         logger.warning(f"⚠️ Target file not found: {tf}")
-                
+
                 if not valid_target_files:
                     logger.warning("❌ No valid target files found after adjustment!")
-                    await event_emitter.emit_warning("⚠️ 警告：无法找到指定的目标文件，将扫描所有文件")
+                    await event_emitter.emit_warning(
+                        "⚠️ 警告：无法找到指定的目标文件，将扫描所有文件"
+                    )
                     task.target_files = None  # 回退到全量扫描
                 elif len(valid_target_files) < len(task.target_files):
-                    logger.warning(f"⚠️ Partial target files missing. Found {len(valid_target_files)}/{len(task.target_files)}")
+                    logger.warning(
+                        f"⚠️ Partial target files missing. Found {len(valid_target_files)}/{len(task.target_files)}"
+                    )
                     task.target_files = valid_target_files
 
             logger.info(f"🚀 Task {task_id} started with Dynamic Agent Tree architecture")
@@ -462,29 +485,30 @@ async def _execute_agent_task(task_id: str):
             _running_orchestrators[task_id] = orchestrator
             _running_tasks[task_id] = orchestrator  # 兼容旧的取消逻辑
             _running_event_managers[task_id] = event_manager  # 用于 SSE 流
-            
+
             # 🔥 清理旧的 Agent 注册表，避免显示多个树
             from app.services.agent.core import agent_registry
+
             agent_registry.clear()
-            
+
             # 注册 Orchestrator 到 Agent Registry（使用其内置方法）
             orchestrator._register_to_registry(task="Root orchestrator for security audit")
-            
+
             await event_emitter.emit_info("🧠 动态 Agent 树架构启动")
             await event_emitter.emit_info(f"📁 项目路径: {project_root}")
-            
+
             # 收集项目信息 - 传递排除模式和目标文件
             project_info = await _collect_project_info(
-                project_root, 
+                project_root,
                 project.name,
                 exclude_patterns=task.exclude_patterns,
                 target_files=task.target_files,
             )
-            
+
             # 更新任务文件统计
             task.total_files = project_info.get("file_count", 0)
             await db.commit()
-            
+
             # 构建输入数据
             input_data = {
                 "project_info": project_info,
@@ -498,45 +522,55 @@ async def _execute_agent_task(task_id: str):
                 "project_root": project_root,
                 "task_id": task_id,
             }
-            
+
             # 执行 Orchestrator
-            await event_emitter.emit_phase_start("orchestration", "🎯 Orchestrator 开始编排审计流程")
+            await event_emitter.emit_phase_start(
+                "orchestration", "🎯 Orchestrator 开始编排审计流程"
+            )
             task.current_phase = AgentTaskPhase.ANALYSIS
             await db.commit()
-            
+
             # 🔥 将 orchestrator.run() 包装在 asyncio.Task 中，以便可以强制取消
             run_task = asyncio.create_task(orchestrator.run(input_data))
             _running_asyncio_tasks[task_id] = run_task
-            
+
             try:
                 result = await run_task
             finally:
                 _running_asyncio_tasks.pop(task_id, None)
-            
+
             # 处理结果
             duration_ms = int((time.time() - start_time) * 1000)
-            
+
             await db.refresh(task)
-            
+
             if result.success:
                 # 🔥 CRITICAL FIX: Log and save findings with detailed debugging
                 findings = result.data.get("findings", [])
-                logger.info(f"[AgentTask] Task {task_id} completed with {len(findings)} findings from Orchestrator")
+                logger.info(
+                    f"[AgentTask] Task {task_id} completed with {len(findings)} findings from Orchestrator"
+                )
 
                 # 🔥 Debug: Log each finding for verification
                 for i, f in enumerate(findings[:5]):  # Log first 5
                     if isinstance(f, dict):
-                        logger.debug(f"[AgentTask] Finding {i+1}: {f.get('title', 'N/A')[:50]} - {f.get('severity', 'N/A')}")
+                        logger.debug(
+                            f"[AgentTask] Finding {i + 1}: {f.get('title', 'N/A')[:50]} - {f.get('severity', 'N/A')}"
+                        )
 
                 # 🔥 v2.1: 传递 project_root 用于文件路径验证
                 saved_count = await _save_findings(db, task_id, findings, project_root=project_root)
-                logger.info(f"[AgentTask] Saved {saved_count}/{len(findings)} findings (filtered {len(findings) - saved_count} hallucinations)")
+                logger.info(
+                    f"[AgentTask] Saved {saved_count}/{len(findings)} findings (filtered {len(findings) - saved_count} hallucinations)"
+                )
 
                 # 更新任务统计
                 # 🔥 CRITICAL FIX: 在设置完成前再次检查取消状态
                 # 避免 "取消后后端继续运行并最终标记为完成" 的问题
                 if is_task_cancelled(task_id):
-                    logger.info(f"[AgentTask] Task {task_id} was cancelled, overriding success result")
+                    logger.info(
+                        f"[AgentTask] Task {task_id} was cancelled, overriding success result"
+                    )
                     task.status = AgentTaskStatus.CANCELLED
                 else:
                     task.status = AgentTaskStatus.COMPLETED
@@ -549,9 +583,9 @@ async def _execute_agent_task(task_id: str):
                 tool_calls_count = result.tool_calls
                 tokens_used = result.tokens_used
 
-                if hasattr(orchestrator, 'sub_agents'):
+                if hasattr(orchestrator, "sub_agents"):
                     for agent in orchestrator.sub_agents.values():
-                        if hasattr(agent, 'get_stats'):
+                        if hasattr(agent, "get_stats"):
                             sub_stats = agent.get_stats()
                             total_iterations += sub_stats.get("iterations", 0)
                             tool_calls_count += sub_stats.get("tool_calls", 0)
@@ -569,7 +603,11 @@ async def _execute_agent_task(task_id: str):
                 files_with_findings_set = set()
                 for f in findings:
                     if isinstance(f, dict):
-                        file_path = f.get("file_path") or f.get("file") or f.get("location", "").split(":")[0]
+                        file_path = (
+                            f.get("file_path")
+                            or f.get("file")
+                            or f.get("location", "").split(":")[0]
+                        )
                         if file_path:
                             files_with_findings_set.add(file_path)
                 task.files_with_findings = len(files_with_findings_set)
@@ -591,21 +629,23 @@ async def _execute_agent_task(task_id: str):
                         if f.get("is_verified") or f.get("verdict") == "confirmed":
                             verified_count += 1
                 task.verified_count = verified_count
-                
+
                 # 计算安全评分
                 task.security_score = _calculate_security_score(findings)
                 task.quality_score = _calculate_security_score(findings)
                 # 🔥 注意: progress_percentage 是计算属性，不需要手动设置
                 # 当 status = COMPLETED 时会自动返回 100.0
-                
+
                 await db.commit()
-                
+
                 await event_emitter.emit_task_complete(
                     findings_count=len(findings),
                     duration_ms=duration_ms,
                 )
-                
-                logger.info(f"✅ Task {task_id} completed: {len(findings)} findings, {duration_ms}ms")
+
+                logger.info(
+                    f"✅ Task {task_id} completed: {len(findings)} findings, {duration_ms}ms"
+                )
             else:
                 # 🔥 检查是否是取消导致的失败
                 if result.error == "任务已取消":
@@ -620,10 +660,10 @@ async def _execute_agent_task(task_id: str):
                     task.error_message = result.error or "Unknown error"
                     task.completed_at = datetime.now(timezone.utc)
                     await db.commit()
-                    
+
                     await event_emitter.emit_error(result.error or "Unknown error")
                     logger.error(f"❌ Task {task_id} failed: {result.error}")
-            
+
         except asyncio.CancelledError:
             logger.info(f"Task {task_id} cancelled")
             try:
@@ -634,10 +674,10 @@ async def _execute_agent_task(task_id: str):
                     await db.commit()
             except Exception:
                 pass
-                
+
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
-            
+
             try:
                 task = await db.get(AgentTask, task_id)
                 if task:
@@ -647,7 +687,7 @@ async def _execute_agent_task(task_id: str):
                     await db.commit()
             except Exception as db_error:
                 logger.error(f"Failed to update task status: {db_error}")
-        
+
         finally:
             # 🔥 在清理之前保存 Agent 树到数据库
             try:
@@ -673,32 +713,31 @@ async def _get_user_config(db: AsyncSession, user_id: Optional[str]) -> Optional
     """获取用户配置"""
     if not user_id:
         return None
-    
+
     try:
         from app.api.v1.endpoints.config import (
-            decrypt_config, 
-            SENSITIVE_LLM_FIELDS, SENSITIVE_OTHER_FIELDS
+            decrypt_config,
+            SENSITIVE_LLM_FIELDS,
+            SENSITIVE_OTHER_FIELDS,
         )
-        
-        result = await db.execute(
-            select(UserConfig).where(UserConfig.user_id == user_id)
-        )
+
+        result = await db.execute(select(UserConfig).where(UserConfig.user_id == user_id))
         config = result.scalar_one_or_none()
-        
+
         if config and config.llm_config:
             user_llm_config = json.loads(config.llm_config) if config.llm_config else {}
             user_other_config = json.loads(config.other_config) if config.other_config else {}
-            
+
             user_llm_config = decrypt_config(user_llm_config, SENSITIVE_LLM_FIELDS)
             user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
-            
+
             return {
                 "llmConfig": user_llm_config,
                 "otherConfig": user_other_config,
             }
     except Exception as e:
         logger.warning(f"Failed to get user config: {e}")
-    
+
     return None
 
 
@@ -706,7 +745,7 @@ async def _initialize_tools(
     project_root: str,
     llm_service,
     user_config: Optional[Dict[str, Any]],
-    sandbox_manager: Any, # 传递预初始化的 SandboxManager
+    sandbox_manager: Any,  # 传递预初始化的 SandboxManager
     exclude_patterns: Optional[List[str]] = None,
     target_files: Optional[List[str]] = None,
     project_id: Optional[str] = None,  # 🔥 用于 RAG collection_name
@@ -727,20 +766,33 @@ async def _initialize_tools(
         task_id: 任务 ID（用于取消检查）
     """
     from app.services.agent.tools import (
-        FileReadTool, FileSearchTool, ListFilesTool,
-        PatternMatchTool, CodeAnalysisTool, DataFlowAnalysisTool,
-        SemgrepTool, BanditTool, GitleaksTool,
-        NpmAuditTool, SafetyTool, TruffleHogTool, OSVScannerTool,  # 🔥 Added missing tools
-        ThinkTool, ReflectTool,
+        FileReadTool,
+        FileSearchTool,
+        ListFilesTool,
+        PatternMatchTool,
+        CodeAnalysisTool,
+        DataFlowAnalysisTool,
+        SemgrepTool,
+        BanditTool,
+        GitleaksTool,
+        NpmAuditTool,
+        SafetyTool,
+        TruffleHogTool,
+        OSVScannerTool,  # 🔥 Added missing tools
+        ThinkTool,
+        ReflectTool,
         CreateVulnerabilityReportTool,
         VulnerabilityValidationTool,
         # 🔥 RAG 工具
-        RAGQueryTool, SecurityCodeSearchTool, FunctionContextTool,
+        RAGQueryTool,
+        SecurityCodeSearchTool,
+        FunctionContextTool,
     )
     from app.services.agent.knowledge import (
         SecurityKnowledgeQueryTool,
         GetVulnerabilityKnowledgeTool,
     )
+
     # 🔥 RAG 相关导入
     from app.services.rag import CodeIndexer, CodeRetriever, EmbeddingService, IndexUpdateMode
     from app.core.config import settings
@@ -764,42 +816,42 @@ async def _initialize_tools(
         await emit(f"🔍 正在初始化 RAG 系统...")
 
         # 从用户配置中获取 embedding 配置
-        user_llm_config = (user_config or {}).get('llmConfig', {})
-        user_other_config = (user_config or {}).get('otherConfig', {})
-        user_embedding_config = user_other_config.get('embedding_config', {})
+        user_llm_config = (user_config or {}).get("llmConfig", {})
+        user_other_config = (user_config or {}).get("otherConfig", {})
+        user_embedding_config = user_other_config.get("embedding_config", {})
 
         # Embedding Provider 优先级：用户嵌入配置 > 环境变量
-        embedding_provider = (
-            user_embedding_config.get('provider') or
-            getattr(settings, 'EMBEDDING_PROVIDER', 'openai')
+        embedding_provider = user_embedding_config.get("provider") or getattr(
+            settings, "EMBEDDING_PROVIDER", "openai"
         )
 
         # Embedding Model 优先级：用户嵌入配置 > 环境变量
-        embedding_model = (
-            user_embedding_config.get('model') or
-            getattr(settings, 'EMBEDDING_MODEL', 'text-embedding-3-small')
+        embedding_model = user_embedding_config.get("model") or getattr(
+            settings, "EMBEDDING_MODEL", "text-embedding-3-small"
         )
 
         # API Key 优先级：用户嵌入配置 > 环境变量 EMBEDDING_API_KEY > 用户 LLM 配置 > 环境变量 LLM_API_KEY
         # 注意：API Key 可以共享，因为很多用户使用同一个 OpenAI Key 做 LLM 和 Embedding
         embedding_api_key = (
-            user_embedding_config.get('api_key') or
-            getattr(settings, 'EMBEDDING_API_KEY', None) or
-            user_llm_config.get('llmApiKey') or
-            getattr(settings, 'LLM_API_KEY', '') or
-            ''
+            user_embedding_config.get("api_key")
+            or getattr(settings, "EMBEDDING_API_KEY", None)
+            or user_llm_config.get("llmApiKey")
+            or getattr(settings, "LLM_API_KEY", "")
+            or ""
         )
 
         # Base URL 优先级：用户嵌入配置 > 环境变量 EMBEDDING_BASE_URL > None（使用提供商默认地址）
         # 🔥 重要：Base URL 不应该回退到 LLM 的 base_url，因为 Embedding 和 LLM 可能使用完全不同的服务
         # 例如：LLM 使用 SiliconFlow，但 Embedding 使用 HuggingFace
         embedding_base_url = (
-            user_embedding_config.get('base_url') or
-            getattr(settings, 'EMBEDDING_BASE_URL', None) or
-            None
+            user_embedding_config.get("base_url")
+            or getattr(settings, "EMBEDDING_BASE_URL", None)
+            or None
         )
 
-        logger.info(f"RAG 配置: provider={embedding_provider}, model={embedding_model}, base_url={embedding_base_url or '(使用默认)'}")
+        logger.info(
+            f"RAG 配置: provider={embedding_provider}, model={embedding_model}, base_url={embedding_base_url or '(使用默认)'}"
+        )
         await emit(f"📊 Embedding 配置: {embedding_provider}/{embedding_model}")
 
         # 创建 Embedding 服务
@@ -810,7 +862,7 @@ async def _initialize_tools(
             base_url=embedding_base_url,
         )
         # 使用用户配置的 batch_size
-        embedding_service.batch_size = user_embedding_config.get('batch_size', 100)
+        embedding_service.batch_size = user_embedding_config.get("batch_size", 100)
 
         # 创建 collection_name（基于 project_id）
         collection_name = f"project_{project_id}" if project_id else "default_project"
@@ -868,7 +920,10 @@ async def _initialize_tools(
 
             index_progress = progress
             # 每处理 10 个文件或有重要变化时发送进度更新
-            if progress.processed_files - last_progress_update >= 10 or progress.processed_files == progress.total_files:
+            if (
+                progress.processed_files - last_progress_update >= 10
+                or progress.processed_files == progress.total_files
+            ):
                 if progress.total_files > 0:
                     await emit(
                         f"📝 索引进度: {progress.processed_files}/{progress.total_files} 文件 "
@@ -908,6 +963,7 @@ async def _initialize_tools(
         logger.warning(f"⚠️ RAG 系统初始化失败: {e}")
         await emit(f"⚠️ RAG 系统初始化失败: {e}", "warning")
         import traceback
+
         logger.debug(f"RAG 初始化异常详情:\n{traceback.format_exc()}")
         retriever = None
 
@@ -919,7 +975,7 @@ async def _initialize_tools(
         "think": ThinkTool(),
         "reflect": ReflectTool(),
     }
-    
+
     # Recon 工具
     recon_tools = {
         **base_tools,
@@ -937,11 +993,11 @@ async def _initialize_tools(
     if retriever:
         recon_tools["rag_query"] = RAGQueryTool(retriever)
         logger.info("✅ RAG 工具 (rag_query) 已注册到 Recon Agent")
-    
+
     # Analysis 工具
     # 🔥 导入智能扫描工具
     from app.services.agent.tools import SmartScanTool, QuickAuditTool
-    
+
     analysis_tools = {
         **base_tools,
         # 🔥 智能扫描工具（推荐首先使用）
@@ -969,23 +1025,38 @@ async def _initialize_tools(
         analysis_tools["rag_query"] = RAGQueryTool(retriever)
         analysis_tools["security_search"] = SecurityCodeSearchTool(retriever)
         analysis_tools["function_context"] = FunctionContextTool(retriever)
-        logger.info("✅ RAG 工具 (rag_query, security_search, function_context) 已注册到 Analysis Agent")
+        logger.info(
+            "✅ RAG 工具 (rag_query, security_search, function_context) 已注册到 Analysis Agent"
+        )
     else:
         logger.warning("⚠️ RAG 未初始化，rag_query/security_search/function_context 工具不可用")
-    
+
     # Verification 工具
     # 🔥 导入沙箱工具
     from app.services.agent.tools import (
-        SandboxTool, SandboxHttpTool, VulnerabilityVerifyTool,
+        SandboxTool,
+        SandboxHttpTool,
+        VulnerabilityVerifyTool,
         # 多语言代码测试工具
-        PhpTestTool, PythonTestTool, JavaScriptTestTool, JavaTestTool,
-        GoTestTool, RubyTestTool, ShellTestTool, UniversalCodeTestTool,
+        PhpTestTool,
+        PythonTestTool,
+        JavaScriptTestTool,
+        JavaTestTool,
+        GoTestTool,
+        RubyTestTool,
+        ShellTestTool,
+        UniversalCodeTestTool,
         # 漏洞验证专用工具
-        CommandInjectionTestTool, SqlInjectionTestTool, XssTestTool,
-        PathTraversalTestTool, SstiTestTool, DeserializationTestTool,
+        CommandInjectionTestTool,
+        SqlInjectionTestTool,
+        XssTestTool,
+        PathTraversalTestTool,
+        SstiTestTool,
+        DeserializationTestTool,
         UniversalVulnTestTool,
         # 🔥 新增：通用代码执行工具 (LLM 驱动的 Fuzzing Harness)
-        RunCodeTool, ExtractFunctionTool,
+        RunCodeTool,
+        ExtractFunctionTool,
     )
 
     verification_tools = {
@@ -994,7 +1065,6 @@ async def _initialize_tools(
         "sandbox_exec": SandboxTool(sandbox_manager),
         "sandbox_http": SandboxHttpTool(sandbox_manager),
         "verify_vulnerability": VulnerabilityVerifyTool(sandbox_manager),
-
         # 🔥 多语言代码测试工具
         "php_test": PhpTestTool(sandbox_manager, project_root),
         "python_test": PythonTestTool(sandbox_manager, project_root),
@@ -1004,7 +1074,6 @@ async def _initialize_tools(
         "ruby_test": RubyTestTool(sandbox_manager, project_root),
         "shell_test": ShellTestTool(sandbox_manager, project_root),
         "universal_code_test": UniversalCodeTestTool(sandbox_manager, project_root),
-
         # 🔥 漏洞验证专用工具
         "test_command_injection": CommandInjectionTestTool(sandbox_manager, project_root),
         "test_sql_injection": SqlInjectionTestTool(sandbox_manager, project_root),
@@ -1013,21 +1082,19 @@ async def _initialize_tools(
         "test_ssti": SstiTestTool(sandbox_manager, project_root),
         "test_deserialization": DeserializationTestTool(sandbox_manager, project_root),
         "universal_vuln_test": UniversalVulnTestTool(sandbox_manager, project_root),
-
         # 🔥 新增：通用代码执行工具 (LLM 驱动的 Fuzzing Harness)
         "run_code": RunCodeTool(sandbox_manager, project_root),
         "extract_function": ExtractFunctionTool(project_root),
-
         # 报告工具 - 🔥 v2.1: 传递 project_root 用于文件验证
         "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
     }
-    
+
     # Orchestrator 工具（主要是思考工具）
     orchestrator_tools = {
         "think": ThinkTool(),
         "reflect": ReflectTool(),
     }
-    
+
     return {
         "recon": recon_tools,
         "analysis": analysis_tools,
@@ -1037,24 +1104,24 @@ async def _initialize_tools(
 
 
 async def _collect_project_info(
-    project_root: str, 
+    project_root: str,
     project_name: str,
     exclude_patterns: Optional[List[str]] = None,
     target_files: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """收集项目信息
-    
+
     Args:
         project_root: 项目根目录
         project_name: 项目名称
         exclude_patterns: 排除模式列表
         target_files: 目标文件列表
-    
+
     🔥 重要：当指定了 target_files 时，返回的项目结构应该只包含目标文件相关的信息，
     以确保 Orchestrator 和子 Agent 看到的是一致的、过滤后的视图。
     """
     import fnmatch
-    
+
     info = {
         "name": project_name,
         "root": project_root,
@@ -1062,14 +1129,22 @@ async def _collect_project_info(
         "file_count": 0,
         "structure": {},
     }
-    
+
     try:
         # 默认排除目录
         exclude_dirs = {
-            "node_modules", "__pycache__", ".git", "venv", ".venv",
-            "build", "dist", "target", ".idea", ".vscode",
+            "node_modules",
+            "__pycache__",
+            ".git",
+            "venv",
+            ".venv",
+            "build",
+            "dist",
+            "target",
+            ".idea",
+            ".vscode",
         }
-        
+
         # 从用户配置的排除模式中提取目录
         if exclude_patterns:
             for pattern in exclude_patterns:
@@ -1077,30 +1152,37 @@ async def _collect_project_info(
                     exclude_dirs.add(pattern[:-3])
                 elif "/" not in pattern and "*" not in pattern:
                     exclude_dirs.add(pattern)
-        
+
         # 目标文件集合
         target_files_set = set(target_files) if target_files else None
-        
+
         lang_map = {
-            ".py": "Python", ".js": "JavaScript", ".ts": "TypeScript",
-            ".java": "Java", ".go": "Go", ".php": "PHP",
-            ".rb": "Ruby", ".rs": "Rust", ".c": "C", ".cpp": "C++",
+            ".py": "Python",
+            ".js": "JavaScript",
+            ".ts": "TypeScript",
+            ".java": "Java",
+            ".go": "Go",
+            ".php": "PHP",
+            ".rb": "Ruby",
+            ".rs": "Rust",
+            ".c": "C",
+            ".cpp": "C++",
         }
-        
+
         # 🔥 收集过滤后的文件列表
         filtered_files = []
         filtered_dirs = set()
-        
+
         for root, dirs, files in os.walk(project_root):
             dirs[:] = [d for d in dirs if d not in exclude_dirs]
-            
+
             for f in files:
                 relative_path = os.path.relpath(os.path.join(root, f), project_root)
-                
+
                 # 检查是否在目标文件列表中
                 if target_files_set and relative_path not in target_files_set:
                     continue
-                
+
                 # 检查排除模式
                 should_skip = False
                 if exclude_patterns:
@@ -1110,22 +1192,22 @@ async def _collect_project_info(
                             break
                 if should_skip:
                     continue
-                
+
                 info["file_count"] += 1
                 filtered_files.append(relative_path)
-                
+
                 # 🔥 收集文件所在的目录
                 dir_path = os.path.dirname(relative_path)
                 if dir_path:
                     # 添加目录及其父目录
                     parts = dir_path.split(os.sep)
                     for i in range(len(parts)):
-                        filtered_dirs.add(os.sep.join(parts[:i+1]))
-                
+                        filtered_dirs.add(os.sep.join(parts[: i + 1]))
+
                 ext = os.path.splitext(f)[1].lower()
                 if ext in lang_map and lang_map[ext] not in info["languages"]:
                     info["languages"].append(lang_map[ext])
-        
+
         # 🔥 根据是否有目标文件限制，生成不同的结构信息
         if target_files_set:
             # 当指定了目标文件时，只显示目标文件和相关目录
@@ -1140,16 +1222,22 @@ async def _collect_project_info(
             try:
                 top_items = os.listdir(project_root)
                 info["structure"] = {
-                    "directories": [d for d in top_items if os.path.isdir(os.path.join(project_root, d)) and d not in exclude_dirs],
-                    "files": [f for f in top_items if os.path.isfile(os.path.join(project_root, f))][:20],
+                    "directories": [
+                        d
+                        for d in top_items
+                        if os.path.isdir(os.path.join(project_root, d)) and d not in exclude_dirs
+                    ],
+                    "files": [
+                        f for f in top_items if os.path.isfile(os.path.join(project_root, f))
+                    ][:20],
                     "scope_limited": False,
                 }
             except Exception:
                 pass
-            
+
     except Exception as e:
         logger.warning(f"Failed to collect project info: {e}")
-    
+
     return info
 
 
@@ -1222,21 +1310,25 @@ async def _save_findings(
 
         try:
             # 🔥 Handle severity (case-insensitive, support multiple field names)
-            raw_severity = str(
-                finding.get("severity") or
-                finding.get("risk") or
-                "medium"
-            ).lower().strip()
+            raw_severity = (
+                str(finding.get("severity") or finding.get("risk") or "medium").lower().strip()
+            )
             severity_enum = severity_map.get(raw_severity, VulnerabilitySeverity.MEDIUM)
 
             # 🔥 Handle vulnerability type (case-insensitive & snake_case normalization)
             # Support multiple field names: vulnerability_type, type, vuln_type
-            raw_type = str(
-                finding.get("vulnerability_type") or
-                finding.get("type") or
-                finding.get("vuln_type") or
-                "other"
-            ).lower().strip().replace(" ", "_").replace("-", "_")
+            raw_type = (
+                str(
+                    finding.get("vulnerability_type")
+                    or finding.get("type")
+                    or finding.get("vuln_type")
+                    or "other"
+                )
+                .lower()
+                .strip()
+                .replace(" ", "_")
+                .replace("-", "_")
+            )
 
             type_enum = type_map.get(raw_type, VulnerabilityType.OTHER)
 
@@ -1262,15 +1354,19 @@ async def _save_findings(
 
             # 🔥 Handle file path (support multiple field names)
             file_path = (
-                finding.get("file_path") or
-                finding.get("file") or
-                finding.get("location", "").split(":")[0] if ":" in finding.get("location", "") else finding.get("location")
+                finding.get("file_path")
+                or finding.get("file")
+                or finding.get("location", "").split(":")[0]
+                if ":" in finding.get("location", "")
+                else finding.get("location")
             )
 
             # 🔥 v2.1: 文件路径验证 - 过滤幻觉发现
             if project_root and file_path:
                 # 清理路径（移除可能的行号）
-                clean_path = file_path.split(":")[0].strip() if ":" in file_path else file_path.strip()
+                clean_path = (
+                    file_path.split(":")[0].strip() if ":" in file_path else file_path.strip()
+                )
                 full_path = os.path.join(project_root, clean_path)
 
                 if not os.path.isfile(full_path):
@@ -1294,9 +1390,7 @@ async def _save_findings(
 
             # 🔥 Handle code snippet (support multiple field names)
             code_snippet = (
-                finding.get("code_snippet") or
-                finding.get("code") or
-                finding.get("vulnerable_code")
+                finding.get("code_snippet") or finding.get("code") or finding.get("vulnerable_code")
             )
 
             # 🔥 Handle title (generate from type if not provided)
@@ -1311,19 +1405,19 @@ async def _save_findings(
 
             # 🔥 Handle description (support multiple field names)
             description = (
-                finding.get("description") or
-                finding.get("details") or
-                finding.get("explanation") or
-                finding.get("impact") or
-                ""
+                finding.get("description")
+                or finding.get("details")
+                or finding.get("explanation")
+                or finding.get("impact")
+                or ""
             )
 
             # 🔥 Handle suggestion/recommendation
             suggestion = (
-                finding.get("suggestion") or
-                finding.get("recommendation") or
-                finding.get("remediation") or
-                finding.get("fix")
+                finding.get("suggestion")
+                or finding.get("recommendation")
+                or finding.get("remediation")
+                or finding.get("fix")
             )
 
             # 🔥 Handle confidence (map to ai_confidence field in model)
@@ -1401,6 +1495,7 @@ async def _save_findings(
         except Exception as e:
             logger.warning(f"Failed to save finding: {e}, data: {finding}")
             import traceback
+
             logger.debug(f"[SaveFindings] Traceback: {traceback.format_exc()}")
 
     logger.info(f"Successfully prepared {saved_count} findings for commit")
@@ -1481,7 +1576,7 @@ async def _save_agent_tree(db: AsyncSession, task_id: str) -> None:
             tool_calls = 0
             tokens_used = 0
 
-            if agent_instance and hasattr(agent_instance, 'get_stats'):
+            if agent_instance and hasattr(agent_instance, "get_stats"):
                 stats = agent_instance.get_stats()
                 iterations = stats.get("iterations", 0)
                 tool_calls = stats.get("tool_calls", 0)
@@ -1527,6 +1622,7 @@ async def _save_agent_tree(db: AsyncSession, task_id: str) -> None:
 
 # ============ API Endpoints ============
 
+
 @router.post("/", response_model=AgentTaskResponse)
 async def create_agent_task(
     request: AgentTaskCreate,
@@ -1541,10 +1637,10 @@ async def create_agent_task(
     project = await db.get(Project, request.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
+
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此项目")
-    
+
     # 创建任务
     task = AgentTask(
         id=str(uuid4()),
@@ -1562,16 +1658,16 @@ async def create_agent_task(
         timeout_seconds=request.timeout_seconds or 1800,
         created_by=current_user.id,
     )
-    
+
     db.add(task)
     await db.commit()
     await db.refresh(task)
-    
+
     # 在后台启动任务（项目根目录在任务内部获取）
     background_tasks.add_task(_execute_agent_task, task.id)
-    
+
     logger.info(f"Created agent task {task.id} for project {project.name}")
-    
+
     return task
 
 
@@ -1592,29 +1688,29 @@ async def list_agent_tasks(
         select(Project.id).where(Project.owner_id == current_user.id)
     )
     user_project_ids = [p[0] for p in projects_result.fetchall()]
-    
+
     if not user_project_ids:
         return []
-    
+
     # 构建查询
     query = select(AgentTask).where(AgentTask.project_id.in_(user_project_ids))
-    
+
     if project_id:
         query = query.where(AgentTask.project_id == project_id)
-    
+
     if status:
         try:
             status_enum = AgentTaskStatus(status)
             query = query.where(AgentTask.status == status_enum)
         except ValueError:
             pass
-    
+
     query = query.order_by(AgentTask.created_at.desc())
     query = query.offset(skip).limit(limit)
-    
+
     result = await db.execute(query)
     tasks = result.scalars().all()
-    
+
     return tasks
 
 
@@ -1630,28 +1726,28 @@ async def get_agent_task(
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     # 检查权限
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     # 构建响应，确保所有字段都包含
     try:
         # 计算进度百分比
         progress = 0.0
-        if hasattr(task, 'progress_percentage'):
+        if hasattr(task, "progress_percentage"):
             progress = task.progress_percentage
         elif task.status == AgentTaskStatus.COMPLETED:
             progress = 100.0
         elif task.status in [AgentTaskStatus.FAILED, AgentTaskStatus.CANCELLED]:
             progress = 0.0
-        
+
         # 🔥 从运行中的 Orchestrator 获取实时统计
         total_iterations = task.total_iterations or 0
         tool_calls_count = task.tool_calls_count or 0
         tokens_used = task.tokens_used or 0
-        
+
         orchestrator = _running_orchestrators.get(task_id)
         if orchestrator and task.status == AgentTaskStatus.RUNNING:
             # 从 Orchestrator 获取统计
@@ -1659,16 +1755,16 @@ async def get_agent_task(
             total_iterations = stats.get("iterations", 0)
             tool_calls_count = stats.get("tool_calls", 0)
             tokens_used = stats.get("tokens_used", 0)
-            
+
             # 累加子 Agent 的统计
-            if hasattr(orchestrator, 'sub_agents'):
+            if hasattr(orchestrator, "sub_agents"):
                 for agent in orchestrator.sub_agents.values():
-                    if hasattr(agent, 'get_stats'):
+                    if hasattr(agent, "get_stats"):
                         sub_stats = agent.get_stats()
                         total_iterations += sub_stats.get("iterations", 0)
                         tool_calls_count += sub_stats.get("tool_calls", 0)
                         tokens_used += sub_stats.get("tokens_used", 0)
-        
+
         # 手动构建响应数据
         response_data = {
             "id": task.id,
@@ -1696,7 +1792,9 @@ async def get_agent_task(
             "medium_count": task.medium_count or 0,
             "low_count": task.low_count or 0,
             "quality_score": float(task.quality_score or 0.0),
-            "security_score": float(task.security_score) if task.security_score is not None else None,
+            "security_score": float(task.security_score)
+            if task.security_score is not None
+            else None,
             "progress_percentage": progress,
             "created_at": task.created_at,
             "started_at": task.started_at,
@@ -1708,7 +1806,7 @@ async def get_agent_task(
             "exclude_patterns": task.exclude_patterns,
             "target_files": task.target_files,
         }
-        
+
         return AgentTaskResponse(**response_data)
     except Exception as e:
         logger.error(f"Error serializing task {task_id}: {e}", exc_info=True)
@@ -1732,7 +1830,11 @@ async def cancel_agent_task(
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权操作此任务")
 
-    if task.status in [AgentTaskStatus.COMPLETED, AgentTaskStatus.FAILED, AgentTaskStatus.CANCELLED]:
+    if task.status in [
+        AgentTaskStatus.COMPLETED,
+        AgentTaskStatus.FAILED,
+        AgentTaskStatus.CANCELLED,
+    ]:
         raise HTTPException(status_code=400, detail="任务已结束，无法取消")
 
     # 🔥 0. 立即标记任务为已取消（用于前置操作的取消检查）
@@ -1748,6 +1850,7 @@ async def cancel_agent_task(
     # 🔥 2. 通过 agent_registry 取消所有子 Agent
     from app.services.agent.core import agent_registry
     from app.services.agent.core.graph_controller import stop_all_agents
+
     try:
         # 停止所有 Agent（包括子 Agent）
         stop_result = stop_all_agents(exclude_root=False)
@@ -1783,18 +1886,18 @@ async def stream_agent_events(
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     async def event_generator():
         """生成 SSE 事件流"""
         last_sequence = after_sequence
         poll_interval = 0.5
         max_idle = 300  # 5 分钟无事件后关闭
         idle_time = 0
-        
+
         while True:
             # 查询新事件
             async with async_session_factory() as session:
@@ -1806,11 +1909,11 @@ async def stream_agent_events(
                     .limit(50)
                 )
                 events = result.scalars().all()
-                
+
                 # 获取任务状态
                 current_task = await session.get(AgentTask, task_id)
                 task_status = current_task.status if current_task else None
-            
+
             if events:
                 idle_time = 0
                 for event in events:
@@ -1818,7 +1921,7 @@ async def stream_agent_events(
                     # event_type 已经是字符串，不需要 .value
                     event_type_str = str(event.event_type)
                     phase_str = str(event.phase) if event.phase else None
-                    
+
                     data = {
                         "id": event.id,
                         "type": event_type_str,
@@ -1832,7 +1935,7 @@ async def stream_agent_events(
                     yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
             else:
                 idle_time += poll_interval
-            
+
             # 检查任务是否结束
             if task_status:
                 # task_status 可能是字符串或枚举，统一转换为字符串
@@ -1840,14 +1943,14 @@ async def stream_agent_events(
                 if status_str in ["completed", "failed", "cancelled"]:
                     yield f"data: {json.dumps({'type': 'task_end', 'status': status_str})}\n\n"
                     break
-            
+
             # 检查空闲超时
             if idle_time >= max_idle:
                 yield f"data: {json.dumps({'type': 'timeout'})}\n\n"
                 break
-            
+
             await asyncio.sleep(poll_interval)
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
@@ -1855,7 +1958,7 @@ async def stream_agent_events(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -1870,40 +1973,40 @@ async def stream_agent_with_thinking(
 ):
     """
     增强版事件流 (SSE)
-    
+
     支持:
     - LLM 思考过程的 Token 级流式输出 (仅运行时)
     - 工具调用的详细输入/输出
     - 节点执行状态
     - 发现事件
-    
+
     优先使用内存中的事件队列 (支持 thinking_token)，
     如果任务未在运行，则回退到数据库轮询 (不支持 thinking_token 复盘)。
     """
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     # 定义 SSE 格式化函数
     def format_sse_event(event_data: Dict[str, Any]) -> str:
         """格式化为 SSE 事件"""
         event_type = event_data.get("event_type") or event_data.get("type")
-        
+
         # 统一字段
         if "type" not in event_data:
             event_data["type"] = event_type
-            
+
         return f"event: {event_type}\ndata: {json.dumps(event_data, ensure_ascii=False)}\n\n"
 
     async def enhanced_event_generator():
         """生成增强版 SSE 事件流"""
         # 1. 检查任务是否在运行中 (内存)
         event_manager = _running_event_managers.get(task_id)
-        
+
         if event_manager:
             logger.debug(f"Stream {task_id}: Using in-memory event manager")
             try:
@@ -1913,33 +2016,37 @@ async def stream_agent_with_thinking(
                 if not include_thinking:
                     skip_types.update(["thinking_start", "thinking_token", "thinking_end"])
                 if not include_tool_calls:
-                    skip_types.update(["tool_call_start", "tool_call_input", "tool_call_output", "tool_call_end"])
-                
-                async for event in event_manager.stream_events(task_id, after_sequence=after_sequence):
+                    skip_types.update(
+                        ["tool_call_start", "tool_call_input", "tool_call_output", "tool_call_end"]
+                    )
+
+                async for event in event_manager.stream_events(
+                    task_id, after_sequence=after_sequence
+                ):
                     event_type = event.get("event_type")
-                    
+
                     if event_type in skip_types:
                         continue
-                    
+
                     # 🔥 Debug: 记录 thinking_token 事件
                     if event_type == "thinking_token":
                         token = event.get("metadata", {}).get("token", "")[:20]
                         logger.debug(f"Stream {task_id}: Sending thinking_token: '{token}...'")
-                        
+
                     # 格式化并 yield
                     yield format_sse_event(event)
-                    
+
                     # 🔥 CRITICAL: 为 thinking_token 添加微小延迟
                     # 确保事件在不同的 TCP 包中发送，让前端能够逐个处理
                     # 没有这个延迟，所有 token 会在一次 read() 中被接收，导致 React 批量更新
                     if event_type == "thinking_token":
                         await asyncio.sleep(0.01)  # 10ms 延迟
-                    
+
             except Exception as e:
                 logger.error(f"In-memory stream error: {e}")
                 err_data = {"type": "error", "message": str(e)}
                 yield format_sse_event(err_data)
-                
+
         else:
             logger.debug(f"Stream {task_id}: Task not running, falling back to DB polling")
             # 2. 回退到数据库轮询 (无法获取 thinking_token)
@@ -1949,11 +2056,11 @@ async def stream_agent_with_thinking(
             max_idle = 60  # 1分钟无事件关闭
             idle_time = 0
             last_heartbeat = 0
-            
+
             skip_types = set()
             if not include_thinking:
                 skip_types.update(["thinking_start", "thinking_token", "thinking_end"])
-            
+
             while True:
                 try:
                     async with async_session_factory() as session:
@@ -1966,20 +2073,20 @@ async def stream_agent_with_thinking(
                             .limit(100)
                         )
                         events = result.scalars().all()
-                        
+
                         # 获取任务状态
                         current_task = await session.get(AgentTask, task_id)
                         task_status = current_task.status if current_task else None
-                    
+
                     if events:
                         idle_time = 0
                         for event in events:
                             last_sequence = event.sequence
                             event_type = str(event.event_type)
-                            
+
                             if event_type in skip_types:
                                 continue
-                            
+
                             # 构建数据
                             data = {
                                 "id": event.id,
@@ -1987,9 +2094,11 @@ async def stream_agent_with_thinking(
                                 "phase": str(event.phase) if event.phase else None,
                                 "message": event.message,
                                 "sequence": event.sequence,
-                                "timestamp": event.created_at.isoformat() if event.created_at else None,
+                                "timestamp": event.created_at.isoformat()
+                                if event.created_at
+                                else None,
                             }
-                            
+
                             # 添加详情
                             if include_tool_calls and event.tool_name:
                                 data["tool"] = {
@@ -1998,17 +2107,17 @@ async def stream_agent_with_thinking(
                                     "output": event.tool_output,
                                     "duration_ms": event.tool_duration_ms,
                                 }
-                                
+
                             if event.event_metadata:
                                 data["metadata"] = event.event_metadata
-                                
+
                             if event.tokens_used:
                                 data["tokens_used"] = event.tokens_used
-                            
+
                             yield format_sse_event(data)
                     else:
                         idle_time += poll_interval
-                        
+
                         # 检查是否应该结束
                         if task_status:
                             status_str = str(task_status)
@@ -2017,28 +2126,33 @@ async def stream_agent_with_thinking(
                                 end_data = {
                                     "type": "task_end",
                                     "status": status_str,
-                                    "message": f"任务已{status_str}"
+                                    "message": f"任务已{status_str}",
                                 }
                                 yield format_sse_event(end_data)
                                 break
-                    
+
                     # 心跳
                     last_heartbeat += poll_interval
                     if last_heartbeat >= heartbeat_interval:
                         last_heartbeat = 0
-                        yield format_sse_event({"type": "heartbeat", "timestamp": datetime.now(timezone.utc).isoformat()})
-                    
+                        yield format_sse_event(
+                            {
+                                "type": "heartbeat",
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            }
+                        )
+
                     # 超时
                     if idle_time >= max_idle:
                         break
-                    
+
                     await asyncio.sleep(poll_interval)
-                    
+
                 except Exception as e:
                     logger.error(f"DB poll stream error: {e}")
                     yield format_sse_event({"type": "error", "message": str(e)})
                     break
-    
+
     return StreamingResponse(
         enhanced_event_generator(),
         media_type="text/event-stream",
@@ -2047,7 +2161,7 @@ async def stream_agent_with_thinking(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
             "Content-Type": "text/event-stream; charset=utf-8",
-        }
+        },
     )
 
 
@@ -2080,11 +2194,17 @@ async def list_agent_events(
     events = result.scalars().all()
 
     # 🔥 Debug logging
-    logger.debug(f"[EventsList] Task {task_id}: returning {len(events)} events (after_sequence={after_sequence})")
+    logger.debug(
+        f"[EventsList] Task {task_id}: returning {len(events)} events (after_sequence={after_sequence})"
+    )
     if events:
-        logger.debug(f"[EventsList] First event: type={events[0].event_type}, seq={events[0].sequence}")
+        logger.debug(
+            f"[EventsList] First event: type={events[0].event_type}, seq={events[0].sequence}"
+        )
         if len(events) > 1:
-            logger.debug(f"[EventsList] Last event: type={events[-1].event_type}, seq={events[-1].sequence}")
+            logger.debug(
+                f"[EventsList] Last event: type={events[-1].event_type}, seq={events[-1].sequence}"
+            )
 
     return events
 
@@ -2105,23 +2225,23 @@ async def list_agent_findings(
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     query = select(AgentFinding).where(AgentFinding.task_id == task_id)
-    
+
     if severity:
         try:
             sev_enum = VulnerabilitySeverity(severity)
             query = query.where(AgentFinding.severity == sev_enum)
         except ValueError:
             pass
-    
+
     if verified_only:
         query = query.where(AgentFinding.is_verified == True)
-    
+
     # 按严重程度排序
     severity_order = {
         VulnerabilitySeverity.CRITICAL: 0,
@@ -2130,13 +2250,13 @@ async def list_agent_findings(
         VulnerabilitySeverity.LOW: 3,
         VulnerabilitySeverity.INFO: 4,
     }
-    
+
     query = query.order_by(AgentFinding.severity, AgentFinding.created_at.desc())
     query = query.offset(skip).limit(limit)
-    
+
     result = await db.execute(query)
     findings = result.scalars().all()
-    
+
     return findings
 
 
@@ -2152,38 +2272,36 @@ async def get_task_summary(
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     # 获取所有发现
-    result = await db.execute(
-        select(AgentFinding).where(AgentFinding.task_id == task_id)
-    )
+    result = await db.execute(select(AgentFinding).where(AgentFinding.task_id == task_id))
     findings = result.scalars().all()
-    
+
     # 统计
     severity_distribution = {}
     vulnerability_types = {}
     verified_count = 0
-    
+
     for f in findings:
         # severity 和 vulnerability_type 已经是字符串
         sev = str(f.severity)
         vtype = str(f.vulnerability_type)
-        
+
         severity_distribution[sev] = severity_distribution.get(sev, 0) + 1
         vulnerability_types[vtype] = vulnerability_types.get(vtype, 0) + 1
-        
+
         if f.is_verified:
             verified_count += 1
-    
+
     # 计算持续时间
     duration = None
     if task.started_at and task.completed_at:
         duration = int((task.completed_at - task.started_at).total_seconds())
-    
+
     # 获取已完成的阶段
     phases_result = await db.execute(
         select(AgentEvent.phase)
@@ -2192,7 +2310,7 @@ async def get_task_summary(
         .distinct()
     )
     phases = [str(p[0]) for p in phases_result.fetchall() if p[0]]
-    
+
     return TaskSummaryResponse(
         task_id=task_id,
         status=str(task.status),  # status 已经是字符串
@@ -2234,9 +2352,14 @@ async def update_finding_status(
         raise HTTPException(status_code=404, detail="发现不存在")
 
     VALID_FINDING_STATUSES = {
-        FindingStatus.NEW, FindingStatus.ANALYZING, FindingStatus.VERIFIED,
-        FindingStatus.FALSE_POSITIVE, FindingStatus.NEEDS_REVIEW,
-        FindingStatus.FIXED, FindingStatus.WONT_FIX, FindingStatus.DUPLICATE,
+        FindingStatus.NEW,
+        FindingStatus.ANALYZING,
+        FindingStatus.VERIFIED,
+        FindingStatus.FALSE_POSITIVE,
+        FindingStatus.NEEDS_REVIEW,
+        FindingStatus.FIXED,
+        FindingStatus.WONT_FIX,
+        FindingStatus.DUPLICATE,
     }
     if status not in VALID_FINDING_STATUSES:
         raise HTTPException(status_code=400, detail=f"无效的状态: {status}")
@@ -2250,122 +2373,135 @@ async def update_finding_status(
 
 # ============ Helper Functions ============
 
+
 def validate_git_url(url: str) -> bool:
     """
     验证 Git URL 是否安全
-    
+
     Args:
         url: Git URL
-        
+
     Returns:
         bool: URL 是否安全
     """
     if not url:
         return False
-    
+
     from urllib.parse import urlparse
+
     parsed = urlparse(url)
-    
+
     # 只允许 http, https, git, ssh 协议
-    allowed_schemes = {'http', 'https', 'git', 'ssh', 'git@'}
+    allowed_schemes = {"http", "https", "git", "ssh", "git@"}
     if parsed.scheme and parsed.scheme not in allowed_schemes:
         return False
-    
+
     # 检查是否包含可疑的命令注入字符
-    dangerous_patterns = [';', '|', '&', '$(', '`', '\n', '\r', '\t']
+    dangerous_patterns = [";", "|", "&", "$(", "`", "\n", "\r", "\t"]
     for pattern in dangerous_patterns:
         if pattern in url:
             return False
-    
+
     return True
+
 
 def validate_branch_name(branch: str) -> bool:
     """
     验证 Git 分支名称是否安全
-    
+
     Args:
         branch: 分支名称
-        
+
     Returns:
         bool: 分支名称是否安全
     """
     if not branch:
         return False
-    
+
     # Git 分支名称规则：只允许字母、数字、下划线、连字符、点、斜杠
     # 参考: https://git-scm.com/docs/git-check-ref-format
-    pattern = r'^[a-zA-Z0-9_\-\.\/]+$'
+    pattern = r"^[a-zA-Z0-9_\-\.\/]+$"
     if not re.match(pattern, branch):
         return False
-    
+
     # 防止路径遍历
-    if '..' in branch or branch.startswith('/') or branch.endswith('/'):
+    if ".." in branch or branch.startswith("/") or branch.endswith("/"):
         return False
-    
+
     # 限制长度
     if len(branch) > 256:
         return False
-    
+
     return True
+
 
 def is_path_safe(base_path: str, target_path: str) -> bool:
     """
     检查目标路径是否在基础目录内（防止路径遍历）
-    
+
     Args:
         base_path: 基础目录
         target_path: 目标路径
-        
+
     Returns:
         bool: 路径是否安全
     """
     # 规范化路径
     abs_base = os.path.abspath(base_path)
     abs_target = os.path.abspath(os.path.join(base_path, target_path))
-    
+
     # 检查目标路径是否在基础目录内
     return abs_target.startswith(abs_base + os.sep) or abs_target == abs_base
 
-def safe_extract_zip(zip_ref: zipfile.ZipFile, extract_dir: str, task_id: str) -> None:
+
+def safe_extract_zip(
+    zip_ref: zipfile.ZipFile, extract_dir: str, task_id: str, pwd: Optional[bytes] = None
+) -> None:
     """
     安全解压 ZIP 文件，防止 Zip Slip 攻击
-    
+
     Args:
         zip_ref: ZipFile 对象
         extract_dir: 解压目标目录
         task_id: 任务 ID（用于取消检查）
+        pwd: ZIP密码（字节数组，可选）
     """
+
     def check_cancelled():
         if is_task_cancelled(task_id):
             raise asyncio.CancelledError("任务已取消")
-    
+
     file_list = zip_ref.namelist()
-    
+
     # 找到公共前缀
     if file_list:
-        common_prefix = file_list[0].split('/')[0] + '/'
-        
+        common_prefix = file_list[0].split("/")[0] + "/"
+
         for i, file_name in enumerate(file_list):
             if i % 50 == 0:
                 check_cancelled()
-            
+
             # 去掉公共前缀
             if file_name.startswith(common_prefix):
-                target_path = file_name[len(common_prefix):]
+                target_path = file_name[len(common_prefix) :]
                 if target_path:
                     full_target = os.path.join(extract_dir, target_path)
-                    
+
                     # 🔥 安全检查：防止路径遍历
                     if not is_path_safe(extract_dir, target_path):
                         logger.warning(f"⚠️ 检测到路径遍历攻击: {file_name}")
                         continue
-                    
-                    if file_name.endswith('/'):
+
+                    if file_name.endswith("/"):
                         os.makedirs(full_target, exist_ok=True)
                     else:
                         os.makedirs(os.path.dirname(full_target), exist_ok=True)
-                        with zip_ref.open(file_name) as src, open(full_target, 'wb') as dst:
+                        with (
+                            zip_ref.open(file_name, pwd=pwd) as src,
+                            open(full_target, "wb") as dst,
+                        ):
                             dst.write(src.read())
+
 
 async def _get_project_root(
     project: Project,
@@ -2435,17 +2571,19 @@ async def _get_project_root(
         # 🔥 ZIP 项目：解压 ZIP 文件
         check_cancelled()  # 🔥 解压前检查
         await emit(f"📦 正在解压项目文件...")
-        from app.services.project.zip_storage import load_project_zip
+        from app.services.project.zip_storage import load_project_zip, get_project_zip_password
 
         zip_path = await load_project_zip(project.id)
+        zip_password = await get_project_zip_password(project.id)
+        pwd_bytes = zip_password.encode("utf-8") if zip_password else None
 
         if zip_path and os.path.exists(zip_path):
             try:
                 check_cancelled()  # 🔥 解压前再次检查
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                with zipfile.ZipFile(zip_path, "r") as zip_ref:
                     # 🔥 逐个文件解压，支持取消检查
                     # 🔥 Security Fix: 使用 safe_extract_zip 替代 extract，防止 Zip Slip 和软链接攻击
-                    safe_extract_zip(zip_ref, base_path, task_id)
+                    safe_extract_zip(zip_ref, base_path, task_id, pwd=pwd_bytes)
                 logger.info(f"✅ Extracted ZIP project {project.id} to {base_path}")
                 await emit(f"✅ ZIP 文件解压完成")
             except Exception as e:
@@ -2475,7 +2613,7 @@ async def _get_project_root(
 
         # 解析仓库 URL 获取 owner/repo
         parsed = urlparse(repo_url)
-        path_parts = parsed.path.strip('/').replace('.git', '').split('/')
+        path_parts = parsed.path.strip("/").replace(".git", "").split("/")
         if len(path_parts) >= 2:
             owner, repo = path_parts[0], path_parts[1]
         else:
@@ -2528,7 +2666,8 @@ async def _get_project_root(
                 elif repo_type == "gitlab" or "gitlab" in repo_url:
                     # GitLab ZIP 下载 URL（需要对 owner/repo 进行 URL 编码）
                     import urllib.parse
-                    project_path = urllib.parse.quote(f"{owner}/{repo}", safe='')
+
+                    project_path = urllib.parse.quote(f"{owner}/{repo}", safe="")
                     gitlab_host = parsed.netloc
                     zip_url = f"https://{gitlab_host}/api/v4/projects/{project_path}/repository/archive.zip?sha={branch}"
                     headers = {}
@@ -2548,7 +2687,7 @@ async def _get_project_root(
                         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
                             resp = await client.get(zip_url, headers=headers)
                             if resp.status_code == 200:
-                                with open(zip_temp_path, 'wb') as f:
+                                with open(zip_temp_path, "wb") as f:
                                     f.write(resp.content)
                                 return True, None
                             else:
@@ -2559,7 +2698,9 @@ async def _get_project_root(
                     while not download_task.done():
                         check_cancelled()
                         try:
-                            success, error = await asyncio.wait_for(asyncio.shield(download_task), timeout=1.0)
+                            success, error = await asyncio.wait_for(
+                                asyncio.shield(download_task), timeout=1.0
+                            )
                             break
                         except asyncio.TimeoutError:
                             continue
@@ -2570,7 +2711,7 @@ async def _get_project_root(
                     if success and os.path.exists(zip_temp_path):
                         # 解压 ZIP
                         check_cancelled()
-                        with zipfile.ZipFile(zip_temp_path, 'r') as zip_ref:
+                        with zipfile.ZipFile(zip_temp_path, "r") as zip_ref:
                             # 🔥 使用安全解压函数，防止 Zip Slip 攻击
                             safe_extract_zip(zip_ref, base_path, task_id)
 
@@ -2608,10 +2749,7 @@ async def _get_project_root(
             # 检查 git 是否可用
             try:
                 git_check = subprocess.run(
-                    ["git", "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
+                    ["git", "--version"], capture_output=True, text=True, timeout=10
                 )
                 if git_check.returncode != 0:
                     await emit(f"❌ Git 未安装", "error")
@@ -2626,38 +2764,44 @@ async def _get_project_root(
             # 构建带认证的 URL
             auth_url = repo_url
             if repo_type == "github" and github_token:
-                auth_url = urlunparse((
-                    parsed.scheme,
-                    f"{github_token}@{parsed.netloc}",
-                    parsed.path,
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment
-                ))
+                auth_url = urlunparse(
+                    (
+                        parsed.scheme,
+                        f"{github_token}@{parsed.netloc}",
+                        parsed.path,
+                        parsed.params,
+                        parsed.query,
+                        parsed.fragment,
+                    )
+                )
                 await emit(f"🔐 使用 GitHub Token 认证")
             elif repo_type == "gitlab" and gitlab_token:
-                auth_url = urlunparse((
-                    parsed.scheme,
-                    f"oauth2:{gitlab_token}@{parsed.netloc}",
-                    parsed.path,
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment
-                ))
+                auth_url = urlunparse(
+                    (
+                        parsed.scheme,
+                        f"oauth2:{gitlab_token}@{parsed.netloc}",
+                        parsed.path,
+                        parsed.params,
+                        parsed.query,
+                        parsed.fragment,
+                    )
+                )
                 await emit(f"🔐 使用 GitLab Token 认证")
             elif repo_type == "gitea" and gitea_token:
-                auth_url = urlunparse((
-                    parsed.scheme,
-                    f"{gitea_token}@{parsed.netloc}",
-                    parsed.path,
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment
-                ))
+                auth_url = urlunparse(
+                    (
+                        parsed.scheme,
+                        f"{gitea_token}@{parsed.netloc}",
+                        parsed.path,
+                        parsed.params,
+                        parsed.query,
+                        parsed.fragment,
+                    )
+                )
                 await emit(f"🔐 使用 Gitea Token 认证")
             elif is_ssh_url and ssh_private_key:
                 await emit(f"🔐 使用 SSH Key 认证")
-                
+
             for branch in branches_to_try:
                 check_cancelled()
 
@@ -2671,17 +2815,23 @@ async def _get_project_root(
                 try:
                     # SSH URL使用GitSSHOperations（支持SSH密钥认证）
                     if is_ssh_url and ssh_private_key:
+
                         async def run_ssh_clone():
                             return await asyncio.to_thread(
                                 GitSSHOperations.clone_repo_with_ssh,
-                                repo_url, ssh_private_key, base_path, branch
+                                repo_url,
+                                ssh_private_key,
+                                base_path,
+                                branch,
                             )
 
                         clone_task = asyncio.create_task(run_ssh_clone())
                         while not clone_task.done():
                             check_cancelled()
                             try:
-                                result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
+                                result = await asyncio.wait_for(
+                                    asyncio.shield(clone_task), timeout=1.0
+                                )
                                 break
                             except asyncio.TimeoutError:
                                 continue
@@ -2690,13 +2840,13 @@ async def _get_project_root(
                             result = clone_task.result()
 
                         # GitSSHOperations返回字典格式
-                        if result.get('success'):
+                        if result.get("success"):
                             logger.info(f"✅ Git 克隆成功 (SSH, 分支: {branch})")
                             await emit(f"✅ 仓库获取成功 (SSH克隆, 分支: {branch})")
                             download_success = True
                             break
                         else:
-                            last_error = result.get('message', '未知错误')
+                            last_error = result.get("message", "未知错误")
                             logger.warning(f"SSH克隆失败 (分支 {branch}): {last_error[:200]}")
                             await emit(f"⚠️ 分支 {branch} SSH克隆失败...", "warning")
                     else:
@@ -2704,7 +2854,16 @@ async def _get_project_root(
                         async def run_clone():
                             return await asyncio.to_thread(
                                 subprocess.run,
-                                ["git", "clone", "--depth", "1", "--branch", branch, auth_url, base_path],
+                                [
+                                    "git",
+                                    "clone",
+                                    "--depth",
+                                    "1",
+                                    "--branch",
+                                    branch,
+                                    auth_url,
+                                    base_path,
+                                ],
                                 capture_output=True,
                                 text=True,
                                 timeout=120,
@@ -2714,7 +2873,9 @@ async def _get_project_root(
                         while not clone_task.done():
                             check_cancelled()
                             try:
-                                result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
+                                result = await asyncio.wait_for(
+                                    asyncio.shield(clone_task), timeout=1.0
+                                )
                                 break
                             except asyncio.TimeoutError:
                                 continue
@@ -2751,17 +2912,23 @@ async def _get_project_root(
                 try:
                     # SSH URL使用GitSSHOperations（不指定分支）
                     if is_ssh_url and ssh_private_key:
+
                         async def run_default_ssh_clone():
                             return await asyncio.to_thread(
                                 GitSSHOperations.clone_repo_with_ssh,
-                                repo_url, ssh_private_key, base_path, branch
+                                repo_url,
+                                ssh_private_key,
+                                base_path,
+                                branch,
                             )
 
                         clone_task = asyncio.create_task(run_default_ssh_clone())
                         while not clone_task.done():
                             check_cancelled()
                             try:
-                                result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
+                                result = await asyncio.wait_for(
+                                    asyncio.shield(clone_task), timeout=1.0
+                                )
                                 break
                             except asyncio.TimeoutError:
                                 continue
@@ -2769,12 +2936,12 @@ async def _get_project_root(
                         if clone_task.done():
                             result = clone_task.result()
 
-                        if result.get('success'):
+                        if result.get("success"):
                             logger.info(f"✅ Git 克隆成功 (SSH, 默认分支)")
                             await emit(f"✅ 仓库获取成功 (SSH克隆, 默认分支)")
                             download_success = True
                         else:
-                            last_error = result.get('message', '未知错误')
+                            last_error = result.get("message", "未知错误")
                     else:
                         # HTTPS URL使用标准git clone
                         async def run_default_clone():
@@ -2790,7 +2957,9 @@ async def _get_project_root(
                         while not clone_task.done():
                             check_cancelled()
                             try:
-                                result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
+                                result = await asyncio.wait_for(
+                                    asyncio.shield(clone_task), timeout=1.0
+                                )
                                 break
                             except asyncio.TimeoutError:
                                 continue
@@ -2838,12 +3007,14 @@ async def _get_project_root(
     # 例如：/tmp/deepaudit/UUID/PHP-Project/ -> 返回 /tmp/deepaudit/UUID/PHP-Project
     items = os.listdir(base_path)
     # 过滤掉 macOS 产生的 __MACOSX 目录和隐藏文件
-    real_items = [item for item in items if not item.startswith('__') and not item.startswith('.')]
-    
+    real_items = [item for item in items if not item.startswith("__") and not item.startswith(".")]
+
     if len(real_items) == 1:
         single_item_path = os.path.join(base_path, real_items[0])
         if os.path.isdir(single_item_path):
-            logger.info(f"🔍 检测到单层嵌套目录，自动调整项目根目录: {base_path} -> {single_item_path}")
+            logger.info(
+                f"🔍 检测到单层嵌套目录，自动调整项目根目录: {base_path} -> {single_item_path}"
+            )
             await emit(f"🔍 检测到嵌套目录，自动调整为: {real_items[0]}")
             base_path = single_item_path
 
@@ -2853,8 +3024,10 @@ async def _get_project_root(
 
 # ============ Agent Tree API ============
 
+
 class AgentTreeNodeResponse(BaseModel):
     """Agent 树节点响应"""
+
     id: str
     agent_id: str
     agent_name: str
@@ -2871,13 +3044,14 @@ class AgentTreeNodeResponse(BaseModel):
     tool_calls: int = 0
     duration_ms: Optional[int] = None
     children: List["AgentTreeNodeResponse"] = []
-    
+
     class Config:
         from_attributes = True
 
 
 class AgentTreeResponse(BaseModel):
     """Agent 树响应"""
+
     task_id: str
     root_agent_id: Optional[str] = None
     total_agents: int = 0
@@ -2896,7 +3070,7 @@ async def get_agent_tree(
 ) -> Any:
     """
     获取任务的 Agent 树结构
-    
+
     返回动态 Agent 树的完整结构，包括：
     - 所有 Agent 节点
     - 父子关系
@@ -2906,26 +3080,28 @@ async def get_agent_tree(
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     # 尝试从内存中获取 Agent 树（运行中的任务）
     runner = _running_tasks.get(task_id)
     logger.debug(f"[AgentTree API] task_id={task_id}, runner exists={runner is not None}")
-    
+
     if runner:
         from app.services.agent.core import agent_registry
-        
+
         tree = agent_registry.get_agent_tree()
         stats = agent_registry.get_statistics()
-        logger.debug(f"[AgentTree API] tree nodes={len(tree.get('nodes', {}))}, root={tree.get('root_agent_id')}")
+        logger.debug(
+            f"[AgentTree API] tree nodes={len(tree.get('nodes', {}))}, root={tree.get('root_agent_id')}"
+        )
         logger.debug(f"[AgentTree API] 节点详情: {list(tree.get('nodes', {}).keys())}")
-        
+
         # 🔥 获取 root agent ID，用于判断是否是 Orchestrator
         root_agent_id = tree.get("root_agent_id")
-        
+
         # 构建节点列表
         nodes = []
         for agent_id, node_data in tree.get("nodes", {}).items():
@@ -2934,14 +3110,14 @@ async def get_agent_tree(
             tool_calls = 0
             tokens_used = 0
             findings_count = 0
-            
+
             agent_instance = agent_registry.get_agent(agent_id)
-            if agent_instance and hasattr(agent_instance, 'get_stats'):
+            if agent_instance and hasattr(agent_instance, "get_stats"):
                 agent_stats = agent_instance.get_stats()
                 iterations = agent_stats.get("iterations", 0)
                 tool_calls = agent_stats.get("tool_calls", 0)
                 tokens_used = agent_stats.get("tokens_used", 0)
-            
+
             # 🔥 FIX: 对于 Orchestrator (root agent)，使用 task 的 findings_count
             # 这确保了正确显示聚合的 findings 总数
             if agent_id == root_agent_id:
@@ -2951,23 +3127,25 @@ async def get_agent_tree(
                 if node_data.get("result"):
                     result = node_data.get("result", {})
                     findings_count = len(result.get("findings", []))
-            
-            nodes.append(AgentTreeNodeResponse(
-                id=node_data.get("id", agent_id),
-                agent_id=agent_id,
-                agent_name=node_data.get("name", "Unknown"),
-                agent_type=node_data.get("type", "unknown"),
-                parent_agent_id=node_data.get("parent_id"),
-                task_description=node_data.get("task"),
-                knowledge_modules=node_data.get("knowledge_modules", []),
-                status=node_data.get("status", "unknown"),
-                findings_count=findings_count,
-                iterations=iterations,
-                tool_calls=tool_calls,
-                tokens_used=tokens_used,
-                children=[],
-            ))
-        
+
+            nodes.append(
+                AgentTreeNodeResponse(
+                    id=node_data.get("id", agent_id),
+                    agent_id=agent_id,
+                    agent_name=node_data.get("name", "Unknown"),
+                    agent_type=node_data.get("type", "unknown"),
+                    parent_agent_id=node_data.get("parent_id"),
+                    task_description=node_data.get("task"),
+                    knowledge_modules=node_data.get("knowledge_modules", []),
+                    status=node_data.get("status", "unknown"),
+                    findings_count=findings_count,
+                    iterations=iterations,
+                    tool_calls=tool_calls,
+                    tokens_used=tokens_used,
+                    children=[],
+                )
+            )
+
         # 🔥 使用 task.findings_count 作为 total_findings，确保一致性
         return AgentTreeResponse(
             task_id=task_id,
@@ -2979,41 +3157,41 @@ async def get_agent_tree(
             total_findings=task.findings_count or 0,
             nodes=nodes,
         )
-    
+
     # 从数据库获取（已完成的任务）
     from app.models.agent.agent_task import AgentTreeNode
-    
+
     result = await db.execute(
         select(AgentTreeNode)
         .where(AgentTreeNode.task_id == task_id)
         .order_by(AgentTreeNode.depth, AgentTreeNode.created_at)
     )
     db_nodes = result.scalars().all()
-    
+
     if not db_nodes:
         return AgentTreeResponse(
             task_id=task_id,
             nodes=[],
         )
-    
+
     # 构建响应
     nodes = []
     root_id = None
     running = 0
     completed = 0
     failed = 0
-    
+
     for node in db_nodes:
         if node.parent_agent_id is None:
             root_id = node.agent_id
-        
+
         if node.status == "running":
             running += 1
         elif node.status == "completed":
             completed += 1
         elif node.status == "failed":
             failed += 1
-        
+
         # 🔥 FIX: 对于 Orchestrator (root agent)，使用 task 的 findings_count
         # 这确保了正确显示聚合的 findings 总数
         if node.parent_agent_id is None:
@@ -3021,26 +3199,28 @@ async def get_agent_tree(
             node_findings_count = task.findings_count or 0
         else:
             node_findings_count = node.findings_count or 0
-        
-        nodes.append(AgentTreeNodeResponse(
-            id=node.id,
-            agent_id=node.agent_id,
-            agent_name=node.agent_name,
-            agent_type=node.agent_type,
-            parent_agent_id=node.parent_agent_id,
-            depth=node.depth,
-            task_description=node.task_description,
-            knowledge_modules=node.knowledge_modules,
-            status=node.status,
-            result_summary=node.result_summary,
-            findings_count=node_findings_count,
-            iterations=node.iterations or 0,
-            tokens_used=node.tokens_used or 0,
-            tool_calls=node.tool_calls or 0,
-            duration_ms=node.duration_ms,
-            children=[],
-        ))
-    
+
+        nodes.append(
+            AgentTreeNodeResponse(
+                id=node.id,
+                agent_id=node.agent_id,
+                agent_name=node.agent_name,
+                agent_type=node.agent_type,
+                parent_agent_id=node.parent_agent_id,
+                depth=node.depth,
+                task_description=node.task_description,
+                knowledge_modules=node.knowledge_modules,
+                status=node.status,
+                result_summary=node.result_summary,
+                findings_count=node_findings_count,
+                iterations=node.iterations or 0,
+                tokens_used=node.tokens_used or 0,
+                tool_calls=node.tool_calls or 0,
+                duration_ms=node.duration_ms,
+                children=[],
+            )
+        )
+
     # 🔥 使用 task.findings_count 作为 total_findings，确保一致性
     return AgentTreeResponse(
         task_id=task_id,
@@ -3056,8 +3236,10 @@ async def get_agent_tree(
 
 # ============ Checkpoint API ============
 
+
 class CheckpointResponse(BaseModel):
     """检查点响应"""
+
     id: str
     agent_id: str
     agent_name: str
@@ -3070,7 +3252,7 @@ class CheckpointResponse(BaseModel):
     checkpoint_type: str = "auto"
     checkpoint_name: Optional[str] = None
     created_at: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -3085,7 +3267,7 @@ async def list_checkpoints(
 ) -> Any:
     """
     获取任务的检查点列表
-    
+
     用于：
     - 查看执行历史
     - 状态恢复
@@ -3094,23 +3276,23 @@ async def list_checkpoints(
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     from app.models.agent.agent_task import AgentCheckpoint
-    
+
     query = select(AgentCheckpoint).where(AgentCheckpoint.task_id == task_id)
-    
+
     if agent_id:
         query = query.where(AgentCheckpoint.agent_id == agent_id)
-    
+
     query = query.order_by(AgentCheckpoint.created_at.desc()).limit(limit)
-    
+
     result = await db.execute(query)
     checkpoints = result.scalars().all()
-    
+
     return [
         CheckpointResponse(
             id=cp.id,
@@ -3139,23 +3321,23 @@ async def get_checkpoint_detail(
 ) -> Any:
     """
     获取检查点详情
-    
+
     返回完整的 Agent 状态数据
     """
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     from app.models.agent.agent_task import AgentCheckpoint
-    
+
     checkpoint = await db.get(AgentCheckpoint, checkpoint_id)
     if not checkpoint or checkpoint.task_id != task_id:
         raise HTTPException(status_code=404, detail="检查点不存在")
-    
+
     # 解析状态数据
     state_data = {}
     if checkpoint.state_data:
@@ -3163,7 +3345,7 @@ async def get_checkpoint_detail(
             state_data = json.loads(checkpoint.state_data)
         except json.JSONDecodeError:
             pass
-    
+
     return {
         "id": checkpoint.id,
         "task_id": checkpoint.task_id,
@@ -3186,6 +3368,7 @@ async def get_checkpoint_detail(
 
 # ============ Report Generation API ============
 
+
 @router.get("/{task_id}/report")
 async def generate_audit_report(
     task_id: str,
@@ -3195,44 +3378,46 @@ async def generate_audit_report(
 ):
     """
     生成审计报告
-    
+
     支持 Markdown 和 JSON 格式
     """
     task = await db.get(AgentTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     project = await db.get(Project, task.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
+
     # 获取此任务的所有发现
     findings = await db.execute(
         select(AgentFinding)
         .where(AgentFinding.task_id == task_id)
         .order_by(
             case(
-                (AgentFinding.severity == 'critical', 1),
-                (AgentFinding.severity == 'high', 2),
-                (AgentFinding.severity == 'medium', 3),
-                (AgentFinding.severity == 'low', 4),
-                else_=5
+                (AgentFinding.severity == "critical", 1),
+                (AgentFinding.severity == "high", 2),
+                (AgentFinding.severity == "medium", 3),
+                (AgentFinding.severity == "low", 4),
+                else_=5,
             ),
-            AgentFinding.created_at.desc()
+            AgentFinding.created_at.desc(),
         )
     )
     findings = findings.scalars().all()
-    
+
     # 🔥 Helper function to normalize severity for comparison (case-insensitive)
     def normalize_severity(sev: str) -> str:
         return str(sev).lower().strip() if sev else ""
-    
+
     # Log findings for debugging
     logger.info(f"[Report] Task {task_id}: Found {len(findings)} findings from database")
     if findings:
         for i, f in enumerate(findings[:3]):  # Log first 3
-            logger.debug(f"[Report] Finding {i+1}: severity='{f.severity}', title='{f.title[:50] if f.title else 'N/A'}'")
-    
+            logger.debug(
+                f"[Report] Finding {i + 1}: severity='{f.severity}', title='{f.title[:50] if f.title else 'N/A'}'"
+            )
+
     if format == "json":
         # Enhanced JSON report with full metadata
         return {
@@ -3242,7 +3427,9 @@ async def generate_audit_report(
                 "project_name": project.name,
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "task_status": task.status,
-                "duration_seconds": int((task.completed_at - task.started_at).total_seconds()) if task.completed_at and task.started_at else None,
+                "duration_seconds": int((task.completed_at - task.started_at).total_seconds())
+                if task.completed_at and task.started_at
+                else None,
             },
             "summary": {
                 "security_score": task.security_score,
@@ -3250,16 +3437,20 @@ async def generate_audit_report(
                 "total_findings": len(findings),
                 "verified_findings": sum(1 for f in findings if f.is_verified),
                 "severity_distribution": {
-                    "critical": sum(1 for f in findings if normalize_severity(f.severity) == 'critical'),
-                    "high": sum(1 for f in findings if normalize_severity(f.severity) == 'high'),
-                    "medium": sum(1 for f in findings if normalize_severity(f.severity) == 'medium'),
-                    "low": sum(1 for f in findings if normalize_severity(f.severity) == 'low'),
+                    "critical": sum(
+                        1 for f in findings if normalize_severity(f.severity) == "critical"
+                    ),
+                    "high": sum(1 for f in findings if normalize_severity(f.severity) == "high"),
+                    "medium": sum(
+                        1 for f in findings if normalize_severity(f.severity) == "medium"
+                    ),
+                    "low": sum(1 for f in findings if normalize_severity(f.severity) == "low"),
                 },
                 "agent_metrics": {
                     "total_iterations": task.total_iterations,
                     "tool_calls": task.tool_calls_count,
                     "tokens_used": task.tokens_used,
-                }
+                },
             },
             "findings": [
                 {
@@ -3281,8 +3472,9 @@ async def generate_audit_report(
                     "suggestion": f.suggestion,
                     "fix_code": f.fix_code,
                     "created_at": f.created_at.isoformat() if f.created_at else None,
-                } for f in findings
-            ]
+                }
+                for f in findings
+            ],
         }
 
     # Generate Enhanced Markdown Report
@@ -3290,10 +3482,10 @@ async def generate_audit_report(
 
     # Calculate statistics
     total = len(findings)
-    critical = sum(1 for f in findings if normalize_severity(f.severity) == 'critical')
-    high = sum(1 for f in findings if normalize_severity(f.severity) == 'high')
-    medium = sum(1 for f in findings if normalize_severity(f.severity) == 'medium')
-    low = sum(1 for f in findings if normalize_severity(f.severity) == 'low')
+    critical = sum(1 for f in findings if normalize_severity(f.severity) == "critical")
+    high = sum(1 for f in findings if normalize_severity(f.severity) == "high")
+    medium = sum(1 for f in findings if normalize_severity(f.severity) == "medium")
+    low = sum(1 for f in findings if normalize_severity(f.severity) == "low")
     verified = sum(1 for f in findings if f.is_verified)
     with_poc = sum(1 for f in findings if f.has_poc)
 
@@ -3355,13 +3547,21 @@ async def generate_audit_report(
     md_lines.append(f"| 严重程度 | 数量 | 已验证 |")
     md_lines.append(f"|----------|-------|----------|")
     if critical > 0:
-        md_lines.append(f"| **严重 (CRITICAL)** | {critical} | {sum(1 for f in findings if normalize_severity(f.severity) == 'critical' and f.is_verified)} |")
+        md_lines.append(
+            f"| **严重 (CRITICAL)** | {critical} | {sum(1 for f in findings if normalize_severity(f.severity) == 'critical' and f.is_verified)} |"
+        )
     if high > 0:
-        md_lines.append(f"| **高危 (HIGH)** | {high} | {sum(1 for f in findings if normalize_severity(f.severity) == 'high' and f.is_verified)} |")
+        md_lines.append(
+            f"| **高危 (HIGH)** | {high} | {sum(1 for f in findings if normalize_severity(f.severity) == 'high' and f.is_verified)} |"
+        )
     if medium > 0:
-        md_lines.append(f"| **中危 (MEDIUM)** | {medium} | {sum(1 for f in findings if normalize_severity(f.severity) == 'medium' and f.is_verified)} |")
+        md_lines.append(
+            f"| **中危 (MEDIUM)** | {medium} | {sum(1 for f in findings if normalize_severity(f.severity) == 'medium' and f.is_verified)} |"
+        )
     if low > 0:
-        md_lines.append(f"| **低危 (LOW)** | {low} | {sum(1 for f in findings if normalize_severity(f.severity) == 'low' and f.is_verified)} |")
+        md_lines.append(
+            f"| **低危 (LOW)** | {low} | {sum(1 for f in findings if normalize_severity(f.severity) == 'low' and f.is_verified)} |"
+        )
     md_lines.append(f"| **总计** | {total} | {verified} |")
     md_lines.append("")
 
@@ -3385,14 +3585,16 @@ async def generate_audit_report(
     else:
         # Group findings by severity
         severity_map = {
-            'critical': '严重 (Critical)',
-            'high': '高危 (High)',
-            'medium': '中危 (Medium)',
-            'low': '低危 (Low)'
+            "critical": "严重 (Critical)",
+            "high": "高危 (High)",
+            "medium": "中危 (Medium)",
+            "low": "低危 (Low)",
         }
-        
+
         for severity_level, severity_name in severity_map.items():
-            severity_findings = [f for f in findings if normalize_severity(f.severity) == severity_level]
+            severity_findings = [
+                f for f in findings if normalize_severity(f.severity) == severity_level
+            ]
             if not severity_findings:
                 continue
 
@@ -3432,52 +3634,87 @@ async def generate_audit_report(
                     # 🔥 v2.1: 增强语言检测，避免默认 python 标记错误
                     lang = "text"  # 默认使用 text 而非 python
                     if f.file_path:
-                        ext = f.file_path.split('.')[-1].lower()
+                        ext = f.file_path.split(".")[-1].lower()
                         lang_map = {
                             # Python
-                            'py': 'python', 'pyw': 'python', 'pyi': 'python',
+                            "py": "python",
+                            "pyw": "python",
+                            "pyi": "python",
                             # JavaScript/TypeScript
-                            'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
-                            'ts': 'typescript', 'mts': 'typescript',
-                            'jsx': 'jsx', 'tsx': 'tsx',
+                            "js": "javascript",
+                            "mjs": "javascript",
+                            "cjs": "javascript",
+                            "ts": "typescript",
+                            "mts": "typescript",
+                            "jsx": "jsx",
+                            "tsx": "tsx",
                             # Web
-                            'html': 'html', 'htm': 'html',
-                            'css': 'css', 'scss': 'scss', 'sass': 'sass', 'less': 'less',
-                            'vue': 'vue', 'svelte': 'svelte',
+                            "html": "html",
+                            "htm": "html",
+                            "css": "css",
+                            "scss": "scss",
+                            "sass": "sass",
+                            "less": "less",
+                            "vue": "vue",
+                            "svelte": "svelte",
                             # Backend
-                            'java': 'java', 'kt': 'kotlin', 'kts': 'kotlin',
-                            'go': 'go', 'rs': 'rust',
-                            'rb': 'ruby', 'erb': 'erb',
-                            'php': 'php', 'phtml': 'php',
+                            "java": "java",
+                            "kt": "kotlin",
+                            "kts": "kotlin",
+                            "go": "go",
+                            "rs": "rust",
+                            "rb": "ruby",
+                            "erb": "erb",
+                            "php": "php",
+                            "phtml": "php",
                             # C-family
-                            'c': 'c', 'h': 'c',
-                            'cpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp', 'hpp': 'cpp',
-                            'cs': 'csharp',
+                            "c": "c",
+                            "h": "c",
+                            "cpp": "cpp",
+                            "cc": "cpp",
+                            "cxx": "cpp",
+                            "hpp": "cpp",
+                            "cs": "csharp",
                             # Shell/Script
-                            'sh': 'bash', 'bash': 'bash', 'zsh': 'zsh',
-                            'ps1': 'powershell', 'psm1': 'powershell',
+                            "sh": "bash",
+                            "bash": "bash",
+                            "zsh": "zsh",
+                            "ps1": "powershell",
+                            "psm1": "powershell",
                             # Config
-                            'json': 'json', 'yaml': 'yaml', 'yml': 'yaml',
-                            'toml': 'toml', 'ini': 'ini', 'cfg': 'ini',
-                            'xml': 'xml', 'xhtml': 'xml',
+                            "json": "json",
+                            "yaml": "yaml",
+                            "yml": "yaml",
+                            "toml": "toml",
+                            "ini": "ini",
+                            "cfg": "ini",
+                            "xml": "xml",
+                            "xhtml": "xml",
                             # Database
-                            'sql': 'sql',
+                            "sql": "sql",
                             # Other
-                            'md': 'markdown', 'markdown': 'markdown',
-                            'sol': 'solidity',
-                            'swift': 'swift',
-                            'r': 'r', 'R': 'r',
-                            'lua': 'lua',
-                            'pl': 'perl', 'pm': 'perl',
-                            'ex': 'elixir', 'exs': 'elixir',
-                            'erl': 'erlang',
-                            'hs': 'haskell',
-                            'scala': 'scala', 'sc': 'scala',
-                            'clj': 'clojure', 'cljs': 'clojure',
-                            'dart': 'dart',
-                            'groovy': 'groovy', 'gradle': 'groovy',
+                            "md": "markdown",
+                            "markdown": "markdown",
+                            "sol": "solidity",
+                            "swift": "swift",
+                            "r": "r",
+                            "R": "r",
+                            "lua": "lua",
+                            "pl": "perl",
+                            "pm": "perl",
+                            "ex": "elixir",
+                            "exs": "elixir",
+                            "erl": "erlang",
+                            "hs": "haskell",
+                            "scala": "scala",
+                            "sc": "scala",
+                            "clj": "clojure",
+                            "cljs": "clojure",
+                            "dart": "dart",
+                            "groovy": "groovy",
+                            "gradle": "groovy",
                         }
-                        lang = lang_map.get(ext, 'text')
+                        lang = lang_map.get(ext, "text")
                     md_lines.append("**漏洞代码:**")
                     md_lines.append("")
                     md_lines.append(f"```{lang}")
@@ -3534,7 +3771,9 @@ async def generate_audit_report(
         md_lines.append("")
         priority_idx = 1
         if critical > 0:
-            md_lines.append(f"{priority_idx}. **立即修复:** 处理 {critical} 个严重漏洞 - 可能造成严重影响")
+            md_lines.append(
+                f"{priority_idx}. **立即修复:** 处理 {critical} 个严重漏洞 - 可能造成严重影响"
+            )
             priority_idx += 1
         if high > 0:
             md_lines.append(f"{priority_idx}. **高优先级:** 在 1 周内修复 {high} 个高危漏洞")
@@ -3553,14 +3792,13 @@ async def generate_audit_report(
     md_lines.append("*本报告由 DeepAudit - AI 驱动的安全分析系统生成*")
     md_lines.append("")
     content = "\n".join(md_lines)
-    
+
     filename = f"audit_report_{task.id[:8]}_{datetime.now().strftime('%Y%m%d')}.md"
-    
+
     from fastapi.responses import Response
+
     return Response(
         content=content,
         media_type="text/markdown",
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}"
-        }
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

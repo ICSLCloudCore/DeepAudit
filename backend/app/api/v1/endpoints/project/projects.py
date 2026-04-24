@@ -670,6 +670,7 @@ class ZipFileMetaResponse(BaseModel):
     original_filename: Optional[str] = None
     file_size: Optional[int] = None
     uploaded_at: Optional[str] = None
+    has_password: Optional[bool] = False
 
 
 @router.get("/{id}/zip", response_model=ZipFileMetaResponse)
@@ -698,6 +699,7 @@ async def get_project_zip_info(
             "original_filename": meta.get("original_filename"),
             "file_size": meta.get("file_size"),
             "uploaded_at": meta.get("uploaded_at"),
+            "has_password": meta.get("has_password", False),
         }
 
     return {"has_file": True}
@@ -707,6 +709,7 @@ async def get_project_zip_info(
 async def upload_project_zip(
     id: str,
     file: UploadFile = File(...),
+    password: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
@@ -742,14 +745,15 @@ async def upload_project_zip(
         if file_size > 500 * 1024 * 1024:  # 500MB limit
             raise HTTPException(status_code=400, detail="文件大小不能超过500MB")
 
-        # 保存到持久化存储
-        meta = await save_project_zip(id, temp_file_path, file.filename)
+        # 保存到持久化存储（包含密码）
+        meta = await save_project_zip(id, temp_file_path, file.filename, password)
 
         return {
             "message": "ZIP文件上传成功",
             "original_filename": meta["original_filename"],
             "file_size": meta["file_size"],
             "uploaded_at": meta["uploaded_at"],
+            "has_password": meta.get("has_password", False),
         }
     finally:
         # 清理临时文件
