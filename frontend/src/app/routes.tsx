@@ -17,6 +17,7 @@ import AgentManagement from "@/pages/AgentManagement";
 import SkillMarketplace from "@/pages/SkillMarketplace";
 import MCPMarketplace from "@/pages/MCPMarketplace";
 import SecurityKnowledgeBase from "@/pages/SecurityKnowledgeBase";
+import ModelManager from "@/pages/ModelManager";
 import type { ReactNode } from 'react';
 
 export interface RouteConfig {
@@ -152,6 +153,12 @@ const routes: RouteConfig[] = [
     path: "/account",
     element: <Account />,
     visible: false, // 不在主导航显示，在侧边栏底部单独显示
+  },
+  {
+    name: "Models",
+    path: "/models",
+    element: <ModelManager />,
+    visible: true,
   },
 ];
 

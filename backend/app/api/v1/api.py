@@ -20,6 +20,7 @@ from app.api.v1.endpoints import (
     project_config,
     opencode_audit_tasks,
     security_kb,
+    opencode_config,
 )
 
 api_router = APIRouter()
@@ -45,3 +46,6 @@ api_router.include_router(
     opencode_audit_tasks.router, prefix="/opencode-audit-tasks", tags=["opencode-audit-tasks"]
 )
 api_router.include_router(security_kb.router, prefix="/security-kb", tags=["security-kb"])
+api_router.include_router(
+    opencode_config.router, prefix="/opencode-config", tags=["opencode-config"]
+)

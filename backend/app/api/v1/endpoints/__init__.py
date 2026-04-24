@@ -34,6 +34,7 @@ from .knowledge.prompts import router as _prompts_router
 from .knowledge.embedding_config import router as _embedding_config_router
 
 from .system.config import router as _config_router
+from .system.opencode_config import router as _opencode_config_router
 
 # 创建包装对象
 auth = _RouterWrapper(_auth_router)
@@ -62,6 +63,7 @@ prompts = _RouterWrapper(_prompts_router)
 embedding_config = _RouterWrapper(_embedding_config_router)
 
 config = _RouterWrapper(_config_router)
+opencode_config = _RouterWrapper(_opencode_config_router)
 
 __all__ = [
     "auth",
@@ -84,4 +86,5 @@ __all__ = [
     "prompts",
     "embedding_config",
     "config",
+    "opencode_config",
 ]

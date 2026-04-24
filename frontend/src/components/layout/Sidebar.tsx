@@ -21,6 +21,7 @@ import {
     Shield,
     MessageSquare,
     BookOpen,
+    Cpu,
 } from "lucide-react";
 import routes from "@/app/routes";
 
@@ -36,6 +37,7 @@ const routeIcons: Record<string, React.ReactNode> = {
     "/security-kb": <BookOpen className="w-[18px] h-[18px]" />,
     "/admin": <Settings className="w-[18px] h-[18px]" />,
     "/recycle-bin": <Trash2 className="w-[18px] h-[18px]" />,
+    "/models": <Cpu className="w-[18px] h-[18px]" />,
 };
 
 interface SidebarProps {
