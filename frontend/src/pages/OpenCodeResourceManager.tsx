@@ -157,7 +157,12 @@ export default function OpenCodeResourceManager() {
 
   // ============== LOAD DATA ==============
   useEffect(() => {
+    // Load all data on page initialization
     loadModels();
+    loadSkills();
+    loadAgents();
+    loadAgentFiles();
+    loadMcps();
   }, []);
 
   useEffect(() => {
@@ -390,6 +395,9 @@ export default function OpenCodeResourceManager() {
         0
       )
     : 0;
+  const skillCount = skills.length;
+  const agentCount = agents.length;
+  const mcpCount = mcps.length;
 
   // ============== SKILLS FUNCTIONS ==============
   const loadSkills = async () => {
@@ -889,8 +897,71 @@ export default function OpenCodeResourceManager() {
           <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Opencode 管理</h3>
         </div>
         <div className="p-6">
-          <p className="text-muted-foreground font-mono">统一管理模型、Skills、Agents 和 MCPs</p>
+          <p className="text-muted-foreground font-mono">统一管理Models、Skills、Agents 和 MCPs</p>
         </div>
+      </div>
+
+      {/* Unified Dashboard Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 relative z-10">
+        <Card className="cyber-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-primary" />
+              Providers
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">{providerCount}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="cyber-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Package className="w-4 h-4 text-emerald-400" />
+              Models
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-emerald-400">{modelCount}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="cyber-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Code2 className="w-4 h-4 text-violet-400" />
+              Skills
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-violet-400">{skillCount}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="cyber-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Bot className="w-4 h-4 text-amber-400" />
+              Agents
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-amber-400">{agentCount}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="cyber-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Server className="w-4 h-4 text-sky-400" />
+              MCPs
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-sky-400">{mcpCount}</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Tabs */}
@@ -937,26 +1008,6 @@ export default function OpenCodeResourceManager() {
             </div>
           ) : (
             <>
-              {/* Stats cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="cyber-card">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">供应商数量</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-primary">{providerCount}</div>
-                  </CardContent>
-                </Card>
-
-                <Card className="cyber-card">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">模型总数</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-emerald-400">{modelCount}</div>
-                  </CardContent>
-                </Card>
-              </div>
 
               {/* Actions bar */}
               <div className="cyber-card p-4">

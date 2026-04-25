@@ -1167,12 +1167,6 @@ class OpenCodeSessionService:
                         else str(msg_type)
                     )
 
-                    logger.info(f"[OpenCode] Saving message to database:")
-                    logger.info(f"[OpenCode]   - audit_task_id: {audit_task_id}")
-                    logger.info(f"[OpenCode]   - msg_index: {msg_index}")
-                    logger.info(f"[OpenCode]   - msg_type: {content_type_str}")
-                    logger.info(f"[OpenCode]   - Content length: {len(msg_content)} chars")
-
                     # 先检查是否已经存在相同的消息
                     # 同时检查 session_id、message_index、content_type
                     existing_result = await db_session_local.execute(
