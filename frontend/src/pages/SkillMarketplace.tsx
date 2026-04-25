@@ -38,14 +38,13 @@ const SkillMarketplace: React.FC = () => {
   });
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadForm, setUploadForm] = useState({
-    name: "",
     version: "1.0.0",
-    description: "",
     category: "custom" as const,
     is_public: false,
-    file: null as File | null,
+    files: [] as File[],
   });
   const [uploading, setUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState<{ success: any[]; failed: any[] } | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [skillToDelete, setSkillToDelete] = useState<OpenCodeSkill | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -71,36 +70,52 @@ const SkillMarketplace: React.FC = () => {
 
   const handleUploadSkill = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadForm.file) {
+    if (uploadForm.files.length === 0) {
       toast.error("请选择要上传的文件");
       return;
     }
 
     try {
       setUploading(true);
-      const formData = new FormData();
-      formData.append("file", uploadForm.file);
-      formData.append("name", uploadForm.name);
-      formData.append("version", uploadForm.version);
-      formData.append("description", uploadForm.description);
-      formData.append("category", uploadForm.category);
-      formData.append("is_public", uploadForm.is_public.toString());
+      setUploadResults(null);
+      
+      if (uploadForm.files.length === 1) {
+        // 单个文件上传
+        const formData = new FormData();
+        formData.append("file", uploadForm.files[0]);
+        formData.append("version", uploadForm.version);
+        formData.append("category", uploadForm.category);
+        formData.append("is_public", uploadForm.is_public.toString());
 
-      await opencodeApi.uploadSkill(formData);
-      toast.success("Skill 上传成功！");
-      setShowUploadDialog(false);
-      setUploadForm({
-        name: "",
-        version: "1.0.0",
-        description: "",
-        category: "custom",
-        is_public: false,
-        file: null,
-      });
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        await opencodeApi.uploadSkill(formData);
+        toast.success("Skill 上传成功！");
+        setShowUploadDialog(false);
+        resetUploadForm();
+        loadSkills();
+      } else {
+        // 批量上传
+        const formData = new FormData();
+        uploadForm.files.forEach(file => {
+          formData.append("files", file);
+        });
+        formData.append("version", uploadForm.version);
+        formData.append("category", uploadForm.category);
+        formData.append("is_public", uploadForm.is_public.toString());
+
+        const result = await opencodeApi.batchUploadSkills(formData);
+        setUploadResults(result);
+        
+        if (result.success.length > 0) {
+          toast.success(`成功上传 ${result.success.length} 个 Skill${result.failed.length > 0 ? `，${result.failed.length} 个失败` : ''}`);
+        }
+        if (result.failed.length > 0 && result.success.length === 0) {
+          toast.error(`全部 ${result.failed.length} 个 Skill 上传失败`);
+        }
+        
+        if (result.success.length > 0) {
+          loadSkills();
+        }
       }
-      loadSkills();
     } catch (error: any) {
       console.error("Failed to upload skill:", error);
       let errorMessage = "Skill 上传失败";
@@ -133,6 +148,19 @@ const SkillMarketplace: React.FC = () => {
       toast.error(errorMessage);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const resetUploadForm = () => {
+    setUploadForm({
+      version: "1.0.0",
+      category: "custom",
+      is_public: false,
+      files: [],
+    });
+    setUploadResults(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -373,7 +401,10 @@ const SkillMarketplace: React.FC = () => {
       </div>
 
       {/* Upload Dialog */}
-      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+      <Dialog open={showUploadDialog} onOpenChange={(open) => {
+        setShowUploadDialog(open);
+        if (!open) resetUploadForm();
+      }}>
         <DialogContent className="!w-[min(90vw,700px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
           {/* Terminal Header */}
           <div className="flex items-center gap-2 px-4 py-3 cyber-bg-elevated border-b border-border flex-shrink-0">
@@ -397,19 +428,6 @@ const SkillMarketplace: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-6">
             <form onSubmit={handleUploadSkill} className="flex flex-col gap-5">
               <div className="space-y-1.5">
-                <Label htmlFor="skill-name" className="font-mono font-bold uppercase text-xs text-muted-foreground">Skill 名称 *</Label>
-                <Input
-                  id="skill-name"
-                  type="text"
-                  className="cyber-input"
-                  value={uploadForm.name}
-                  onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
-                  placeholder="输入 Skill 名称"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
                 <Label htmlFor="skill-version" className="font-mono font-bold uppercase text-xs text-muted-foreground">版本</Label>
                 <Input
                   id="skill-version"
@@ -418,18 +436,6 @@ const SkillMarketplace: React.FC = () => {
                   value={uploadForm.version}
                   onChange={(e) => setUploadForm({ ...uploadForm, version: e.target.value })}
                   placeholder="1.0.0"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="skill-description" className="font-mono font-bold uppercase text-xs text-muted-foreground">描述</Label>
-                <Textarea
-                  id="skill-description"
-                  className="cyber-input min-h-[80px]"
-                  rows={3}
-                  value={uploadForm.description}
-                  onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
-                  placeholder="// Skill 描述..."
                 />
               </div>
 
@@ -454,7 +460,7 @@ const SkillMarketplace: React.FC = () => {
               <div className="space-y-4">
                 <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">Skill 文件 *</Label>
 
-                {!uploadForm.file ? (
+                {uploadForm.files.length === 0 ? (
                   <div
                     className="border border-dashed border-border bg-muted/50 rounded p-6 text-center hover:bg-muted hover:border-border transition-colors cursor-pointer group"
                     onClick={() => fileInputRef.current?.click()}
@@ -462,14 +468,18 @@ const SkillMarketplace: React.FC = () => {
                     <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3 group-hover:text-primary transition-colors" />
                     <h3 className="text-base font-bold text-foreground uppercase mb-1">上传 Skill 文件</h3>
                     <p className="text-xs font-mono text-muted-foreground mb-3">
-                      选择 .zip Skill 文件
+                      选择一个或多个 .zip Skill 文件
                     </p>
                     <input
                       ref={fileInputRef}
                       id="skill-file"
                       type="file"
                       accept=".zip"
-                      onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files?.[0] || null })}
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        setUploadForm({ ...uploadForm, files });
+                      }}
                       className="hidden"
                       disabled={uploading}
                       required
@@ -489,47 +499,93 @@ const SkillMarketplace: React.FC = () => {
                     </Button>
                   </div>
                 ) : (
-                  <div className="border border-border bg-muted/50 p-4 flex items-center justify-between rounded">
-                    <div className="flex items-center space-x-3 overflow-hidden">
-                      <div className="w-10 h-10 bg-muted border border-border rounded flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-5 h-5 text-primary" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-mono font-bold text-sm text-foreground truncate">{uploadForm.file.name}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{(uploadForm.file.size / 1024).toFixed(2)} KB</p>
-                      </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-mono text-foreground">已选择 {uploadForm.files.length} 个文件</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setUploadForm({ ...uploadForm, files: [] });
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = '';
+                          }
+                        }}
+                        disabled={uploading}
+                        className="h-7 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        清空
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setUploadForm({ ...uploadForm, file: null });
-                        if (fileInputRef.current) {
-                          fileInputRef.current.value = '';
-                        }
-                      }}
-                      disabled={uploading}
-                      className="hover:bg-rose-500/10 hover:text-rose-400"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="border border-border bg-muted/50 rounded max-h-[200px] overflow-y-auto">
+                      {uploadForm.files.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 border-b border-border last:border-b-0">
+                          <div className="flex items-center space-x-3 overflow-hidden">
+                            <div className="w-8 h-8 bg-muted border border-border rounded flex items-center justify-center flex-shrink-0">
+                              <FileText className="w-4 h-4 text-primary" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-mono text-sm text-foreground truncate">{file.name}</p>
+                              <p className="font-mono text-xs text-muted-foreground">{(file.size / 1024).toFixed(2)} KB</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                  <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded">
+                <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded">
                   <div className="flex items-start space-x-3">
                     <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5" />
                     <div className="text-xs font-mono text-amber-300">
                       <p className="font-bold mb-1 uppercase">上传说明:</p>
                       <ul className="space-y-0.5 list-disc list-inside text-amber-400/80">
                         <li>仅支持 ZIP 格式</li>
-                        <li>确保文件包含完整的 Skill 配置</li>
-                        <li>包含必要的元数据和工具定义</li>
+                        <li>ZIP 根目录下必须包含 SKILL.md 文件</li>
+                        <li>自动从 SKILL.md 提取 name 和 description</li>
+                        <li>支持批量上传多个文件</li>
                       </ul>
                     </div>
                   </div>
                 </div>
               </div>
+
+              {/* 上传结果展示 */}
+              {uploadResults && (
+                <div className="space-y-3">
+                  {uploadResults.success.length > 0 && (
+                    <div className="bg-green-500/10 border border-green-500/30 p-3 rounded">
+                      <p className="text-sm font-mono text-green-400 font-bold mb-2">
+                        ✓ 成功上传 {uploadResults.success.length} 个 Skill
+                      </p>
+                      <div className="space-y-1 max-h-[100px] overflow-y-auto">
+                        {uploadResults.success.map((item, index) => (
+                          <p key={index} className="text-xs font-mono text-green-300">
+                            {item.skill?.name || item.filename}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {uploadResults.failed.length > 0 && (
+                    <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded">
+                      <p className="text-sm font-mono text-rose-400 font-bold mb-2">
+                        ✗ 失败 {uploadResults.failed.length} 个 Skill
+                      </p>
+                      <div className="space-y-1 max-h-[100px] overflow-y-auto">
+                        {uploadResults.failed.map((item, index) => (
+                          <div key={index} className="text-xs font-mono">
+                            <span className="text-rose-300">{item.filename}: </span>
+                            <span className="text-rose-200">{item.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center space-x-2">
                 <Checkbox
@@ -549,22 +605,24 @@ const SkillMarketplace: React.FC = () => {
                   onClick={() => setShowUploadDialog(false)}
                   className="cyber-btn-outline"
                 >
-                  取消
+                  {uploadResults ? "关闭" : "取消"}
                 </Button>
-                <Button
-                  type="submit"
-                  className="cyber-btn-primary"
-                  disabled={uploading}
-                >
-                  {uploading ? (
-                    <>
-                      <div className="loading-spinner w-4 h-4 mr-2"></div>
-                      上传中...
-                    </>
-                  ) : (
-                    "上传"
-                  )}
-                </Button>
+                {!uploadResults && (
+                  <Button
+                    type="submit"
+                    className="cyber-btn-primary"
+                    disabled={uploading || uploadForm.files.length === 0}
+                  >
+                    {uploading ? (
+                      <>
+                        <div className="loading-spinner w-4 h-4 mr-2"></div>
+                        上传中...
+                      </>
+                    ) : (
+                      uploadForm.files.length > 1 ? `批量上传 ${uploadForm.files.length} 个` : "上传"
+                    )}
+                  </Button>
+                )}
               </div>
             </form>
           </div>

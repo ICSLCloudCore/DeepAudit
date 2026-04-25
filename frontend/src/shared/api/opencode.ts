@@ -284,6 +284,11 @@ export const opencodeApi = {
     return response.data;
   },
 
+  batchUploadSkills: async (formData: FormData) => {
+    const response = await apiClient.post("/opencode/skills/batch-upload", formData);
+    return response.data;
+  },
+
   updateSkill: async (id: string, data: Partial<OpenCodeSkill>) => {
     const response = await apiClient.put(`/opencode/skills/${id}`, data);
     return response.data;

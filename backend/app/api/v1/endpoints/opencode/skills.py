@@ -4,11 +4,13 @@ Skill Management API
 
 import os
 import zipfile
+import tempfile
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
+import frontmatter
 
 from app.db.session import get_db
 from app.models import OpenCodeSkill, SkillCategory
@@ -20,6 +22,71 @@ router = APIRouter()
 
 # Import asyncio for the sleep
 import asyncio
+
+
+def parse_skill_metadata_from_zip(zip_content: bytes) -> dict:
+    """从 ZIP 文件内容中解析 SKILL.md 的元数据"""
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as temp_file:
+        temp_file.write(zip_content)
+        temp_file_path = temp_file.name
+
+    try:
+        with zipfile.ZipFile(temp_file_path, "r") as zip_ref:
+            # 查找 SKILL.md 文件
+            skill_md_path = None
+            skill_dir_name = None
+            for info in zip_ref.infolist():
+                parts = info.filename.split("/")
+                if len(parts) == 2 and parts[1] == "SKILL.md":
+                    skill_md_path = info.filename
+                    skill_dir_name = parts[0]
+                    break
+
+            if not skill_md_path:
+                return {"name": None, "description": None, "skill_dir_name": skill_dir_name}
+
+            # 读取 SKILL.md 内容
+            skill_md_content = zip_ref.read(skill_md_path).decode("utf-8")
+
+            # 使用 python-frontmatter 解析
+            post = frontmatter.loads(skill_md_content)
+
+            return {
+                "name": post.get("name"),
+                "description": post.get("description"),
+                "skill_dir_name": skill_dir_name,
+            }
+    finally:
+        os.unlink(temp_file_path)
+
+
+def parse_skill_metadata_from_zip_path(zip_file_path: str) -> dict:
+    """从 ZIP 文件路径中解析 SKILL.md 的元数据"""
+    with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
+        # 查找 SKILL.md 文件
+        skill_md_path = None
+        skill_dir_name = None
+        for info in zip_ref.infolist():
+            parts = info.filename.split("/")
+            if len(parts) == 2 and parts[1] == "SKILL.md":
+                skill_md_path = info.filename
+                skill_dir_name = parts[0]
+                break
+
+        if not skill_md_path:
+            return {"name": None, "description": None, "skill_dir_name": skill_dir_name}
+
+        # 读取 SKILL.md 内容
+        skill_md_content = zip_ref.read(skill_md_path).decode("utf-8")
+
+        # 使用 python-frontmatter 解析
+        post = frontmatter.loads(skill_md_content)
+
+        return {
+            "name": post.get("name"),
+            "description": post.get("description"),
+            "skill_dir_name": skill_dir_name,
+        }
 
 
 # ==================== Skill Endpoints ====================
@@ -93,7 +160,7 @@ async def get_skill(
 @router.post("/skills/upload")
 async def upload_skill(
     file: UploadFile = File(...),
-    name: str = Form(...),
+    name: Optional[str] = Form(None),
     version: str = Form("1.0.0"),
     description: Optional[str] = Form(None),
     category: str = Form(SkillCategory.CUSTOM),
@@ -101,7 +168,7 @@ async def upload_skill(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Upload a new skill"""
+    """Upload a new skill - 自动从 SKILL.md 提取元数据"""
     import os
     import hashlib
     import tempfile
@@ -129,6 +196,20 @@ async def upload_skill(
     skills_zip_dir = Path(settings.SKILLS_ZIP_STORAGE_PATH)
     skills_zip_dir.mkdir(parents=True, exist_ok=True)
 
+    # 解析 SKILL.md 获取元数据
+    metadata = parse_skill_metadata_from_zip(file_content)
+    skill_dir_name = metadata.get("skill_dir_name")
+
+    # 如果用户没有提供 name/description，则从 SKILL.md 提取
+    final_name = name or metadata.get("name")
+    final_description = description or metadata.get("description")
+
+    # 如果 SKILL.md 也没有 name，则使用目录名
+    if not final_name and skill_dir_name:
+        final_name = skill_dir_name
+    if not final_name:
+        final_name = "unnamed-skill"
+
     # 创建临时目录用于检查zip内容
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_zip_path = os.path.join(temp_dir, safe_filename)
@@ -138,7 +219,6 @@ async def upload_skill(
         # 检查zip内容
         root_dirs = set()
         has_skill_md = False
-        skill_dir_name = None
 
         try:
             with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
@@ -151,7 +231,6 @@ async def upload_skill(
                         # 检查是否有SKILL.md在根目录下
                         if len(parts) == 2 and parts[1] == "SKILL.md":
                             has_skill_md = True
-                            skill_dir_name = parts[0]
 
                 # 检查是否只有一个根目录
                 if len(root_dirs) != 1:
@@ -172,11 +251,11 @@ async def upload_skill(
             raise HTTPException(status_code=400, detail=f"ZIP文件解析失败：{str(e)}")
 
         # 检查目标目录是否已存在
-        skill_dir = os.path.join(opencode_skills_dir, skill_dir_name)
-        if os.path.exists(skill_dir):
+        skill_dir = os.path.join(opencode_skills_dir, skill_dir_name) if skill_dir_name else None
+        if not skill_dir or os.path.exists(skill_dir):
             raise HTTPException(
                 status_code=400,
-                detail=f"技能目录 '{skill_dir_name}' 已存在，请使用其他名称或删除现有技能",
+                detail=f"技能目录 '{skill_dir_name}' 已存在或无效，请使用其他名称或删除现有技能",
             )
 
         # 解压到opencode_skills_dir
@@ -191,9 +270,9 @@ async def upload_skill(
 
     # 创建数据库记录
     skill = OpenCodeSkill(
-        name=name,
+        name=final_name,
         version=version,
-        description=description,
+        description=final_description,
         author=getattr(current_user, "full_name", "unknown"),
         category=category,
         file_path=str(skills_zip_file_path),
@@ -335,3 +414,160 @@ async def delete_skill(
     await db.commit()
 
     return {"message": "Skill deleted successfully", "deleted_files": deleted_files}
+
+
+@router.post("/skills/batch-upload")
+async def batch_upload_skills(
+    files: List[UploadFile] = File(...),
+    category: str = Form(SkillCategory.CUSTOM),
+    is_public: bool = Form(False),
+    version: str = Form("1.0.0"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """批量上传 skills - 自动从每个 ZIP 的 SKILL.md 提取元数据"""
+    import os
+    import hashlib
+    import tempfile
+    from app.core.platform_config import get_opencode_skills_dir, ensure_dir_exists
+    from app.core.config import settings
+
+    results = {"success": [], "failed": []}
+
+    # 获取跨平台的OpenCode Skills目录
+    opencode_skills_dir = get_opencode_skills_dir()
+    ensure_dir_exists(opencode_skills_dir)
+
+    # 确保skills zip存储目录存在
+    skills_zip_dir = Path(settings.SKILLS_ZIP_STORAGE_PATH)
+    skills_zip_dir.mkdir(parents=True, exist_ok=True)
+
+    for file in files:
+        try:
+            file_content = await file.read()
+            checksum = hashlib.sha256(file_content).hexdigest()
+
+            # 保持原始文件名，只做基本安全检查防止路径遍历
+            original_filename = file.filename or "skill"
+            safe_filename = os.path.basename(original_filename)
+            if not safe_filename:
+                safe_filename = "skill"
+
+            # 只接受zip格式
+            if not safe_filename.endswith(".zip"):
+                results["failed"].append(
+                    {"filename": original_filename, "reason": "只支持ZIP格式的文件"}
+                )
+                continue
+
+            # 解析 SKILL.md 获取元数据
+            metadata = parse_skill_metadata_from_zip(file_content)
+            skill_dir_name = metadata.get("skill_dir_name")
+
+            # 从 SKILL.md 提取 name 和 description
+            final_name = metadata.get("name")
+            final_description = metadata.get("description")
+
+            # 如果 SKILL.md 没有 name，则使用目录名
+            if not final_name and skill_dir_name:
+                final_name = skill_dir_name
+            if not final_name:
+                final_name = "unnamed-skill"
+
+            # 创建临时目录用于检查zip内容
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_zip_path = os.path.join(temp_dir, safe_filename)
+                with open(temp_zip_path, "wb") as f:
+                    f.write(file_content)
+
+                # 检查zip内容
+                root_dirs = set()
+                has_skill_md = False
+
+                try:
+                    with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
+                        # 遍历zip中的所有文件
+                        for info in zip_ref.infolist():
+                            # 获取路径的第一部分（根目录）
+                            parts = info.filename.split("/")
+                            if len(parts) > 0 and parts[0]:
+                                root_dirs.add(parts[0])
+                                # 检查是否有SKILL.md在根目录下
+                                if len(parts) == 2 and parts[1] == "SKILL.md":
+                                    has_skill_md = True
+
+                        # 检查是否只有一个根目录
+                        if len(root_dirs) != 1:
+                            results["failed"].append(
+                                {
+                                    "filename": original_filename,
+                                    "reason": f"ZIP格式不符：必须包含且仅包含一个根目录，当前包含 {len(root_dirs)} 个",
+                                }
+                            )
+                            continue
+
+                        # 检查是否包含SKILL.md
+                        if not has_skill_md:
+                            results["failed"].append(
+                                {
+                                    "filename": original_filename,
+                                    "reason": "ZIP格式不符：根目录下必须包含SKILL.md文件",
+                                }
+                            )
+                            continue
+
+                except Exception as e:
+                    results["failed"].append(
+                        {"filename": original_filename, "reason": f"ZIP文件解析失败：{str(e)}"}
+                    )
+                    continue
+
+                # 检查目标目录是否已存在
+                skill_dir = (
+                    os.path.join(opencode_skills_dir, skill_dir_name) if skill_dir_name else None
+                )
+                if not skill_dir or os.path.exists(skill_dir):
+                    results["failed"].append(
+                        {
+                            "filename": original_filename,
+                            "reason": f"技能目录 '{skill_dir_name}' 已存在或无效",
+                        }
+                    )
+                    continue
+
+                # 解压到opencode_skills_dir
+                with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
+                    zip_ref.extractall(opencode_skills_dir)
+
+                # 保存原始zip文件到项目upload的skills目录下
+                skills_zip_file_path = skills_zip_dir / safe_filename
+
+                with open(skills_zip_file_path, "wb") as f:
+                    f.write(file_content)
+
+            # 创建数据库记录
+            skill = OpenCodeSkill(
+                name=final_name,
+                version=version,
+                description=final_description,
+                author=getattr(current_user, "full_name", "unknown"),
+                category=category,
+                file_path=str(skills_zip_file_path),
+                opencode_file_path=skill_dir,
+                file_size=len(file_content),
+                checksum=checksum,
+                is_public=is_public,
+                is_active=True,
+                created_by=current_user.id if hasattr(current_user, "id") else None,
+            )
+
+            db.add(skill)
+            await db.commit()
+            await db.refresh(skill)
+
+            results["success"].append({"filename": original_filename, "skill": skill.to_dict()})
+
+        except Exception as e:
+            results["failed"].append({"filename": file.filename or "unknown", "reason": str(e)})
+
+    return results
