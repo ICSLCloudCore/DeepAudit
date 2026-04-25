@@ -13,11 +13,8 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import Account from "@/pages/Account";
 import AuditRules from "@/pages/AuditRules";
 import PromptManager from "@/pages/PromptManager";
-import AgentManagement from "@/pages/AgentManagement";
-import SkillMarketplace from "@/pages/SkillMarketplace";
-import MCPMarketplace from "@/pages/MCPMarketplace";
+import OpenCodeResourceManager from "@/pages/OpenCodeResourceManager";
 import SecurityKnowledgeBase from "@/pages/SecurityKnowledgeBase";
-import ModelManager from "@/pages/ModelManager";
 import type { ReactNode } from 'react';
 
 export interface RouteConfig {
@@ -82,24 +79,7 @@ const routes: RouteConfig[] = [
     element: <ProjectDetail />,
     visible: false,
   },
-  {
-    name: "Agent管理",
-    path: "/agents",
-    element: <AgentManagement />,
-    visible: true,
-  },
-  {
-    name: "Skill",
-    path: "/skill-marketplace",
-    element: <SkillMarketplace />,
-    visible: true,
-  },
-  {
-    name: "MCP",
-    path: "/mcp-marketplace",
-    element: <MCPMarketplace />,
-    visible: true,
-  },
+
   {
     name: "即时分析",
     path: "/instant-analysis",
@@ -137,9 +117,9 @@ const routes: RouteConfig[] = [
     visible: true,
   },
   {
-    name: "模型管理",
-    path: "/models",
-    element: <ModelManager />,
+    name: "OpenCode管理",
+    path: "/opencode",
+    element: <OpenCodeResourceManager />,
     visible: true,
   },
   {
