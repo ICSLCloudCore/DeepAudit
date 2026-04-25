@@ -49,7 +49,7 @@ type TaskTab = "regular" | "agent" | "opencode";
 
 export default function AuditTasks() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TaskTab>("agent"); // 默认显示Agent任务
+  const [activeTab, setActiveTab] = useState<TaskTab>("opencode"); // 默认显示Agent任务
 
   // 普通任务状态
   const [tasks, setTasks] = useState<AuditTask[]>([]);
