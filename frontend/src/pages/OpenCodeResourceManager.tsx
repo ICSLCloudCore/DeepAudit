@@ -1381,17 +1381,16 @@ export default function OpenCodeResourceManager() {
             <div className="cyber-card-header">
               <Bot className="w-5 h-5 text-primary" />
               <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Agent 管理</h3>
-              <div className="ml-auto flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => agentFileInputRef.current?.click()}
-                  disabled={agentUploading}
-                  size="sm"
-                  className="cyber-btn-outline h-8"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  {agentUploading ? "上传中..." : "上传 Agent 文件"}
-                </Button>
+             <div className="ml-auto flex items-center gap-2">
+               <Button
+                 variant="outline"
+                 onClick={() => agentFileInputRef.current?.click()}
+                 disabled={agentUploading}
+                 className="cyber-btn-primary"
+               >
+                 <Upload className="w-4 h-4 mr-2" />
+                 {agentUploading ? "上传中..." : "上传 Agent 文件"}
+               </Button>
                 <input
                   ref={agentFileInputRef}
                   type="file"
