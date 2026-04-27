@@ -1217,160 +1217,9 @@ export default function OpenCodeResourceManager() {
                    )}
                  </div>
                </div>
-             </>
-           )}
-
-              {/* Provider Dialog */}
-              <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
-                <DialogContent className="!w-[min(90vw,600px)] !max-w-none cyber-dialog border border-border rounded-lg">
-                  <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
-                    <DialogTitle className="flex items-center gap-3 font-mono text-foreground">
-                      <div className="p-2 bg-primary/20 rounded border border-primary/30">
-                        <Settings className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <span className="text-base font-bold uppercase tracking-wider">
-                          {editingProviderId ? "编辑供应商" : "添加供应商"}
-                        </span>
-                      </div>
-                    </DialogTitle>
-                  </DialogHeader>
-
-                  <div className="p-6 space-y-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase">供应商 ID *</Label>
-                      <Input
-                        value={providerForm.id}
-                        onChange={(e) => setProviderForm({ ...providerForm, id: e.target.value })}
-                        placeholder="例如: openai, anthropic, llm"
-                        className="cyber-input"
-                        disabled={!!editingProviderId}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase">显示名称 *</Label>
-                      <Input
-                        value={providerForm.name}
-                        onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
-                        placeholder="例如: OpenAI, Anthropic"
-                        className="cyber-input"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase">SDK 包 *</Label>
-                      <Input
-                        value={providerForm.npm}
-                        onChange={(e) => setProviderForm({ ...providerForm, npm: e.target.value })}
-                        placeholder="@ai-sdk/openai-compatible 或 @ai-sdk/openai"
-                        className="cyber-input"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase">Base URL</Label>
-                      <Input
-                        value={providerForm.baseURL}
-                        onChange={(e) => setProviderForm({ ...providerForm, baseURL: e.target.value })}
-                        placeholder="https://api.openai.com/v1"
-                        className="cyber-input"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase">API Key</Label>
-                      <Input
-                        value={providerForm.apiKey}
-                        onChange={(e) => setProviderForm({ ...providerForm, apiKey: e.target.value })}
-                        placeholder="sk-..."
-                        type="password"
-                        className="cyber-input"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase">模型列表 (逗号分隔)</Label>
-                      <Input
-                        value={providerForm.models}
-                        onChange={(e) => setProviderForm({ ...providerForm, models: e.target.value })}
-                        placeholder="gpt-4, gpt-3.5-turbo, gpt-4o"
-                        className="cyber-input"
-                      />
-                    </div>
-                  </div>
-
-                  <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowProviderDialog(false)}
-                      className="cyber-btn-outline"
-                    >
-                      取消
-                    </Button>
-                    <Button onClick={handleSaveProvider} className="cyber-btn-primary">
-                      {editingProviderId ? "更新" : "添加"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
-              {/* Model Dialog */}
-              <Dialog open={showModelDialog} onOpenChange={setShowModelDialog}>
-                <DialogContent className="!w-[min(90vw,500px)] !max-w-none cyber-dialog border border-border rounded-lg">
-                  <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
-                    <DialogTitle className="flex items-center gap-3 font-mono text-foreground">
-                      <div className="p-2 bg-primary/20 rounded border border-primary/30">
-                        <Cpu className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <span className="text-base font-bold uppercase tracking-wider">
-                          {editingModelId ? "编辑模型" : "添加模型"}
-                        </span>
-                      </div>
-                    </DialogTitle>
-                  </DialogHeader>
-
-                  <div className="p-6 space-y-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase">模型 ID *</Label>
-                      <Input
-                        value={modelForm.id}
-                        onChange={(e) => setModelForm({ ...modelForm, id: e.target.value })}
-                        placeholder="例如: gpt-4o"
-                        className="cyber-input"
-                        disabled={!!editingModelId}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase">显示名称</Label>
-                      <Input
-                        value={modelForm.name}
-                        onChange={(e) => setModelForm({ ...modelForm, name: e.target.value })}
-                        placeholder="例如: GPT-4o"
-                        className="cyber-input"
-                      />
-                    </div>
-                  </div>
-
-                  <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowModelDialog(false)}
-                      className="cyber-btn-outline"
-                    >
-                      取消
-                    </Button>
-                    <Button onClick={handleSaveModel} className="cyber-btn-primary">
-                      {editingModelId ? "更新" : "添加"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-        </TabsContent>
+              </>
+            )}
+           </TabsContent>
 
         {/* ============== SKILLS TAB CONTENT ============== */}
         <TabsContent value="skills" className="mt-6 space-y-6">
@@ -1981,10 +1830,160 @@ export default function OpenCodeResourceManager() {
               />
             </CardContent>
           </Card>
-        </TabsContent>
-       </Tabs>
+         </TabsContent>
 
-       {/* ============== SKILLS UPLOAD DIALOG ============== */}
+         {/* ============== MODELS DIALOGS ============== */}
+         {/* Provider Dialog */}
+         <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
+                 <DialogContent className="!w-[min(90vw,600px)] !max-w-none cyber-dialog border border-border rounded-lg">
+                   <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
+                     <DialogTitle className="flex items-center gap-3 font-mono text-foreground">
+                       <div className="p-2 bg-primary/20 rounded border border-primary/30">
+                         <Settings className="w-5 h-5 text-primary" />
+                       </div>
+                       <div>
+                         <span className="text-base font-bold uppercase tracking-wider">
+                           {editingProviderId ? "编辑供应商" : "添加供应商"}
+                         </span>
+                       </div>
+                     </DialogTitle>
+                   </DialogHeader>
+
+                   <div className="p-6 space-y-4">
+                     <div className="space-y-2">
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">供应商 ID *</Label>
+                       <Input
+                         value={providerForm.id}
+                         onChange={(e) => setProviderForm({ ...providerForm, id: e.target.value })}
+                         placeholder="例如: openai, anthropic, llm"
+                         className="cyber-input"
+                         disabled={!!editingProviderId}
+                       />
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">显示名称 *</Label>
+                       <Input
+                         value={providerForm.name}
+                         onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
+                         placeholder="例如: OpenAI, Anthropic"
+                         className="cyber-input"
+                       />
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">SDK 包 *</Label>
+                       <Input
+                         value={providerForm.npm}
+                         onChange={(e) => setProviderForm({ ...providerForm, npm: e.target.value })}
+                         placeholder="@ai-sdk/openai-compatible 或 @ai-sdk/openai"
+                         className="cyber-input"
+                       />
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">Base URL</Label>
+                       <Input
+                         value={providerForm.baseURL}
+                         onChange={(e) => setProviderForm({ ...providerForm, baseURL: e.target.value })}
+                         placeholder="https://api.openai.com/v1"
+                         className="cyber-input"
+                       />
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">API Key</Label>
+                       <Input
+                         value={providerForm.apiKey}
+                         onChange={(e) => setProviderForm({ ...providerForm, apiKey: e.target.value })}
+                         placeholder="sk-..."
+                         type="password"
+                         className="cyber-input"
+                       />
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">模型列表 (逗号分隔)</Label>
+                       <Input
+                         value={providerForm.models}
+                         onChange={(e) => setProviderForm({ ...providerForm, models: e.target.value })}
+                         placeholder="gpt-4, gpt-3.5-turbo, gpt-4o"
+                         className="cyber-input"
+                       />
+                     </div>
+                   </div>
+
+                   <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+                     <Button
+                       variant="outline"
+                       onClick={() => setShowProviderDialog(false)}
+                       className="cyber-btn-outline"
+                     >
+                       取消
+                     </Button>
+                     <Button onClick={handleSaveProvider} className="cyber-btn-primary">
+                       {editingProviderId ? "更新" : "添加"}
+                     </Button>
+                   </DialogFooter>
+                 </DialogContent>
+               </Dialog>
+
+         {/* Model Dialog */}
+         <Dialog open={showModelDialog} onOpenChange={setShowModelDialog}>
+                 <DialogContent className="!w-[min(90vw,500px)] !max-w-none cyber-dialog border border-border rounded-lg">
+                   <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
+                     <DialogTitle className="flex items-center gap-3 font-mono text-foreground">
+                       <div className="p-2 bg-primary/20 rounded border border-primary/30">
+                         <Cpu className="w-5 h-5 text-primary" />
+                       </div>
+                       <div>
+                         <span className="text-base font-bold uppercase tracking-wider">
+                           {editingModelId ? "编辑模型" : "添加模型"}
+                         </span>
+                       </div>
+                     </DialogTitle>
+                   </DialogHeader>
+
+                   <div className="p-6 space-y-4">
+                     <div className="space-y-2">
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">模型 ID *</Label>
+                       <Input
+                         value={modelForm.id}
+                         onChange={(e) => setModelForm({ ...modelForm, id: e.target.value })}
+                         placeholder="例如: gpt-4o"
+                         className="cyber-input"
+                         disabled={!!editingModelId}
+                       />
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">显示名称</Label>
+                       <Input
+                         value={modelForm.name}
+                         onChange={(e) => setModelForm({ ...modelForm, name: e.target.value })}
+                         placeholder="例如: GPT-4o"
+                         className="cyber-input"
+                       />
+                     </div>
+                   </div>
+
+                   <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+                     <Button
+                       variant="outline"
+                       onClick={() => setShowModelDialog(false)}
+                       className="cyber-btn-outline"
+                     >
+                       取消
+                     </Button>
+                     <Button onClick={handleSaveModel} className="cyber-btn-primary">
+                       {editingModelId ? "更新" : "添加"}
+                     </Button>
+                   </DialogFooter>
+                 </DialogContent>
+               </Dialog>
+        </Tabs>
+
+        {/* ============== SKILLS UPLOAD DIALOG ============== */}
       <Dialog
         open={showSkillUploadDialog}
         onOpenChange={(open) => {
