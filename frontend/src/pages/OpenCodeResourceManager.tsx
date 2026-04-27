@@ -71,6 +71,8 @@ export default function OpenCodeResourceManager() {
   const [rawConfig, setRawConfig] = useState<string>("");
   const [modelsLoading, setModelsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [providerSaving, setProviderSaving] = useState(false);
+  const [modelSaving, setModelSaving] = useState(false);
   const [modelFilters, setModelFilters] = useState({ search: "" });
 
   // Provider dialog
@@ -274,55 +276,90 @@ export default function OpenCodeResourceManager() {
     setShowProviderDialog(true);
   };
 
-  const handleSaveProvider = () => {
+  const handleSaveProvider = async () => {
     if (!openCodeConfig) return;
 
-    const modelIds = providerForm.models
-      ? providerForm.models.split(",").map((m) => m.trim()).filter((m) => m)
-      : [];
+    try {
+      setProviderSaving(true);
 
-    const models: Record<string, { name: string }> = {};
-    modelIds.forEach((modelId) => {
-      models[modelId] = { name: modelId };
-    });
+      const modelIds = providerForm.models
+        ? providerForm.models.split(",").map((m) => m.trim()).filter((m) => m)
+        : [];
 
-    const newProvider: ProviderConfig = {
-      npm: providerForm.npm,
-      name: providerForm.name,
-      options: {
-        baseURL: providerForm.baseURL || undefined,
-        apiKey: providerForm.apiKey || undefined,
-      },
-      models: Object.keys(models).length > 0 ? models : undefined,
-    };
+      const models: Record<string, { name: string }> = {};
+      modelIds.forEach((modelId) => {
+        models[modelId] = { name: modelId };
+      });
 
-    const newProviders = { ...(openCodeConfig.provider || {}) };
+      const newProvider: ProviderConfig = {
+        npm: providerForm.npm,
+        name: providerForm.name,
+        options: {
+          baseURL: providerForm.baseURL || undefined,
+          apiKey: providerForm.apiKey || undefined,
+        },
+        models: Object.keys(models).length > 0 ? models : undefined,
+      };
 
-    if (editingProviderId && editingProviderId !== providerForm.id) {
-      delete newProviders[editingProviderId];
+      const newProviders = { ...(openCodeConfig.provider || {}) };
+
+      if (editingProviderId && editingProviderId !== providerForm.id) {
+        delete newProviders[editingProviderId];
+      }
+
+      newProviders[providerForm.id] = newProvider;
+
+      const newConfig = {
+        ...openCodeConfig,
+        provider: newProviders,
+      };
+
+      setOpenCodeConfig(newConfig);
+      
+      const res = await updateOpenCodeConfig(newConfig);
+      if (res.success) {
+        toast.success(editingProviderId ? "供应商更新成功！" : "供应商添加成功！");
+        setShowProviderDialog(false);
+        loadModels();
+      } else {
+        toast.error(res.error || "保存失败");
+      }
+    } catch (error) {
+      toast.error("保存失败");
+    } finally {
+      setProviderSaving(false);
     }
-
-    newProviders[providerForm.id] = newProvider;
-
-    setOpenCodeConfig({
-      ...openCodeConfig,
-      provider: newProviders,
-    });
-
-    setShowProviderDialog(false);
   };
 
-  const handleDeleteProvider = (providerId: string) => {
+  const handleDeleteProvider = async (providerId: string) => {
     if (!openCodeConfig) return;
     if (!confirm(`确定要删除供应商 "${providerId}" 吗？`)) return;
 
-    const newProviders = { ...(openCodeConfig.provider || {}) };
-    delete newProviders[providerId];
+    try {
+      setProviderSaving(true);
+      
+      const newProviders = { ...(openCodeConfig.provider || {}) };
+      delete newProviders[providerId];
 
-    setOpenCodeConfig({
-      ...openCodeConfig,
-      provider: newProviders,
-    });
+      const newConfig = {
+        ...openCodeConfig,
+        provider: newProviders,
+      };
+
+      setOpenCodeConfig(newConfig);
+      
+      const res = await updateOpenCodeConfig(newConfig);
+      if (res.success) {
+        toast.success("供应商删除成功！");
+        loadModels();
+      } else {
+        toast.error(res.error || "删除失败");
+      }
+    } catch (error) {
+      toast.error("删除失败");
+    } finally {
+      setProviderSaving(false);
+    }
   };
 
   const openAddModel = (providerId: string) => {
@@ -339,54 +376,89 @@ export default function OpenCodeResourceManager() {
     setShowModelDialog(true);
   };
 
-  const handleSaveModel = () => {
+  const handleSaveModel = async () => {
     if (!openCodeConfig || !currentProviderId) return;
 
-    const providers = { ...(openCodeConfig.provider || {}) };
-    const providerConfig = providers[currentProviderId];
-    if (!providerConfig) return;
+    try {
+      setModelSaving(true);
 
-    const models = { ...(providerConfig.models || {}) };
+      const providers = { ...(openCodeConfig.provider || {}) };
+      const providerConfig = providers[currentProviderId];
+      if (!providerConfig) return;
 
-    if (editingModelId && editingModelId !== modelForm.id) {
-      delete models[editingModelId];
+      const models = { ...(providerConfig.models || {}) };
+
+      if (editingModelId && editingModelId !== modelForm.id) {
+        delete models[editingModelId];
+      }
+
+      models[modelForm.id] = { name: modelForm.name || modelForm.id };
+
+      providers[currentProviderId] = {
+        ...providerConfig,
+        models,
+      };
+
+      const newConfig = {
+        ...openCodeConfig,
+        provider: providers,
+      };
+
+      setOpenCodeConfig(newConfig);
+
+      const res = await updateOpenCodeConfig(newConfig);
+      if (res.success) {
+        toast.success(editingModelId ? "模型更新成功！" : "模型添加成功！");
+        setShowModelDialog(false);
+        loadModels();
+      } else {
+        toast.error(res.error || "保存失败");
+      }
+    } catch (error) {
+      toast.error("保存失败");
+    } finally {
+      setModelSaving(false);
     }
-
-    models[modelForm.id] = { name: modelForm.name || modelForm.id };
-
-    providers[currentProviderId] = {
-      ...providerConfig,
-      models,
-    };
-
-    setOpenCodeConfig({
-      ...openCodeConfig,
-      provider: providers,
-    });
-
-    setShowModelDialog(false);
   };
 
-  const handleDeleteModel = (providerId: string, modelId: string) => {
+  const handleDeleteModel = async (providerId: string, modelId: string) => {
     if (!openCodeConfig) return;
     if (!confirm(`确定要删除模型 "${modelId}" 吗？`)) return;
 
-    const providers = { ...(openCodeConfig.provider || {}) };
-    const providerConfig = providers[providerId];
-    if (!providerConfig || !providerConfig.models) return;
+    try {
+      setModelSaving(true);
 
-    const newModels = { ...providerConfig.models };
-    delete newModels[modelId];
+      const providers = { ...(openCodeConfig.provider || {}) };
+      const providerConfig = providers[providerId];
+      if (!providerConfig || !providerConfig.models) return;
 
-    providers[providerId] = {
-      ...providerConfig,
-      models: newModels,
-    };
+      const newModels = { ...providerConfig.models };
+      delete newModels[modelId];
 
-    setOpenCodeConfig({
-      ...openCodeConfig,
-      provider: providers,
-    });
+      providers[providerId] = {
+        ...providerConfig,
+        models: newModels,
+      };
+
+      const newConfig = {
+        ...openCodeConfig,
+        provider: providers,
+      };
+
+      setOpenCodeConfig(newConfig);
+
+      const res = await updateOpenCodeConfig(newConfig);
+      if (res.success) {
+        toast.success("模型删除成功！");
+        loadModels();
+      } else {
+        toast.error(res.error || "删除失败");
+      }
+    } catch (error) {
+      toast.error("删除失败");
+    } finally {
+      setModelSaving(false);
+    }
   };
 
   const providerCount = openCodeConfig?.provider ? Object.keys(openCodeConfig.provider).length : 0;
@@ -1724,15 +1796,6 @@ export default function OpenCodeResourceManager() {
               <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">文件管理</h3>
               <div className="ml-auto">
                 <Button
-                  variant="outline"
-                  onClick={loadModels}
-                  className="cyber-btn-outline"
-                  disabled={saving}
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  刷新
-                </Button>
-                <Button
                   onClick={handleSaveRaw}
                   className="cyber-btn-primary ml-2"
                   disabled={saving}
@@ -1850,18 +1913,30 @@ export default function OpenCodeResourceManager() {
                      </div>
                    </div>
 
-                   <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
-                     <Button
-                       variant="outline"
-                       onClick={() => setShowProviderDialog(false)}
-                       className="cyber-btn-outline"
-                     >
-                       取消
-                     </Button>
-                     <Button onClick={handleSaveProvider} className="cyber-btn-primary">
-                       {editingProviderId ? "更新" : "添加"}
-                     </Button>
-                   </DialogFooter>
+                    <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowProviderDialog(false)}
+                        className="cyber-btn-outline"
+                        disabled={providerSaving}
+                      >
+                        取消
+                      </Button>
+                      <Button 
+                        onClick={handleSaveProvider} 
+                        className="cyber-btn-primary"
+                        disabled={providerSaving}
+                      >
+                        {providerSaving ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            保存中...
+                          </>
+                        ) : (
+                          editingProviderId ? "更新" : "添加"
+                        )}
+                      </Button>
+                    </DialogFooter>
                  </DialogContent>
                </Dialog>
 
@@ -1904,16 +1979,28 @@ export default function OpenCodeResourceManager() {
                      </div>
                    </div>
 
-                   <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
-                     <Button
-                       variant="outline"
-                       onClick={() => setShowModelDialog(false)}
-                       className="cyber-btn-outline"
-                     >
-                       取消
-                     </Button>
-                     <Button onClick={handleSaveModel} className="cyber-btn-primary">
-                       {editingModelId ? "更新" : "添加"}
+                    <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowModelDialog(false)}
+                        className="cyber-btn-outline"
+                        disabled={modelSaving}
+                      >
+                        取消
+                      </Button>
+                      <Button 
+                        onClick={handleSaveModel} 
+                        className="cyber-btn-primary"
+                        disabled={modelSaving}
+                      >
+                        {modelSaving ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            保存中...
+                          </>
+                        ) : (
+                          editingModelId ? "更新" : "添加"
+                        )}
                      </Button>
                    </DialogFooter>
                  </DialogContent>
