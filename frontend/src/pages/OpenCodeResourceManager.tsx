@@ -1401,66 +1401,67 @@ export default function OpenCodeResourceManager() {
                 />
               </div>
             </div>
-            <div className="p-6">
-              <p className="text-muted-foreground font-mono">管理系统 Agent 和自定义 Agent</p>
-            </div>
+             <div className="p-6">
+               <p className="text-muted-foreground font-mono">管理系统 Agent 和自定义 Agent</p>
+             </div>
            </div>
 
+           {/* Main content */}
            <div className="cyber-card p-0">
              <div className="p-6 space-y-6">
                {/* Filters */}
                <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
-                      <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                        <Search className="w-3 h-3" />
-                        搜索
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder="搜索 Agent..."
-                        className="cyber-input"
-                        value={agentFilters.search}
-                        onChange={(e) => setAgentFilters({ ...agentFilters, search: e.target.value })}
-                      />
-                    </div>
-                    <div className="sm:w-48">
-                      <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                        <Filter className="w-3 h-3" />
-                        Agent类型
-                      </label>
-                      <Select value={agentFilters.agent_type} onValueChange={(val) => setAgentFilters({ ...agentFilters, agent_type: val })}>
-                        <SelectTrigger className="cyber-input">
-                          <SelectValue placeholder="选择类型" />
-                        </SelectTrigger>
-                        <SelectContent className="cyber-dialog border-border">
-                          <SelectItem value="all">全部类型</SelectItem>
-                          <SelectItem value="system">系统 Agent</SelectItem>
-                          <SelectItem value="custom">自定义 Agent</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="sm:w-48">
-                      <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                        <Filter className="w-3 h-3" />
-                        状态
-                      </label>
-                      <Select
-                        value={agentFilters.is_active === undefined ? "all" : agentFilters.is_active ? "active" : "inactive"}
-                        onValueChange={(val) => setAgentFilters({ ...agentFilters, is_active: val === "all" ? undefined : val === "active" })}
-                      >
-                        <SelectTrigger className="cyber-input">
-                          <SelectValue placeholder="选择状态" />
-                        </SelectTrigger>
-                        <SelectContent className="cyber-dialog border-border">
-                          <SelectItem value="all">全部状态</SelectItem>
-                          <SelectItem value="active">已启用</SelectItem>
-                          <SelectItem value="inactive">已禁用</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
+                 <div className="flex flex-col sm:flex-row gap-4">
+                   <div className="flex-1">
+                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                       <Search className="w-3 h-3" />
+                       搜索
+                     </label>
+                     <Input
+                       type="text"
+                       placeholder="搜索 Agent..."
+                       className="cyber-input"
+                       value={agentFilters.search}
+                       onChange={(e) => setAgentFilters({ ...agentFilters, search: e.target.value })}
+                     />
+                   </div>
+                   <div className="sm:w-48">
+                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                       <Filter className="w-3 h-3" />
+                       Agent类型
+                     </label>
+                     <Select value={agentFilters.agent_type} onValueChange={(val) => setAgentFilters({ ...agentFilters, agent_type: val })}>
+                       <SelectTrigger className="cyber-input">
+                         <SelectValue placeholder="选择类型" />
+                       </SelectTrigger>
+                       <SelectContent className="cyber-dialog border-border">
+                         <SelectItem value="all">全部类型</SelectItem>
+                         <SelectItem value="system">系统 Agent</SelectItem>
+                         <SelectItem value="custom">自定义 Agent</SelectItem>
+                       </SelectContent>
+                     </Select>
+                   </div>
+                   <div className="sm:w-48">
+                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                       <Filter className="w-3 h-3" />
+                       状态
+                     </label>
+                     <Select
+                       value={agentFilters.is_active === undefined ? "all" : agentFilters.is_active ? "active" : "inactive"}
+                       onValueChange={(val) => setAgentFilters({ ...agentFilters, is_active: val === "all" ? undefined : val === "active" })}
+                     >
+                       <SelectTrigger className="cyber-input">
+                         <SelectValue placeholder="选择状态" />
+                       </SelectTrigger>
+                       <SelectContent className="cyber-dialog border-border">
+                         <SelectItem value="all">全部状态</SelectItem>
+                         <SelectItem value="active">已启用</SelectItem>
+                         <SelectItem value="inactive">已禁用</SelectItem>
+                       </SelectContent>
+                     </Select>
+                   </div>
+                 </div>
+               </div>
 
                {/* Agents grid */}
                {agentsLoading ? (
@@ -1538,141 +1539,7 @@ export default function OpenCodeResourceManager() {
                )}
              </div>
            </div>
-            <div className="p-6">
-               {/* Filters */}
-               <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
-                 <div className="flex flex-col sm:flex-row gap-4">
-                   <div className="flex-1">
-                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                       <Search className="w-3 h-3" />
-                       搜索
-                     </label>
-                     <Input
-                       type="text"
-                       placeholder="搜索 Agent..."
-                       className="cyber-input"
-                       value={agentFilters.search}
-                       onChange={(e) => setAgentFilters({ ...agentFilters, search: e.target.value })}
-                     />
-                   </div>
-                   <div className="sm:w-48">
-                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                       <Filter className="w-3 h-3" />
-                       Agent类型
-                     </label>
-                     <Select value={agentFilters.agent_type} onValueChange={(val) => setAgentFilters({ ...agentFilters, agent_type: val })}>
-                       <SelectTrigger className="cyber-input">
-                         <SelectValue placeholder="选择类型" />
-                       </SelectTrigger>
-                       <SelectContent className="cyber-dialog border-border">
-                         <SelectItem value="all">全部类型</SelectItem>
-                         <SelectItem value="system">系统 Agent</SelectItem>
-                         <SelectItem value="custom">自定义 Agent</SelectItem>
-                       </SelectContent>
-                     </Select>
-                   </div>
-                   <div className="sm:w-48">
-                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                       <Filter className="w-3 h-3" />
-                       状态
-                     </label>
-                     <Select
-                       value={agentFilters.is_active === undefined ? "all" : agentFilters.is_active ? "active" : "inactive"}
-                       onValueChange={(val) => setAgentFilters({ ...agentFilters, is_active: val === "all" ? undefined : val === "active" })}
-                     >
-                       <SelectTrigger className="cyber-input">
-                         <SelectValue placeholder="选择状态" />
-                       </SelectTrigger>
-                       <SelectContent className="cyber-dialog border-border">
-                         <SelectItem value="all">全部状态</SelectItem>
-                         <SelectItem value="active">已启用</SelectItem>
-                         <SelectItem value="inactive">已禁用</SelectItem>
-                       </SelectContent>
-                     </Select>
-                   </div>
-                 </div>
-               </div>
-
-              {/* Agents grid */}
-              {agentsLoading ? (
-                <div className="text-center py-12">
-                  <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
-                  <p className="text-muted-foreground font-mono">加载中...</p>
-                </div>
-              ) : agents.length === 0 ? (
-                <div className="empty-state">
-                  <Bot className="empty-state-icon" />
-                  <p className="empty-state-title">暂无 Agents</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {agents.map((agent) => (
-                    <div key={agent.id} className="cyber-card p-4 hover:border-primary transition-all group">
-                      <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
-                        <div className="flex items-start space-x-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${agent.is_system ? "text-muted-foreground bg-muted" : "text-primary bg-primary/20"}`}>
-                            <Bot className="w-5 h-5" />
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">
-                              {agent.name}
-                            </h4>
-                            <div className="flex items-center space-x-1 text-xs text-muted-foreground font-mono">
-                              <span className="text-primary">{">"}</span>
-                              <span>v{agent.version}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={agent.is_system ? "cyber-badge-muted" : "cyber-badge-primary"}>
-                            {agent.agent_type}
-                          </Badge>
-                          <Badge className={agent.is_active ? "cyber-badge-success" : "cyber-badge-muted"}>
-                            {agent.is_active ? "启用" : "禁用"}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <p className="text-muted-foreground text-sm">{agent.description}</p>
-
-                        <div className="flex justify-between items-center">
-                          <div className="text-xs text-muted-foreground font-mono">作者: {agent.author}</div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs cyber-btn-ghost"
-                              title="查看"
-                              onClick={() => console.log("View agent:", agent)}
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              查看
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className={`h-7 px-2 text-xs cyber-btn-ghost ${
-                                agent.is_active
-                                  ? "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                                  : "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-                              }`}
-                              title={agent.is_active ? "禁用" : "启用"}
-                              onClick={() => toggleAgent(agent.id, agent.is_active)}
-                            >
-                              <Power className="w-3 h-3 mr-1" />
-                              {agent.is_active ? "禁用" : "启用"}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </TabsContent>
+         </TabsContent>
 
         {/* ============== MCPS TAB CONTENT ============== */}
         <TabsContent value="mcps" className="mt-6 space-y-6">
