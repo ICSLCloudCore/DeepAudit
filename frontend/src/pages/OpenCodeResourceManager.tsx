@@ -995,6 +995,13 @@ export default function OpenCodeResourceManager() {
             <Server className="w-4 h-4 mr-2" />
             MCPs
           </TabsTrigger>
+          <TabsTrigger
+            value="file"
+            className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            文件管理
+          </TabsTrigger>
         </TabsList>
 
         {/* ============== MODELS TAB CONTENT ============== */}
@@ -1009,206 +1016,176 @@ export default function OpenCodeResourceManager() {
           ) : (
             <>
 
-              {/* Actions bar */}
-              <div className="cyber-card p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Settings className="w-5 h-5 text-primary" />
-                    <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">OpenCode 配置管理</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={loadModels}
-                      className="cyber-btn-outline"
-                      disabled={saving}
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      刷新
-                    </Button>
-                    <Button
-                      onClick={activeTab === "visual" ? handleSaveVisual : handleSaveRaw}
-                      className="cyber-btn-primary"
-                      disabled={saving}
-                    >
-                      {saving ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                          保存中...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4 mr-2" />
-                          保存配置
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
+               {/* Actions bar */}
+               <div className="cyber-card p-4">
+                 <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                     <Settings className="w-5 h-5 text-primary" />
+                     <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">OpenCode 配置管理</h3>
+                   </div>
+                   <div className="flex items-center gap-2">
+                     <Button
+                       variant="outline"
+                       onClick={loadModels}
+                       className="cyber-btn-outline"
+                       disabled={saving}
+                     >
+                       <RefreshCw className="w-4 h-4 mr-2" />
+                       刷新
+                     </Button>
+                     <Button
+                       onClick={handleSaveVisual}
+                       className="cyber-btn-primary"
+                       disabled={saving}
+                     >
+                       {saving ? (
+                         <>
+                           <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                           保存中...
+                         </>
+                       ) : (
+                         <>
+                           <Save className="w-4 h-4 mr-2" />
+                           保存配置
+                         </>
+                       )}
+                     </Button>
+                   </div>
+                 </div>
+               </div>
 
-              {/* Inner tabs for visual/raw edit */}
-              <Tabs defaultValue="visual">
-                <TabsList className="bg-muted border border-border p-1 h-auto gap-1 rounded">
-                  <TabsTrigger
-                    value="visual"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
-                  >
-                    可视化编辑
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="raw"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
-                  >
-                    原始 JSON
-                  </TabsTrigger>
-                </TabsList>
+               {/* Visual edit content */}
+               <div className="mt-6 space-y-4">
+                   <div className="flex justify-end">
+                     <Button onClick={openAddProvider} className="cyber-btn-primary">
+                       <Plus className="w-4 h-4 mr-2" />
+                       添加供应商
+                     </Button>
+                   </div>
 
-                <TabsContent value="visual" className="mt-6 space-y-4">
-                  <div className="flex justify-end">
-                    <Button onClick={openAddProvider} className="cyber-btn-primary">
-                      <Plus className="w-4 h-4 mr-2" />
-                      添加供应商
-                    </Button>
-                  </div>
+                   <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
+                     {openCodeConfig?.provider &&
+                       Object.entries(openCodeConfig.provider).map(([providerId, providerConfig]) => (
+                         <Card key={providerId} className="cyber-card overflow-hidden">
+                           <CardHeader className="pb-3 border-b border-border">
+                             <div className="flex items-center justify-between">
+                               <div className="flex items-center gap-3">
+                                 <div className="p-2 bg-primary/20 rounded border border-primary/30">
+                                   <Package className="w-5 h-5 text-primary" />
+                                 </div>
+                                 <div>
+                                   <CardTitle className="text-base">{providerConfig.name || providerId}</CardTitle>
+                                   <p className="text-xs text-muted-foreground font-mono">{providerConfig.npm}</p>
+                                 </div>
+                               </div>
+                             </div>
+                           </CardHeader>
 
-                  <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
-                    {openCodeConfig?.provider &&
-                      Object.entries(openCodeConfig.provider).map(([providerId, providerConfig]) => (
-                        <Card key={providerId} className="cyber-card overflow-hidden">
-                          <CardHeader className="pb-3 border-b border-border">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="p-2 bg-primary/20 rounded border border-primary/30">
-                                  <Package className="w-5 h-5 text-primary" />
-                                </div>
-                                <div>
-                                  <CardTitle className="text-base">{providerConfig.name || providerId}</CardTitle>
-                                  <p className="text-xs text-muted-foreground font-mono">{providerConfig.npm}</p>
-                                </div>
-                              </div>
-                            </div>
-                          </CardHeader>
+                           <CardContent className="pt-4 space-y-4">
+                             {providerConfig.options?.baseURL && (
+                               <div className="flex items-center gap-2">
+                                 <Globe className="w-4 h-4 text-muted-foreground" />
+                                 <span className="text-sm text-foreground font-mono truncate">
+                                   {providerConfig.options.baseURL}
+                                 </span>
+                               </div>
+                             )}
+                             {providerConfig.options?.apiKey && (
+                               <div className="flex items-center gap-2">
+                                 <Key className="w-4 h-4 text-muted-foreground" />
+                                 <span className="text-sm text-foreground font-mono truncate">
+                                   {providerConfig.options.apiKey.substring(0, 10)}...
+                                 </span>
+                               </div>
+                             )}
 
-                          <CardContent className="pt-4 space-y-4">
-                            {providerConfig.options?.baseURL && (
-                              <div className="flex items-center gap-2">
-                                <Globe className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm text-foreground font-mono truncate">
-                                  {providerConfig.options.baseURL}
-                                </span>
-                              </div>
-                            )}
-                            {providerConfig.options?.apiKey && (
-                              <div className="flex items-center gap-2">
-                                <Key className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm text-foreground font-mono truncate">
-                                  {providerConfig.options.apiKey.substring(0, 10)}...
-                                </span>
-                              </div>
-                            )}
+                             <div className="space-y-2">
+                               <div className="flex items-center justify-between">
+                                 <Label className="text-xs text-muted-foreground">模型列表</Label>
+                                 <Button
+                                   variant="ghost"
+                                   size="sm"
+                                   onClick={() => openAddModel(providerId)}
+                                   className="h-7 px-2 text-xs cyber-btn-ghost"
+                                 >
+                                   <Plus className="w-3 h-3 mr-1" />
+                                   添加
+                                 </Button>
+                               </div>
+                               <div className="flex flex-wrap gap-2">
+                                 {providerConfig.models &&
+                                   Object.entries(providerConfig.models).map(([modelId, modelConfig]) => (
+                                     <Badge
+                                       key={modelId}
+                                       className="cyber-badge-muted group cursor-pointer"
+                                     >
+                                       {modelConfig.name || modelId}
+                                       <div className="ml-1 flex gap-1 opacity-0 group-hover:opacity-100">
+                                         <button
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             openEditModel(providerId, modelId, modelConfig.name || modelId);
+                                           }}
+                                           className="hover:text-primary"
+                                         >
+                                           <Edit className="w-3 h-3" />
+                                         </button>
+                                         <button
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             handleDeleteModel(providerId, modelId);
+                                           }}
+                                           className="hover:text-rose-400"
+                                         >
+                                           <Trash2 className="w-3 h-3" />
+                                         </button>
+                                       </div>
+                                     </Badge>
+                                   ))}
+                                 {(!providerConfig.models || Object.keys(providerConfig.models).length === 0) && (
+                                   <span className="text-xs text-muted-foreground">暂无模型</span>
+                                 )}
+                               </div>
+                             </div>
 
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-xs text-muted-foreground">模型列表</Label>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openAddModel(providerId)}
-                                  className="h-7 px-2 text-xs cyber-btn-ghost"
-                                >
-                                  <Plus className="w-3 h-3 mr-1" />
-                                  添加
-                                </Button>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {providerConfig.models &&
-                                  Object.entries(providerConfig.models).map(([modelId, modelConfig]) => (
-                                    <Badge
-                                      key={modelId}
-                                      className="cyber-badge-muted group cursor-pointer"
-                                    >
-                                      {modelConfig.name || modelId}
-                                      <div className="ml-1 flex gap-1 opacity-0 group-hover:opacity-100">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            openEditModel(providerId, modelId, modelConfig.name || modelId);
-                                          }}
-                                          className="hover:text-primary"
-                                        >
-                                          <Edit className="w-3 h-3" />
-                                        </button>
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteModel(providerId, modelId);
-                                          }}
-                                          className="hover:text-rose-400"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                    </Badge>
-                                  ))}
-                                {(!providerConfig.models || Object.keys(providerConfig.models).length === 0) && (
-                                  <span className="text-xs text-muted-foreground">暂无模型</span>
-                                )}
-                              </div>
-                            </div>
+                             <div className="flex items-center gap-2 pt-2 border-t border-border">
+                               <Button
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => openEditProvider(providerId, providerConfig)}
+                                 className="flex-1 h-8 cyber-btn-ghost"
+                               >
+                                 <Edit className="w-4 h-4 mr-1" />
+                                 编辑
+                               </Button>
+                               <Button
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => handleDeleteProvider(providerId)}
+                                 className="h-8 px-2 hover:bg-rose-500/10 hover:text-rose-400"
+                               >
+                                 <Trash2 className="w-4 h-4" />
+                               </Button>
+                             </div>
+                           </CardContent>
+                         </Card>
+                       ))}
 
-                            <div className="flex items-center gap-2 pt-2 border-t border-border">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openEditProvider(providerId, providerConfig)}
-                                className="flex-1 h-8 cyber-btn-ghost"
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                编辑
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteProvider(providerId)}
-                                className="h-8 px-2 hover:bg-rose-500/10 hover:text-rose-400"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-
-                    {(!openCodeConfig?.provider || Object.keys(openCodeConfig.provider).length === 0) && (
-                      <div className="col-span-full cyber-card p-12">
-                        <div className="empty-state">
-                          <Cpu className="empty-state-icon" />
-                          <p className="empty-state-title">暂无供应商</p>
-                          <p className="empty-state-description">点击"添加供应商"开始配置</p>
-                          <Button onClick={openAddProvider} className="cyber-btn-primary h-12 px-8 mt-6">
-                            <Plus className="w-5 h-5 mr-2" />
-                            添加供应商
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="raw" className="mt-6">
-                  <Card className="cyber-card">
-                    <CardContent className="pt-6">
-                      <Textarea
-                        value={rawConfig}
-                        onChange={(e) => setRawConfig(e.target.value)}
-                        className="font-mono text-sm min-h-[500px] cyber-input"
-                        placeholder="输入 JSON 配置..."
-                      />
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </Tabs>
+                     {(!openCodeConfig?.provider || Object.keys(openCodeConfig.provider).length === 0) && (
+                       <div className="col-span-full cyber-card p-12">
+                         <div className="empty-state">
+                           <Cpu className="empty-state-icon" />
+                           <p className="empty-state-title">暂无供应商</p>
+                           <p className="empty-state-description">点击"添加供应商"开始配置</p>
+                           <Button onClick={openAddProvider} className="cyber-btn-primary h-12 px-8 mt-6">
+                             <Plus className="w-5 h-5 mr-2" />
+                             添加供应商
+                           </Button>
+                         </div>
+                       </div>
+                     )}
+                   </div>
+               </div>
 
               {/* Provider Dialog */}
               <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
@@ -1908,10 +1885,64 @@ export default function OpenCodeResourceManager() {
               )}
             </div>
           </div>
-        </TabsContent>
-      </Tabs>
+         </TabsContent>
 
-      {/* ============== SKILLS UPLOAD DIALOG ============== */}
+        {/* ============== FILE MANAGEMENT TAB CONTENT ============== */}
+        <TabsContent value="file" className="mt-6 space-y-6">
+          {/* Header */}
+          <div className="cyber-card p-0">
+            <div className="cyber-card-header">
+              <FileText className="w-5 h-5 text-primary" />
+              <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">文件管理</h3>
+              <div className="ml-auto">
+                <Button
+                  variant="outline"
+                  onClick={loadModels}
+                  className="cyber-btn-outline"
+                  disabled={saving}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  刷新
+                </Button>
+                <Button
+                  onClick={handleSaveRaw}
+                  className="cyber-btn-primary ml-2"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      保存中...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      保存配置
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-muted-foreground font-mono">直接编辑 opencode.json 原始配置文件</p>
+            </div>
+          </div>
+
+          {/* Raw JSON editor */}
+          <Card className="cyber-card">
+            <CardContent className="pt-6">
+              <Textarea
+                value={rawConfig}
+                onChange={(e) => setRawConfig(e.target.value)}
+                className="font-mono text-sm min-h-[500px] cyber-input"
+                placeholder="输入 JSON 配置..."
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+       </Tabs>
+
+       {/* ============== SKILLS UPLOAD DIALOG ============== */}
       <Dialog
         open={showSkillUploadDialog}
         onOpenChange={(open) => {
