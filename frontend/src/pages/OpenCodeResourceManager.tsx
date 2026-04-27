@@ -71,6 +71,7 @@ export default function OpenCodeResourceManager() {
   const [rawConfig, setRawConfig] = useState<string>("");
   const [modelsLoading, setModelsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [modelFilters, setModelFilters] = useState({ search: "" });
 
   // Provider dialog
   const [showProviderDialog, setShowProviderDialog] = useState(false);
@@ -1016,40 +1017,85 @@ export default function OpenCodeResourceManager() {
            </Button>
          </div>
 
-        {/* ============== MODELS TAB CONTENT ============== */}
-        <TabsContent value="models" className="mt-6 space-y-6">
-          {modelsLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center space-y-4">
-                <div className="loading-spinner mx-auto mb-4"></div>
-                <p className="text-muted-foreground font-mono text-sm uppercase tracking-wider">加载中...</p>
-              </div>
-            </div>
+         {/* ============== MODELS TAB CONTENT ============== */}
+         <TabsContent value="models" className="mt-6 space-y-6">
+           {modelsLoading ? (
+             <div className="flex items-center justify-center py-12">
+               <div className="text-center space-y-4">
+                 <div className="loading-spinner mx-auto mb-4"></div>
+                 <p className="text-muted-foreground font-mono text-sm uppercase tracking-wider">加载中...</p>
+               </div>
+             </div>
            ) : (
              <>
+               {/* Header */}
+               <div className="cyber-card p-0">
+                 <div className="cyber-card-header">
+                   <Settings className="w-5 h-5 text-primary" />
+                   <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">OpenCode 配置管理</h3>
+                   <div className="ml-auto">
+                     <Button onClick={openAddProvider} className="cyber-btn-primary">
+                       <Plus className="w-4 h-4 mr-2" />
+                       添加供应商
+                     </Button>
+                   </div>
+                 </div>
+                 <div className="p-6">
+                   <p className="text-muted-foreground font-mono">管理 OpenCode 模型供应商和模型配置</p>
+                 </div>
+               </div>
 
-               {/* Visual edit content */}
-               <div className="space-y-4">
-                    {/* Header */}
-                    <div className="cyber-card p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Settings className="w-5 h-5 text-primary" />
-                          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">OpenCode 配置管理</h3>
-                        </div>
-                        <Button onClick={openAddProvider} className="cyber-btn-primary">
-                          <Plus className="w-4 h-4 mr-2" />
-                          添加供应商
-                        </Button>
-                      </div>
-                    </div>
+               {/* Main content */}
+               <div className="cyber-card p-0">
+                 <div className="p-6 space-y-6">
+                   {/* Filters */}
+                   <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
+                     <div className="flex flex-col sm:flex-row gap-4">
+                       <div className="flex-1">
+                         <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                           <Search className="w-3 h-3" />
+                           搜索
+                         </label>
+                         <Input
+                           type="text"
+                           placeholder="搜索供应商或模型..."
+                           className="cyber-input"
+                           value={modelFilters.search}
+                           onChange={(e) => setModelFilters({ ...modelFilters, search: e.target.value })}
+                         />
+                       </div>
+                     </div>
+                   </div>
 
-                   <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
-                     {openCodeConfig?.provider &&
-                       Object.entries(openCodeConfig.provider).map(([providerId, providerConfig]) => (
-                         <Card key={providerId} className="cyber-card overflow-hidden">
-                           <CardHeader className="pb-3 border-b border-border">
-                             <div className="flex items-center justify-between">
+                   {/* Providers list */}
+                   {(!openCodeConfig?.provider || Object.keys(openCodeConfig.provider).length === 0) ? (
+                     <div className="empty-state">
+                       <Cpu className="empty-state-icon" />
+                       <p className="empty-state-title">暂无供应商</p>
+                       <p className="empty-state-description">点击上方按钮添加供应商</p>
+                     </div>
+                   ) : (
+                     <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
+                       {Object.entries(openCodeConfig.provider)
+                         .filter(([providerId, providerConfig]) => {
+                           if (!modelFilters.search) return true;
+                           const searchLower = modelFilters.search.toLowerCase();
+                           if (providerId.toLowerCase().includes(searchLower)) return true;
+                           if (providerConfig.name?.toLowerCase().includes(searchLower)) return true;
+                           if (providerConfig.npm?.toLowerCase().includes(searchLower)) return true;
+                           if (providerConfig.options?.baseURL?.toLowerCase().includes(searchLower)) return true;
+                           if (providerConfig.models) {
+                             return Object.entries(providerConfig.models).some(
+                               ([modelId, modelConfig]) =>
+                                 modelId.toLowerCase().includes(searchLower) ||
+                                 modelConfig.name?.toLowerCase().includes(searchLower)
+                             );
+                           }
+                           return false;
+                         })
+                         .map(([providerId, providerConfig]) => (
+                           <div key={providerId} className="cyber-card p-4 hover:border-border transition-all">
+                             <div className="flex items-start justify-between mb-3 pb-3 border-b border-border">
                                <div className="flex items-center gap-3">
                                  <div className="p-2 bg-primary/20 rounded border border-primary/30">
                                    <Package className="w-5 h-5 text-primary" />
@@ -1060,113 +1106,119 @@ export default function OpenCodeResourceManager() {
                                  </div>
                                </div>
                              </div>
-                           </CardHeader>
 
-                           <CardContent className="pt-4 space-y-4">
-                             {providerConfig.options?.baseURL && (
-                               <div className="flex items-center gap-2">
-                                 <Globe className="w-4 h-4 text-muted-foreground" />
-                                 <span className="text-sm text-foreground font-mono truncate">
-                                   {providerConfig.options.baseURL}
-                                 </span>
-                               </div>
-                             )}
-                             {providerConfig.options?.apiKey && (
-                               <div className="flex items-center gap-2">
-                                 <Key className="w-4 h-4 text-muted-foreground" />
-                                 <span className="text-sm text-foreground font-mono truncate">
-                                   {providerConfig.options.apiKey.substring(0, 10)}...
-                                 </span>
-                               </div>
-                             )}
+                             <div className="space-y-4">
+                               {providerConfig.options?.baseURL && (
+                                 <div className="flex items-center gap-2">
+                                   <Globe className="w-4 h-4 text-muted-foreground" />
+                                   <span className="text-sm text-foreground font-mono truncate">
+                                     {providerConfig.options.baseURL}
+                                   </span>
+                                 </div>
+                               )}
+                               {providerConfig.options?.apiKey && (
+                                 <div className="flex items-center gap-2">
+                                   <Key className="w-4 h-4 text-muted-foreground" />
+                                   <span className="text-sm text-foreground font-mono truncate">
+                                     {providerConfig.options.apiKey.substring(0, 10)}...
+                                   </span>
+                                 </div>
+                               )}
 
-                             <div className="space-y-2">
-                               <div className="flex items-center justify-between">
-                                 <Label className="text-xs text-muted-foreground">模型列表</Label>
+                               <div className="space-y-2">
+                                 <div className="flex items-center justify-between">
+                                   <Label className="text-xs text-muted-foreground">模型列表</Label>
+                                   <Button
+                                     variant="ghost"
+                                     size="sm"
+                                     onClick={() => openAddModel(providerId)}
+                                     className="h-7 px-2 text-xs cyber-btn-ghost"
+                                   >
+                                     <Plus className="w-3 h-3 mr-1" />
+                                     添加
+                                   </Button>
+                                 </div>
+                                 <div className="flex flex-wrap gap-2">
+                                   {providerConfig.models &&
+                                     Object.entries(providerConfig.models)
+                                       .filter(([modelId, modelConfig]) => {
+                                         if (!modelFilters.search) return true;
+                                         const searchLower = modelFilters.search.toLowerCase();
+                                         return (
+                                           modelId.toLowerCase().includes(searchLower) ||
+                                           modelConfig.name?.toLowerCase().includes(searchLower)
+                                         );
+                                       })
+                                       .map(([modelId, modelConfig]) => (
+                                         <Badge
+                                           key={modelId}
+                                           className="cyber-badge-muted group cursor-pointer"
+                                         >
+                                           {modelConfig.name || modelId}
+                                           <div className="ml-1 flex gap-1 opacity-0 group-hover:opacity-100">
+                                             <button
+                                               onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 openEditModel(providerId, modelId, modelConfig.name || modelId);
+                                               }}
+                                               className="hover:text-primary"
+                                             >
+                                               <Edit className="w-3 h-3" />
+                                             </button>
+                                             <button
+                                               onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 handleDeleteModel(providerId, modelId);
+                                               }}
+                                               className="hover:text-rose-400"
+                                             >
+                                               <Trash2 className="w-3 h-3" />
+                                             </button>
+                                           </div>
+                                         </Badge>
+                                       ))}
+                                   {(!providerConfig.models ||
+                                     Object.entries(providerConfig.models).filter(([modelId, modelConfig]) => {
+                                       if (!modelFilters.search) return true;
+                                       const searchLower = modelFilters.search.toLowerCase();
+                                       return (
+                                         modelId.toLowerCase().includes(searchLower) ||
+                                         modelConfig.name?.toLowerCase().includes(searchLower)
+                                       );
+                                     }).length === 0) && (
+                                     <span className="text-xs text-muted-foreground">暂无模型</span>
+                                   )}
+                                 </div>
+                               </div>
+
+                               <div className="flex items-center gap-2 pt-2 border-t border-border">
                                  <Button
                                    variant="ghost"
                                    size="sm"
-                                   onClick={() => openAddModel(providerId)}
-                                   className="h-7 px-2 text-xs cyber-btn-ghost"
+                                   onClick={() => openEditProvider(providerId, providerConfig)}
+                                   className="flex-1 h-8 cyber-btn-ghost"
                                  >
-                                   <Plus className="w-3 h-3 mr-1" />
-                                   添加
+                                   <Edit className="w-4 h-4 mr-1" />
+                                   编辑
+                                 </Button>
+                                 <Button
+                                   variant="ghost"
+                                   size="sm"
+                                   onClick={() => handleDeleteProvider(providerId)}
+                                   className="h-8 px-2 hover:bg-rose-500/10 hover:text-rose-400"
+                                 >
+                                   <Trash2 className="w-4 h-4" />
                                  </Button>
                                </div>
-                               <div className="flex flex-wrap gap-2">
-                                 {providerConfig.models &&
-                                   Object.entries(providerConfig.models).map(([modelId, modelConfig]) => (
-                                     <Badge
-                                       key={modelId}
-                                       className="cyber-badge-muted group cursor-pointer"
-                                     >
-                                       {modelConfig.name || modelId}
-                                       <div className="ml-1 flex gap-1 opacity-0 group-hover:opacity-100">
-                                         <button
-                                           onClick={(e) => {
-                                             e.stopPropagation();
-                                             openEditModel(providerId, modelId, modelConfig.name || modelId);
-                                           }}
-                                           className="hover:text-primary"
-                                         >
-                                           <Edit className="w-3 h-3" />
-                                         </button>
-                                         <button
-                                           onClick={(e) => {
-                                             e.stopPropagation();
-                                             handleDeleteModel(providerId, modelId);
-                                           }}
-                                           className="hover:text-rose-400"
-                                         >
-                                           <Trash2 className="w-3 h-3" />
-                                         </button>
-                                       </div>
-                                     </Badge>
-                                   ))}
-                                 {(!providerConfig.models || Object.keys(providerConfig.models).length === 0) && (
-                                   <span className="text-xs text-muted-foreground">暂无模型</span>
-                                 )}
-                               </div>
                              </div>
-
-                             <div className="flex items-center gap-2 pt-2 border-t border-border">
-                               <Button
-                                 variant="ghost"
-                                 size="sm"
-                                 onClick={() => openEditProvider(providerId, providerConfig)}
-                                 className="flex-1 h-8 cyber-btn-ghost"
-                               >
-                                 <Edit className="w-4 h-4 mr-1" />
-                                 编辑
-                               </Button>
-                               <Button
-                                 variant="ghost"
-                                 size="sm"
-                                 onClick={() => handleDeleteProvider(providerId)}
-                                 className="h-8 px-2 hover:bg-rose-500/10 hover:text-rose-400"
-                               >
-                                 <Trash2 className="w-4 h-4" />
-                               </Button>
-                             </div>
-                           </CardContent>
-                         </Card>
-                       ))}
-
-                     {(!openCodeConfig?.provider || Object.keys(openCodeConfig.provider).length === 0) && (
-                       <div className="col-span-full cyber-card p-12">
-                         <div className="empty-state">
-                           <Cpu className="empty-state-icon" />
-                           <p className="empty-state-title">暂无供应商</p>
-                           <p className="empty-state-description">点击"添加供应商"开始配置</p>
-                           <Button onClick={openAddProvider} className="cyber-btn-primary h-12 px-8 mt-6">
-                             <Plus className="w-5 h-5 mr-2" />
-                             添加供应商
-                           </Button>
-                         </div>
-                       </div>
-                     )}
-                   </div>
+                           </div>
+                         ))}
+                     </div>
+                   )}
+                 </div>
                </div>
+             </>
+           )}
 
               {/* Provider Dialog */}
               <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
@@ -1567,50 +1619,59 @@ export default function OpenCodeResourceManager() {
               <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Agent 列表</h3>
             </div>
             <div className="p-6">
-              {/* Filters */}
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="flex-1 space-y-1">
-                  <label className="text-xs font-bold text-muted-foreground uppercase">搜索 Agent</label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="搜索 Agent..."
-                      value={agentFilters.search}
-                      onChange={(e) => setAgentFilters({ ...agentFilters, search: e.target.value })}
-                      className="pl-10 cyber-input h-10"
-                    />
-                  </div>
-                </div>
-                <div className="flex-1 space-y-1">
-                  <label className="text-xs font-bold text-muted-foreground uppercase">Agent 类型</label>
-                  <Select value={agentFilters.agent_type} onValueChange={(val) => setAgentFilters({ ...agentFilters, agent_type: val })}>
-                    <SelectTrigger className="cyber-input h-10">
-                      <SelectValue placeholder="选择类型" />
-                    </SelectTrigger>
-                    <SelectContent className="cyber-dialog border-border">
-                      <SelectItem value="all">全部类型</SelectItem>
-                      <SelectItem value="system">系统 Agent</SelectItem>
-                      <SelectItem value="custom">自定义 Agent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex-1 space-y-1">
-                  <label className="text-xs font-bold text-muted-foreground uppercase">状态</label>
-                  <Select
-                    value={agentFilters.is_active === undefined ? "all" : agentFilters.is_active ? "active" : "inactive"}
-                    onValueChange={(val) => setAgentFilters({ ...agentFilters, is_active: val === "all" ? undefined : val === "active" })}
-                  >
-                    <SelectTrigger className="cyber-input h-10">
-                      <SelectValue placeholder="选择状态" />
-                    </SelectTrigger>
-                    <SelectContent className="cyber-dialog border-border">
-                      <SelectItem value="all">全部状态</SelectItem>
-                      <SelectItem value="active">已启用</SelectItem>
-                      <SelectItem value="inactive">已禁用</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+               {/* Filters */}
+               <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
+                 <div className="flex flex-col sm:flex-row gap-4">
+                   <div className="flex-1">
+                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                       <Search className="w-3 h-3" />
+                       搜索
+                     </label>
+                     <Input
+                       type="text"
+                       placeholder="搜索 Agent..."
+                       className="cyber-input"
+                       value={agentFilters.search}
+                       onChange={(e) => setAgentFilters({ ...agentFilters, search: e.target.value })}
+                     />
+                   </div>
+                   <div className="sm:w-48">
+                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                       <Filter className="w-3 h-3" />
+                       Agent类型
+                     </label>
+                     <Select value={agentFilters.agent_type} onValueChange={(val) => setAgentFilters({ ...agentFilters, agent_type: val })}>
+                       <SelectTrigger className="cyber-input">
+                         <SelectValue placeholder="选择类型" />
+                       </SelectTrigger>
+                       <SelectContent className="cyber-dialog border-border">
+                         <SelectItem value="all">全部类型</SelectItem>
+                         <SelectItem value="system">系统 Agent</SelectItem>
+                         <SelectItem value="custom">自定义 Agent</SelectItem>
+                       </SelectContent>
+                     </Select>
+                   </div>
+                   <div className="sm:w-48">
+                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                       <Filter className="w-3 h-3" />
+                       状态
+                     </label>
+                     <Select
+                       value={agentFilters.is_active === undefined ? "all" : agentFilters.is_active ? "active" : "inactive"}
+                       onValueChange={(val) => setAgentFilters({ ...agentFilters, is_active: val === "all" ? undefined : val === "active" })}
+                     >
+                       <SelectTrigger className="cyber-input">
+                         <SelectValue placeholder="选择状态" />
+                       </SelectTrigger>
+                       <SelectContent className="cyber-dialog border-border">
+                         <SelectItem value="all">全部状态</SelectItem>
+                         <SelectItem value="active">已启用</SelectItem>
+                         <SelectItem value="inactive">已禁用</SelectItem>
+                       </SelectContent>
+                     </Select>
+                   </div>
+                 </div>
+               </div>
 
               {/* Agents grid */}
               {agentsLoading ? (
