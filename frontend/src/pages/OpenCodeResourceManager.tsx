@@ -964,45 +964,57 @@ export default function OpenCodeResourceManager() {
         </Card>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="relative z-10">
-        <TabsList className="bg-muted border border-border p-1 h-auto gap-1 rounded">
-          <TabsTrigger
-            value="models"
-            className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
-          >
-            <Cpu className="w-4 h-4 mr-2" />
-            Models
-          </TabsTrigger>
-          <TabsTrigger
-            value="skills"
-            className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
-          >
-            <Code2 className="w-4 h-4 mr-2" />
-            Skills
-          </TabsTrigger>
-          <TabsTrigger
-            value="agents"
-            className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
-          >
-            <Bot className="w-4 h-4 mr-2" />
-            Agents
-          </TabsTrigger>
-          <TabsTrigger
-            value="mcps"
-            className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
-          >
-            <Server className="w-4 h-4 mr-2" />
-            MCPs
-          </TabsTrigger>
-          <TabsTrigger
-            value="file"
-            className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            文件管理
-          </TabsTrigger>
-        </TabsList>
+       {/* Tabs */}
+       <Tabs value={activeTab} onValueChange={setActiveTab} className="relative z-10">
+         <div className="flex items-center justify-between gap-4">
+           <TabsList className="bg-muted border border-border p-1 h-auto gap-1 rounded flex-1">
+             <TabsTrigger
+               value="models"
+               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
+             >
+               <Cpu className="w-4 h-4 mr-2" />
+               Models
+             </TabsTrigger>
+             <TabsTrigger
+               value="skills"
+               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
+             >
+               <Code2 className="w-4 h-4 mr-2" />
+               Skills
+             </TabsTrigger>
+             <TabsTrigger
+               value="agents"
+               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
+             >
+               <Bot className="w-4 h-4 mr-2" />
+               Agents
+             </TabsTrigger>
+             <TabsTrigger
+               value="mcps"
+               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
+             >
+               <Server className="w-4 h-4 mr-2" />
+               MCPs
+             </TabsTrigger>
+             <TabsTrigger
+               value="file"
+               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm text-xs"
+             >
+               <FileText className="w-4 h-4 mr-2" />
+               文件管理
+             </TabsTrigger>
+           </TabsList>
+           
+           <Button
+             variant="outline"
+             onClick={loadModels}
+             className="cyber-btn-outline"
+             disabled={saving}
+           >
+             <RefreshCw className="w-4 h-4 mr-2" />
+             刷新
+           </Button>
+         </div>
 
         {/* ============== MODELS TAB CONTENT ============== */}
         <TabsContent value="models" className="mt-6 space-y-6">
@@ -1013,55 +1025,24 @@ export default function OpenCodeResourceManager() {
                 <p className="text-muted-foreground font-mono text-sm uppercase tracking-wider">加载中...</p>
               </div>
             </div>
-          ) : (
-            <>
-
-               {/* Actions bar */}
-               <div className="cyber-card p-4">
-                 <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                     <Settings className="w-5 h-5 text-primary" />
-                     <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">OpenCode 配置管理</h3>
-                   </div>
-                   <div className="flex items-center gap-2">
-                     <Button
-                       variant="outline"
-                       onClick={loadModels}
-                       className="cyber-btn-outline"
-                       disabled={saving}
-                     >
-                       <RefreshCw className="w-4 h-4 mr-2" />
-                       刷新
-                     </Button>
-                     <Button
-                       onClick={handleSaveVisual}
-                       className="cyber-btn-primary"
-                       disabled={saving}
-                     >
-                       {saving ? (
-                         <>
-                           <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                           保存中...
-                         </>
-                       ) : (
-                         <>
-                           <Save className="w-4 h-4 mr-2" />
-                           保存配置
-                         </>
-                       )}
-                     </Button>
-                   </div>
-                 </div>
-               </div>
+           ) : (
+             <>
 
                {/* Visual edit content */}
-               <div className="mt-6 space-y-4">
-                   <div className="flex justify-end">
-                     <Button onClick={openAddProvider} className="cyber-btn-primary">
-                       <Plus className="w-4 h-4 mr-2" />
-                       添加供应商
-                     </Button>
-                   </div>
+               <div className="space-y-4">
+                    {/* Header */}
+                    <div className="cyber-card p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Settings className="w-5 h-5 text-primary" />
+                          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">OpenCode 配置管理</h3>
+                        </div>
+                        <Button onClick={openAddProvider} className="cyber-btn-primary">
+                          <Plus className="w-4 h-4 mr-2" />
+                          添加供应商
+                        </Button>
+                      </div>
+                    </div>
 
                    <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
                      {openCodeConfig?.provider &&
