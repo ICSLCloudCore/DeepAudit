@@ -311,13 +311,18 @@ async def list_agent_packages(
     # 获取总数
     count_query = select(func.count(Agent.id))
     if filters:
-        count_query = count_query.select_from(query.subquery())
+        count_query = count_query.where(and_(*filters))
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
 
     # 分页查询
     offset = (page - 1) * page_size
-    query = query.offset(offset).limit(page_size).order_by(Agent.created_at.desc())
+    query = (
+        query.options(selectinload(Agent.package_agents), selectinload(Agent.package_skills))
+        .offset(offset)
+        .limit(page_size)
+        .order_by(Agent.created_at.desc())
+    )
 
     result = await db.execute(query)
     agent_packages = result.scalars().all()
