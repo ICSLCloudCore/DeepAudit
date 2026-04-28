@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
 from app.models import Agent, OpenCodeAgent, OpenCodeSkill, User
-from app.api.deps import get_current_user, get_current_active_user
+from app.api.deps import get_current_user
 from app.core.config import settings
 
 router = APIRouter()
@@ -80,7 +80,7 @@ async def upload_agent_package(
     description: Optional[str] = Form(None),
     is_public: bool = Form(False),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user),
 ):
     """上传Agent包"""
     ensure_storage_dirs()
@@ -283,7 +283,7 @@ async def list_agent_packages(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user),
 ):
     """获取Agent包列表"""
     query = select(Agent)
@@ -334,7 +334,7 @@ async def list_agent_packages(
 async def get_agent_package(
     agent_package_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user),
 ):
     """获取单个Agent包详情"""
     result = await db.execute(
@@ -358,7 +358,7 @@ async def get_agent_package(
 async def download_agent_package(
     agent_package_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user),
 ):
     """下载Agent包"""
     result = await db.execute(select(Agent).where(Agent.id == agent_package_id))
@@ -387,7 +387,7 @@ async def download_agent_package(
 async def delete_agent_package(
     agent_package_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user),
 ):
     """删除Agent包"""
     result = await db.execute(
@@ -430,7 +430,7 @@ async def update_agent_package(
     version: Optional[str] = None,
     is_public: Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user),
 ):
     """更新Agent包信息"""
     result = await db.execute(select(Agent).where(Agent.id == agent_package_id))
