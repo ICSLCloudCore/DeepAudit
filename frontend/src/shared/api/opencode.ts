@@ -18,6 +18,67 @@ export interface Agent {
   created_by: string;
 }
 
+// Agent Package Types
+export interface AgentPackageAgent {
+  id: string;
+  agent_package_id: string;
+  name: string;
+  file_name: string;
+  file_path: string;
+  file_content?: string;
+  created_at: string;
+}
+
+export interface AgentPackageSkill {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  author?: string;
+  category: string;
+  file_path?: string;
+  opencode_file_path?: string;
+  file_size?: number;
+  checksum?: string;
+  config?: Record<string, any>;
+  schema?: Record<string, any>;
+  tags?: string[];
+  is_public: boolean;
+  is_active: boolean;
+  download_count: number;
+  created_at: string;
+  updated_at?: string;
+  created_by?: string;
+  agent_package_id?: string;
+}
+
+export interface AgentPackage {
+  id: string;
+  name: string;
+  author?: string;
+  version: string;
+  description?: string;
+  created_at: string;
+  updated_at?: string;
+  created_by?: string;
+  original_filename?: string;
+  package_file_path?: string;
+  extracted_dir_path?: string;
+  agents_md_content?: string;
+  agents_count: number;
+  skills_count: number;
+  is_public: boolean;
+  package_agents?: AgentPackageAgent[];
+  package_skills?: AgentPackageSkill[];
+}
+
+export interface AgentPackageListResponse {
+  items: AgentPackage[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface OpenCodeSkill {
   id: string;
   name: string;
@@ -416,6 +477,51 @@ export const opencodeApi = {
   }) => {
     const response = await apiClient.get(`/opencode/sessions/${sessionId}/interactions`, { params });
     return response.data;
+  },
+
+  // Agent Packages
+  listAgentPackages: async (params?: {
+    search?: string;
+    is_public?: boolean;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const response = await apiClient.get("/opencode/agent-packages", { params });
+    return response.data as AgentPackageListResponse;
+  },
+
+  getAgentPackage: async (id: string) => {
+    const response = await apiClient.get(`/opencode/agent-packages/${id}`);
+    return response.data as AgentPackage;
+  },
+
+  uploadAgentPackage: async (formData: FormData) => {
+    const response = await apiClient.post("/opencode/agent-packages/upload", formData);
+    return response.data as AgentPackage;
+  },
+
+  updateAgentPackage: async (id: string, data: Partial<AgentPackage>) => {
+    const response = await apiClient.put(`/opencode/agent-packages/${id}`, data);
+    return response.data as AgentPackage;
+  },
+
+  deleteAgentPackage: async (id: string) => {
+    const response = await apiClient.delete(`/opencode/agent-packages/${id}`);
+    return response.data;
+  },
+
+  downloadAgentPackage: async (id: string, original_filename: string) => {
+    const response = await apiClient.get(`/opencode/agent-packages/${id}/download`, {
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${original_filename}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 
   // SSE Stream

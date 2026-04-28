@@ -45,13 +45,17 @@ class OpenCodeSkill(Base):
     is_public = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True, index=True)
     download_count = Column(Integer, default=0)
+    agent_package_id = Column(String(36), ForeignKey("agents.id"), nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
 
+    # 新增关系
+    agent_package = relationship("Agent", back_populates="package_skills")
+
     def __repr__(self):
-        return f"<OpenCodeSkill {self.name} v{self.version}>"
+        return f"&lt;OpenCodeSkill {self.name} v{self.version}&gt;"
 
     def to_dict(self):
         return {
@@ -74,6 +78,7 @@ class OpenCodeSkill(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "created_by": self.created_by,
+            "agent_package_id": self.agent_package_id,
         }
 
 
@@ -106,7 +111,7 @@ class OpenCodeMCP(Base):
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
 
     def __repr__(self):
-        return f"<OpenCodeMCP {self.name} ({self.mcp_type})>"
+        return f"&lt;OpenCodeMCP {self.name} ({self.mcp_type})&gt;"
 
     def to_dict(self):
         return {

@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     ZIP_STORAGE_PATH: str = "./uploads/zip_files"  # ZIP文件存储目录
     SKILLS_ZIP_STORAGE_PATH: str = "./uploads/skills"  # Skills ZIP文件存储目录
 
+    # Agent包存储配置
+    AGENT_PACKAGES_ZIP_STORAGE_PATH: str = "./uploads/agent_packages/zips"
+    AGENT_PACKAGES_EXTRACTED_PATH: str = "./uploads/agent_packages/extracted"
+
     # 上传文件存储配置
     UPLOAD_DIR: str = "./uploads"  # 上传文件根目录
     OPENCODE_SKILLS_DIR: str = "./opencode/skills"  # OpenCode Skills目录（供opencode进程调用）

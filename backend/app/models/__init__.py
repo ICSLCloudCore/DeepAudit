@@ -23,9 +23,10 @@ from .agent.agent_task import (
     VulnerabilityType,
     FindingStatus,
 )
-from .agent.opencode_agent import Agent, AgentType
 
 # OpenCode 相关模型
+from .opencode.agent import Agent
+from .opencode.opencode_agent import OpenCodeAgent
 from .opencode.opencode_skill_mcp import OpenCodeSkill, SkillCategory, OpenCodeMCP, MCPType
 from .opencode.opencode_project_task import ProjectConfig, TaskExecution, OpenCodeStatus
 from .opencode.opencode_session import OpenCodeSession, OpenCodeSessionStatus
@@ -58,7 +59,7 @@ __all__ = [
     "VulnerabilityType",
     "FindingStatus",
     "Agent",
-    "AgentType",
+    "OpenCodeAgent",
     "OpenCodeSkill",
     "SkillCategory",
     "OpenCodeMCP",

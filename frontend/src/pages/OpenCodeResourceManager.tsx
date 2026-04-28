@@ -53,6 +53,7 @@ import {
   type OpenCodeSkill,
   type Agent,
   type OpenCodeMCP,
+  type AgentPackage,
 } from "@/shared/api/opencode";
 import {
   getOpenCodeConfig,
@@ -118,20 +119,22 @@ export default function OpenCodeResourceManager() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const skillFileInputRef = useRef<HTMLInputElement>(null);
 
-  // ============== AGENTS TAB STATE ==============
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [agentFiles, setAgentFiles] = useState<
-    Array<{ filename: string; file_size: number; created_at: number; updated_at: number }>
-  >([]);
-  const [agentsLoading, setAgentsLoading] = useState(true);
-  const [agentFilesLoading, setAgentFilesLoading] = useState(false);
-  const [agentUploading, setAgentUploading] = useState(false);
-  const [agentFilters, setAgentFilters] = useState({
-    agent_type: "all",
-    is_active: undefined as boolean | undefined,
+  // ============== AGENTS TAB STATE (Agent Packages) ==============
+  const [agentPackages, setAgentPackages] = useState<AgentPackage[]>([]);
+  const [agentPackagesLoading, setAgentPackagesLoading] = useState(true);
+  const [agentPackageFilters, setAgentPackageFilters] = useState({
     search: "",
+    is_public: undefined as boolean | undefined,
   });
-  const agentFileInputRef = useRef<HTMLInputElement>(null);
+  const [showAgentPackageUploadDialog, setShowAgentPackageUploadDialog] = useState(false);
+  const [agentPackageUploading, setAgentPackageUploading] = useState(false);
+  const [showAgentPackageDeleteDialog, setShowAgentPackageDeleteDialog] = useState(false);
+  const [agentPackageToDelete, setAgentPackageToDelete] = useState<AgentPackage | null>(null);
+  const [agentPackageDeleting, setAgentPackageDeleting] = useState(false);
+  const [downloadingAgentPackageId, setDownloadingAgentPackageId] = useState<string | null>(null);
+  const [selectedAgentPackage, setSelectedAgentPackage] = useState<AgentPackage | null>(null);
+  const [showAgentPackageDetailsDialog, setShowAgentPackageDetailsDialog] = useState(false);
+  const agentPackageFileInputRef = useRef<HTMLInputElement>(null);
 
   // ============== MCPS TAB STATE ==============
   const [mcps, setMcps] = useState<OpenCodeMCP[]>([]);
@@ -163,8 +166,7 @@ export default function OpenCodeResourceManager() {
     // Load all data on page initialization
     loadModels();
     loadSkills();
-    loadAgents();
-    loadAgentFiles();
+    loadAgentPackages();
     loadMcps();
   }, []);
 
@@ -176,10 +178,9 @@ export default function OpenCodeResourceManager() {
 
   useEffect(() => {
     if (activeTab === "agents") {
-      loadAgents();
-      loadAgentFiles();
+      loadAgentPackages();
     }
-  }, [activeTab, agentFilters]);
+  }, [activeTab, agentPackageFilters]);
 
   useEffect(() => {
     if (activeTab === "mcps") {
@@ -469,7 +470,8 @@ export default function OpenCodeResourceManager() {
       )
     : 0;
   const skillCount = skills.length;
-  const agentCount = agents.length;
+  const agentPackageCount = agentPackages.length;
+  const agentCount = agentPackages.reduce((sum, pkg) => sum + pkg.agents_count, 0);
   const mcpCount = mcps.length;
 
   // ============== SKILLS FUNCTIONS ==============
@@ -666,87 +668,93 @@ export default function OpenCodeResourceManager() {
     }
   };
 
-  // ============== AGENTS FUNCTIONS ==============
-  const loadAgents = async () => {
+  // ============== AGENT PACKAGES FUNCTIONS ==============
+  const loadAgentPackages = async () => {
     try {
-      setAgentsLoading(true);
-      const data = await agentApi.list(agentFilters);
-      setAgents(data.items);
+      setAgentPackagesLoading(true);
+      const data = await opencodeApi.listAgentPackages(agentPackageFilters);
+      setAgentPackages(data.items);
     } catch (error) {
-      console.error("Failed to load agents:", error);
-      toast.error("加载 Agent 列表失败");
+      console.error("Failed to load agent packages:", error);
+      toast.error("加载 Agent 包列表失败");
     } finally {
-      setAgentsLoading(false);
+      setAgentPackagesLoading(false);
     }
   };
 
-  const loadAgentFiles = async () => {
-    try {
-      setAgentFilesLoading(true);
-      const data = await agentApi.listFiles();
-      setAgentFiles(data.files);
-    } catch (error) {
-      console.error("Failed to load agent files:", error);
-      toast.error("加载 Agent 文件失败");
-    } finally {
-      setAgentFilesLoading(false);
-    }
-  };
-
-  const toggleAgent = async (id: string, currentStatus: boolean) => {
-    try {
-      await agentApi.toggle(id, !currentStatus);
-      toast.success(currentStatus ? "Agent 已禁用" : "Agent 已启用");
-      loadAgents();
-    } catch (error) {
-      console.error("Failed to toggle agent:", error);
-      toast.error("操作失败");
-    }
-  };
-
-  const handleAgentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAgentPackageFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      handleAgentFileUpload(file);
+      handleAgentPackageUpload(file);
     }
   };
 
-  const handleAgentFileUpload = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".md")) {
-      toast.error("请上传 .md 格式的文件");
-      return;
-    }
-
+  const handleAgentPackageUpload = async (file: File) => {
     try {
-      setAgentUploading(true);
+      setAgentPackageUploading(true);
       const formData = new FormData();
       formData.append("file", file);
-      await agentApi.uploadFile(formData);
-      toast.success("Agent 文件上传成功！");
-      loadAgentFiles();
-    } catch (error) {
-      console.error("Failed to upload file:", error);
-      toast.error("文件上传失败，请重试");
+      await opencodeApi.uploadAgentPackage(formData);
+      toast.success("Agent 包上传成功！");
+      setShowAgentPackageUploadDialog(false);
+      loadAgentPackages();
+    } catch (error: any) {
+      console.error("Failed to upload agent package:", error);
+      let errorMessage = "Agent 包上传失败";
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      }
+      toast.error(errorMessage);
     } finally {
-      setAgentUploading(false);
-      if (agentFileInputRef.current) {
-        agentFileInputRef.current.value = "";
+      setAgentPackageUploading(false);
+      if (agentPackageFileInputRef.current) {
+        agentPackageFileInputRef.current.value = "";
       }
     }
   };
 
-  const handleDeleteAgentFile = async (filename: string) => {
-    if (!confirm(`确定要删除文件 ${filename} 吗？`)) {
-      return;
-    }
-
+  const handleDeleteAgentPackage = async () => {
+    if (!agentPackageToDelete) return;
     try {
-      await agentApi.deleteFile(filename);
-      toast.success("文件删除成功！");
-      loadAgentFiles();
+      setAgentPackageDeleting(true);
+      await opencodeApi.deleteAgentPackage(agentPackageToDelete.id);
+      toast.success("Agent 包删除成功！");
+      setShowAgentPackageDeleteDialog(false);
+      setAgentPackageToDelete(null);
+      loadAgentPackages();
+    } catch (error: any) {
+      console.error("Failed to delete agent package:", error);
+      let errorMessage = "Agent 包删除失败";
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      }
+      toast.error(errorMessage);
+    } finally {
+      setAgentPackageDeleting(false);
+    }
+  };
+
+  const handleDownloadAgentPackage = async (pkg: AgentPackage) => {
+    try {
+      setDownloadingAgentPackageId(pkg.id);
+      await opencodeApi.downloadAgentPackage(pkg.id, pkg.original_filename || pkg.name);
+      toast.success(`${pkg.name} 下载成功`);
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail ?? error?.message ?? "下载失败";
+      toast.error(`下载失败：${msg}`);
+    } finally {
+      setDownloadingAgentPackageId(null);
+    }
+  };
+
+  const handleViewAgentPackageDetails = async (pkg: AgentPackage) => {
+    try {
+      const detailedPkg = await opencodeApi.getAgentPackage(pkg.id);
+      setSelectedAgentPackage(detailedPkg);
+      setShowAgentPackageDetailsDialog(true);
     } catch (error) {
-      console.error("Failed to delete file:", error);
-      toast.error("文件删除失败");
+      console.error("Failed to load agent package details:", error);
+      toast.error("加载 Agent 包详情失败");
     }
   };
 
@@ -1012,17 +1020,17 @@ export default function OpenCodeResourceManager() {
           </CardContent>
         </Card>
 
-        <Card className="cyber-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <Bot className="w-4 h-4 text-amber-400" />
-              Agents
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-amber-400">{agentCount}</div>
-          </CardContent>
-        </Card>
+          <Card className="cyber-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                <Bot className="w-4 h-4 text-amber-400" />
+                Agent 包
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-amber-400">{agentPackageCount}</div>
+            </CardContent>
+          </Card>
 
         <Card className="cyber-card">
           <CardHeader className="pb-2">
@@ -1446,171 +1454,178 @@ export default function OpenCodeResourceManager() {
           </div>
         </TabsContent>
 
-        {/* ============== AGENTS TAB CONTENT ============== */}
+        {/* ============== AGENTS TAB CONTENT (AGENT PACKAGES) ============== */}
         <TabsContent value="agents" className="mt-6 space-y-6">
           {/* Header */}
           <div className="cyber-card p-0">
             <div className="cyber-card-header">
               <Bot className="w-5 h-5 text-primary" />
-              <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Agent 管理</h3>
+              <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Agent 包管理</h3>
              <div className="ml-auto flex items-center gap-2">
-               <Button
-                 variant="outline"
-                 onClick={() => agentFileInputRef.current?.click()}
-                 disabled={agentUploading}
-                 className="cyber-btn-primary"
-               >
-                 <Upload className="w-4 h-4 mr-2" />
-                 {agentUploading ? "上传中..." : "上传 Agent 文件"}
-               </Button>
-                <input
-                  ref={agentFileInputRef}
-                  type="file"
-                  accept=".md"
-                  className="hidden"
-                  onChange={handleAgentFileSelect}
-                />
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAgentPackageUploadDialog(true)}
+                  disabled={agentPackageUploading}
+                  className="cyber-btn-primary"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {agentPackageUploading ? "上传中..." : "上传 Agent 包"}
+                </Button>
+               </div>
+            </div>
+              <div className="p-6">
+                <p className="text-muted-foreground font-mono">管理 Agent 包，包含 Agents 和 Skills</p>
               </div>
             </div>
-             <div className="p-6">
-               <p className="text-muted-foreground font-mono">管理系统 Agent 和自定义 Agent</p>
-             </div>
-           </div>
 
-           {/* Main content */}
-           <div className="cyber-card p-0">
-             <div className="p-6 space-y-6">
-               {/* Filters */}
-               <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
-                 <div className="flex flex-col sm:flex-row gap-4">
-                   <div className="flex-1">
-                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                       <Search className="w-3 h-3" />
-                       搜索
-                     </label>
-                     <Input
-                       type="text"
-                       placeholder="搜索 Agent..."
-                       className="cyber-input"
-                       value={agentFilters.search}
-                       onChange={(e) => setAgentFilters({ ...agentFilters, search: e.target.value })}
-                     />
-                   </div>
-                   <div className="sm:w-48">
-                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                       <Filter className="w-3 h-3" />
-                       Agent类型
-                     </label>
-                     <Select value={agentFilters.agent_type} onValueChange={(val) => setAgentFilters({ ...agentFilters, agent_type: val })}>
-                       <SelectTrigger className="cyber-input">
-                         <SelectValue placeholder="选择类型" />
-                       </SelectTrigger>
-                       <SelectContent className="cyber-dialog border-border">
-                         <SelectItem value="all">全部类型</SelectItem>
-                         <SelectItem value="system">系统 Agent</SelectItem>
-                         <SelectItem value="custom">自定义 Agent</SelectItem>
-                       </SelectContent>
-                     </Select>
-                   </div>
-                   <div className="sm:w-48">
-                     <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                       <Filter className="w-3 h-3" />
-                       状态
-                     </label>
-                     <Select
-                       value={agentFilters.is_active === undefined ? "all" : agentFilters.is_active ? "active" : "inactive"}
-                       onValueChange={(val) => setAgentFilters({ ...agentFilters, is_active: val === "all" ? undefined : val === "active" })}
-                     >
-                       <SelectTrigger className="cyber-input">
-                         <SelectValue placeholder="选择状态" />
-                       </SelectTrigger>
-                       <SelectContent className="cyber-dialog border-border">
-                         <SelectItem value="all">全部状态</SelectItem>
-                         <SelectItem value="active">已启用</SelectItem>
-                         <SelectItem value="inactive">已禁用</SelectItem>
-                       </SelectContent>
-                     </Select>
-                   </div>
-                 </div>
-               </div>
+            {/* Main content */}
+            <div className="cyber-card p-0">
+              <div className="p-6 space-y-6">
+                {/* Filters */}
+                <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-1">
+                      <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                        <Search className="w-3 h-3" />
+                        搜索
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="搜索 Agent 包..."
+                        className="cyber-input"
+                        value={agentPackageFilters.search}
+                        onChange={(e) => setAgentPackageFilters({ ...agentPackageFilters, search: e.target.value })}
+                      />
+                    </div>
+                    <div className="sm:w-48">
+                      <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                        <Filter className="w-3 h-3" />
+                        可见性
+                      </label>
+                      <Select
+                        value={agentPackageFilters.is_public === undefined ? "all" : agentPackageFilters.is_public ? "public" : "private"}
+                        onValueChange={(val) => setAgentPackageFilters({ ...agentPackageFilters, is_public: val === "all" ? undefined : val === "public" })}
+                      >
+                        <SelectTrigger className="cyber-input">
+                          <SelectValue placeholder="全部" />
+                        </SelectTrigger>
+                        <SelectContent className="cyber-dialog border-border">
+                          <SelectItem value="all">全部</SelectItem>
+                          <SelectItem value="public">公开</SelectItem>
+                          <SelectItem value="private">私有</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
 
-               {/* Agents grid */}
-               {agentsLoading ? (
-                 <div className="text-center py-12">
-                   <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
-                   <p className="text-muted-foreground font-mono">加载中...</p>
-                 </div>
-               ) : agents.length === 0 ? (
-                 <div className="empty-state">
-                   <Bot className="empty-state-icon" />
-                   <p className="empty-state-title">暂无 Agents</p>
-                   <p className="empty-state-description">点击上方按钮上传 Agent</p>
-                 </div>
-               ) : (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                   {agents.map((agent) => (
-                     <div key={agent.id} className="cyber-card p-4 hover:border-primary transition-all group">
-                       <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
-                         <div className="flex items-start space-x-3">
-                           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${agent.is_system ? "text-muted-foreground bg-muted" : "text-primary bg-primary/20"}`}>
-                             <Bot className="w-5 h-5" />
-                           </div>
-                           <div className="flex-1">
-                             <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">
-                               {agent.name}
-                             </h4>
-                             <div className="flex items-center space-x-1 text-xs text-muted-foreground font-mono">
-                               <span className="text-primary">{">"}</span>
-                               <span>v{agent.version}</span>
-                             </div>
-                           </div>
-                         </div>
-                         <div className="flex items-center gap-2">
-                           <Badge className={agent.is_system ? "cyber-badge-muted" : "cyber-badge-primary"}>
-                             {agent.agent_type}
-                           </Badge>
-                           <Badge className={agent.is_active ? "cyber-badge-success" : "cyber-badge-muted"}>
-                             {agent.is_active ? "启用" : "禁用"}
-                           </Badge>
-                         </div>
-                       </div>
+                {/* Agent Packages grid */}
+                {agentPackagesLoading ? (
+                  <div className="text-center py-12">
+                    <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
+                    <p className="text-muted-foreground font-mono">加载中...</p>
+                  </div>
+                ) : agentPackages.length === 0 ? (
+                  <div className="empty-state">
+                    <Bot className="empty-state-icon" />
+                    <p className="empty-state-title">暂无 Agent 包</p>
+                    <p className="empty-state-description">点击上方按钮上传 Agent 包</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {agentPackages.map((pkg) => (
+                      <div key={pkg.id} className="cyber-card p-4 hover:border-primary transition-all group">
+                        <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
+                          <div className="flex items-start space-x-3">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-primary bg-primary/20">
+                              <Package className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">
+                                {pkg.name}
+                              </h4>
+                              <div className="flex items-center space-x-1 text-xs text-muted-foreground font-mono">
+                                <span className="text-primary">{">"}</span>
+                                <span>v{pkg.version}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {pkg.is_public && (
+                              <Badge className="cyber-badge-muted">
+                                <Globe className="w-3 h-3 mr-1" />
+                                公开
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
 
-                       <div className="space-y-3">
-                         <p className="text-muted-foreground text-sm">{agent.description}</p>
+                        <div className="space-y-3">
+                          <p className="text-muted-foreground text-sm">{pkg.description || "暂无描述"}</p>
+                          
+                          <div className="flex gap-4 text-xs text-muted-foreground font-mono">
+                            <div className="flex items-center gap-1">
+                              <Bot className="w-3 h-3" />
+                              <span>{pkg.agents_count} 个 Agent</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Code2 className="w-3 h-3" />
+                              <span>{pkg.skills_count} 个 Skill</span>
+                            </div>
+                          </div>
 
-                         <div className="flex justify-between items-center">
-                           <div className="text-xs text-muted-foreground font-mono">作者: {agent.author}</div>
-                           <div className="flex gap-2">
-                             <Button
-                               variant="ghost"
-                               size="sm"
-                               className="h-7 px-2 text-xs cyber-btn-ghost"
-                               title="查看"
-                               onClick={() => console.log("View agent:", agent)}
-                             >
-                               <Eye className="w-3 h-3 mr-1" />
-                               查看
-                             </Button>
-                             <Button
-                               variant="ghost"
-                               size="sm"
-                               className={`h-7 px-2 text-xs cyber-btn-ghost ${agent.is_active ? "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10" : "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"}`}
-                               title={agent.is_active ? "禁用" : "启用"}
-                               onClick={() => toggleAgent(agent.id, agent.is_active)}
-                             >
-                               <Power className="w-3 h-3 mr-1" />
-                               {agent.is_active ? "禁用" : "启用"}
-                             </Button>
-                           </div>
-                         </div>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               )}
-             </div>
-           </div>
-         </TabsContent>
+                          <div className="flex justify-between items-center pt-2">
+                            <div className="text-xs text-muted-foreground font-mono">
+                              {pkg.author && `作者: ${pkg.author}`}
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs cyber-btn-ghost"
+                                title="查看详情"
+                                onClick={() => handleViewAgentPackageDetails(pkg)}
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                详情
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs cyber-btn-ghost"
+                                title="下载"
+                                disabled={downloadingAgentPackageId === pkg.id}
+                                onClick={() => handleDownloadAgentPackage(pkg)}
+                              >
+                                {downloadingAgentPackageId === pkg.id ? (
+                                  <div className="loading-spinner w-3 h-3 mr-1" />
+                                ) : (
+                                  <Download className="w-3 h-3 mr-1" />
+                                )}
+                                下载
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs cyber-btn-ghost text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                                title="删除"
+                                onClick={() => {
+                                  setAgentPackageToDelete(pkg);
+                                  setShowAgentPackageDeleteDialog(true);
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
 
         {/* ============== MCPS TAB CONTENT ============== */}
         <TabsContent value="mcps" className="mt-6 space-y-6">
@@ -2703,7 +2718,255 @@ export default function OpenCodeResourceManager() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+       </Dialog>
+
+       {/* ============== AGENT PACKAGE UPLOAD DIALOG ============== */}
+       <Dialog
+         open={showAgentPackageUploadDialog}
+         onOpenChange={(open) => {
+           setShowAgentPackageUploadDialog(open);
+         }}
+       >
+         <DialogContent className="!w-[min(90vw,600px)] !max-w-none cyber-dialog border border-border rounded-lg">
+           <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
+             <DialogTitle className="flex items-center gap-3 font-mono text-foreground">
+               <div className="p-2 bg-primary/20 rounded border border-primary/30">
+                 <Upload className="w-5 h-5 text-primary" />
+               </div>
+               <div>
+                 <span className="text-base font-bold uppercase tracking-wider">上传 Agent 包</span>
+               </div>
+             </DialogTitle>
+           </DialogHeader>
+
+           <div className="p-6 space-y-4">
+             <div className="space-y-4">
+               <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">Agent 包文件 *</Label>
+
+               <div
+                 className="border border-dashed border-border bg-muted/50 rounded p-6 text-center hover:bg-muted hover:border-border transition-colors cursor-pointer group"
+                 onClick={() => agentPackageFileInputRef.current?.click()}
+               >
+                 <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3 group-hover:text-primary transition-colors" />
+                 <h3 className="text-base font-bold text-foreground uppercase mb-1">上传 Agent 包</h3>
+                 <p className="text-xs font-mono text-muted-foreground mb-3">选择 .zip Agent 包文件</p>
+                 <input
+                   ref={agentPackageFileInputRef}
+                   type="file"
+                   accept=".zip"
+                   onChange={(e) => {
+                     const file = e.target.files?.[0];
+                     if (file) handleAgentPackageUpload(file);
+                   }}
+                   className="hidden"
+                   disabled={agentPackageUploading}
+                   required
+                 />
+                 <Button
+                   type="button"
+                   variant="outline"
+                   className="cyber-btn-outline h-8 text-xs"
+                   disabled={agentPackageUploading}
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     agentPackageFileInputRef.current?.click();
+                   }}
+                 >
+                   <FileText className="w-3 h-3 mr-2" />
+                   选择文件
+                 </Button>
+               </div>
+
+               <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded">
+                 <div className="flex items-start space-x-3">
+                   <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5" />
+                   <div className="text-xs font-mono text-amber-300">
+                     <p className="font-bold mb-1 uppercase">上传说明:</p>
+                     <ul className="space-y-0.5 list-disc list-inside text-amber-400/80">
+                       <li>仅支持 ZIP 格式</li>
+                       <li>ZIP 根目录下必须包含 AGENTS.md 文件</li>
+                       <li>可选包含 skills/ 目录</li>
+                     </ul>
+                   </div>
+                 </div>
+               </div>
+             </div>
+           </div>
+
+           <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+             <Button
+               variant="outline"
+               onClick={() => setShowAgentPackageUploadDialog(false)}
+               className="cyber-btn-outline"
+               disabled={agentPackageUploading}
+             >
+               取消
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
+
+       {/* ============== AGENT PACKAGE DELETE DIALOG ============== */}
+       <Dialog open={showAgentPackageDeleteDialog} onOpenChange={setShowAgentPackageDeleteDialog}>
+         <DialogContent className="cyber-dialog border-border">
+           <DialogHeader>
+             <DialogTitle className="text-lg font-bold uppercase tracking-wider text-rose-400 flex items-center gap-2">
+               <AlertTriangle className="w-5 h-5" />
+               确认删除 Agent 包
+             </DialogTitle>
+             <DialogDescription className="text-muted-foreground font-mono">
+               此操作将同时删除所有相关的 Agents、Skills 和文件，且无法恢复。
+             </DialogDescription>
+           </DialogHeader>
+           <div className="py-4">
+             <p className="text-foreground font-mono">
+               确定要删除 Agent 包{" "}
+               <span className="font-bold text-primary">{agentPackageToDelete?.name}</span> 吗？
+             </p>
+           </div>
+           <DialogFooter>
+             <Button
+               type="button"
+               variant="outline"
+               onClick={() => {
+                 setShowAgentPackageDeleteDialog(false);
+                 setAgentPackageToDelete(null);
+               }}
+               className="cyber-btn-outline"
+             >
+               取消
+             </Button>
+             <Button
+               type="button"
+               onClick={handleDeleteAgentPackage}
+               disabled={agentPackageDeleting}
+               className="cyber-btn-primary bg-rose-500/20 text-rose-400 border-rose-500/30 hover:bg-rose-500/30"
+             >
+               {agentPackageDeleting ? (
+                 <>
+                   <div className="loading-spinner w-4 h-4 mr-2"></div>
+                   删除中...
+                 </>
+               ) : (
+                 "确认删除"
+               )}
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
+
+       {/* ============== AGENT PACKAGE DETAILS DIALOG ============== */}
+       <Dialog open={showAgentPackageDetailsDialog} onOpenChange={setShowAgentPackageDetailsDialog}>
+         <DialogContent className="!w-[min(90vw,800px)] !max-w-none cyber-dialog border border-border rounded-lg">
+           <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted">
+             <DialogTitle className="flex items-center gap-3 font-mono text-foreground">
+               <div className="p-2 bg-primary/20 rounded border border-primary/30">
+                 <Eye className="w-5 h-5 text-primary" />
+               </div>
+               <div>
+                 <span className="text-base font-bold uppercase tracking-wider">Agent 包详情</span>
+               </div>
+             </DialogTitle>
+           </DialogHeader>
+
+           <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+             {selectedAgentPackage && (
+               <>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div>
+                     <Label className="text-xs font-bold text-muted-foreground uppercase">名称</Label>
+                     <p className="text-foreground font-mono">{selectedAgentPackage.name}</p>
+                   </div>
+                   <div>
+                     <Label className="text-xs font-bold text-muted-foreground uppercase">版本</Label>
+                     <p className="text-foreground font-mono">{selectedAgentPackage.version}</p>
+                   </div>
+                   {selectedAgentPackage.author && (
+                     <div>
+                       <Label className="text-xs font-bold text-muted-foreground uppercase">作者</Label>
+                       <p className="text-foreground font-mono">{selectedAgentPackage.author}</p>
+                     </div>
+                   )}
+                   <div>
+                     <Label className="text-xs font-bold text-muted-foreground uppercase">可见性</Label>
+                     <Badge className={selectedAgentPackage.is_public ? "cyber-badge-primary" : "cyber-badge-muted"}>
+                       {selectedAgentPackage.is_public ? "公开" : "私有"}
+                     </Badge>
+                   </div>
+                 </div>
+
+                 {selectedAgentPackage.description && (
+                   <div>
+                     <Label className="text-xs font-bold text-muted-foreground uppercase">描述</Label>
+                     <p className="text-foreground font-mono">{selectedAgentPackage.description}</p>
+                   </div>
+                 )}
+
+                 {/* Agents 列表 */}
+                 <div>
+                   <Label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                     <Bot className="w-3 h-3" />
+                     Agents ({selectedAgentPackage.package_agents?.length || 0})
+                   </Label>
+                   {selectedAgentPackage.package_agents && selectedAgentPackage.package_agents.length > 0 ? (
+                     <div className="mt-2 space-y-2">
+                       {selectedAgentPackage.package_agents.map((agent, index) => (
+                         <div key={index} className="border border-border bg-muted/50 rounded p-3">
+                           <div className="flex justify-between items-center">
+                             <div>
+                               <p className="font-mono text-sm text-foreground font-bold">{agent.name}</p>
+                               <p className="font-mono text-xs text-muted-foreground">{agent.file_name}</p>
+                             </div>
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   ) : (
+                     <p className="text-xs text-muted-foreground mt-2">暂无 Agents</p>
+                   )}
+                 </div>
+
+                 {/* Skills 列表 */}
+                 <div>
+                   <Label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                     <Code2 className="w-3 h-3" />
+                     Skills ({selectedAgentPackage.package_skills?.length || 0})
+                   </Label>
+                   {selectedAgentPackage.package_skills && selectedAgentPackage.package_skills.length > 0 ? (
+                     <div className="mt-2 space-y-2">
+                       {selectedAgentPackage.package_skills.map((skill, index) => (
+                         <div key={index} className="border border-border bg-muted/50 rounded p-3">
+                           <div className="flex justify-between items-center">
+                             <div>
+                               <p className="font-mono text-sm text-foreground font-bold">{skill.name}</p>
+                               <p className="font-mono text-xs text-muted-foreground">v{skill.version} · {skill.category}</p>
+                             </div>
+                           </div>
+                           {skill.description && (
+                             <p className="font-mono text-xs text-muted-foreground mt-1">{skill.description}</p>
+                           )}
+                         </div>
+                       ))}
+                     </div>
+                   ) : (
+                     <p className="text-xs text-muted-foreground mt-2">暂无 Skills</p>
+                   )}
+                 </div>
+               </>
+             )}
+           </div>
+
+           <DialogFooter className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+             <Button
+               variant="outline"
+               onClick={() => setShowAgentPackageDetailsDialog(false)}
+               className="cyber-btn-outline"
+             >
+               关闭
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
+     </div>
+   );
+ }

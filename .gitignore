@@ -195,3 +195,4 @@ backend/uv.lock
 __init__.py
 backend/uploads
 frontend/src/pages/OpenCodeAudit/nul
+docs/example/cloudecore-audit/
