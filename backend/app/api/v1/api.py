@@ -13,7 +13,6 @@ from app.api.v1.endpoints import (
     agent_tasks,
     embedding_config,
     ssh_keys,
-    agents,
     opencode_skills,
     opencode_mcp,
     opencode_sessions,
@@ -38,7 +37,6 @@ api_router.include_router(rules.router, prefix="/rules", tags=["rules"])
 api_router.include_router(agent_tasks.router, prefix="/agent-tasks", tags=["agent-tasks"])
 api_router.include_router(embedding_config.router, prefix="/embedding", tags=["embedding"])
 api_router.include_router(ssh_keys.router, prefix="/ssh-keys", tags=["ssh-keys"])
-api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(opencode_sessions.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(opencode_skills.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(opencode_mcp.router, prefix="/opencode", tags=["opencode"])

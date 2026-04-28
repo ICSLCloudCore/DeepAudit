@@ -21,7 +21,6 @@ from .audit.scan import router as _scan_router
 from .audit.rules import router as _rules_router
 from .audit.database import router as _database_router
 
-from .agent.agents import router as _agents_router
 from .agent.agent_tasks import router as _agent_tasks_router
 
 from .opencode.sessions import router as _opencode_sessions_router
@@ -51,7 +50,6 @@ scan = _RouterWrapper(_scan_router)
 rules = _RouterWrapper(_rules_router)
 database = _RouterWrapper(_database_router)
 
-agents = _RouterWrapper(_agents_router)
 agent_tasks = _RouterWrapper(_agent_tasks_router)
 
 opencode_sessions = _RouterWrapper(_opencode_sessions_router)
@@ -78,7 +76,6 @@ __all__ = [
     "scan",
     "rules",
     "database",
-    "agents",
     "agent_tasks",
     "opencode_sessions",
     "opencode_skills",
