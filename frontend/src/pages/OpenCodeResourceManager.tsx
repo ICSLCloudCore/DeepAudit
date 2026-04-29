@@ -72,6 +72,7 @@ export default function OpenCodeResourceManager() {
   const [rawConfig, setRawConfig] = useState<string>("");
   const [modelsLoading, setModelsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [providerSaving, setProviderSaving] = useState(false);
   const [modelSaving, setModelSaving] = useState(false);
   const [modelFilters, setModelFilters] = useState({ search: "" });
@@ -207,6 +208,48 @@ export default function OpenCodeResourceManager() {
       toast.error("加载配置失败");
     } finally {
       setModelsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true);
+
+      // Parallel refresh calls
+      const [skillsResult, agentsResult, mcpsResult] = await Promise.allSettled([
+        opencodeApi.refreshSkills(),
+        opencodeApi.refreshAgents(),
+        opencodeApi.refreshMcps(),
+      ]);
+
+      // First refresh the models (existing logic)
+      await loadModels();
+
+      // Then reload all lists
+      await Promise.all([
+        loadSkills(),
+        loadAgentPackages(),
+        loadMcps(),
+      ]);
+
+      // Build summary message
+      let summary = "刷新完成！";
+      if (skillsResult.status === "fulfilled") {
+        summary += ` Skills(+${skillsResult.value.stats.added}/~${skillsResult.value.stats.updated})`;
+      }
+      if (agentsResult.status === "fulfilled") {
+        summary += ` Agents(+${agentsResult.value.stats.added}/~${agentsResult.value.stats.updated})`;
+      }
+      if (mcpsResult.status === "fulfilled") {
+        summary += ` MCPs(+${mcpsResult.value.stats.added}/~${mcpsResult.value.stats.updated})`;
+      }
+
+      toast.success(summary);
+    } catch (error) {
+      console.error("Failed to refresh:", error);
+      toast.error("刷新失败");
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -1086,15 +1129,15 @@ export default function OpenCodeResourceManager() {
              </TabsTrigger>
            </TabsList>
            
-           <Button
-             variant="outline"
-             onClick={loadModels}
-             className="cyber-btn-outline"
-             disabled={saving}
-           >
-             <RefreshCw className="w-4 h-4 mr-2" />
-             刷新
-           </Button>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              className="cyber-btn-outline"
+              disabled={saving || refreshing}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+              刷新
+            </Button>
          </div>
 
          {/* ============== MODELS TAB CONTENT ============== */}

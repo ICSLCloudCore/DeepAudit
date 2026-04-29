@@ -486,32 +486,32 @@ export const opencodeApi = {
     page?: number;
     page_size?: number;
   }) => {
-    const response = await apiClient.get("/opencode/agent-packages", { params });
+    const response = await apiClient.get("/opencode/agents", { params });
     return response.data as AgentPackageListResponse;
   },
 
   getAgentPackage: async (id: string) => {
-    const response = await apiClient.get(`/opencode/agent-packages/${id}`);
+    const response = await apiClient.get(`/opencode/agents/${id}`);
     return response.data as AgentPackage;
   },
 
   uploadAgentPackage: async (formData: FormData) => {
-    const response = await apiClient.post("/opencode/agent-packages/upload", formData);
+    const response = await apiClient.post("/opencode/agents/upload", formData);
     return response.data as AgentPackage;
   },
 
   updateAgentPackage: async (id: string, data: Partial<AgentPackage>) => {
-    const response = await apiClient.put(`/opencode/agent-packages/${id}`, data);
+    const response = await apiClient.put(`/opencode/agents/${id}`, data);
     return response.data as AgentPackage;
   },
 
   deleteAgentPackage: async (id: string) => {
-    const response = await apiClient.delete(`/opencode/agent-packages/${id}`);
+    const response = await apiClient.delete(`/opencode/agents/${id}`);
     return response.data;
   },
 
   downloadAgentPackage: async (id: string, original_filename: string) => {
-    const response = await apiClient.get(`/opencode/agent-packages/${id}/download`, {
+    const response = await apiClient.get(`/opencode/agents/${id}/download`, {
       responseType: 'blob',
     });
     const url = URL.createObjectURL(response.data);
@@ -522,6 +522,22 @@ export const opencodeApi = {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  },
+
+  // Refresh APIs
+  refreshSkills: async () => {
+    const response = await apiClient.post("/opencode/skills/refresh");
+    return response.data;
+  },
+
+  refreshAgents: async () => {
+    const response = await apiClient.post("/opencode/agents/refresh");
+    return response.data;
+  },
+
+  refreshMcps: async () => {
+    const response = await apiClient.post("/opencode/mcps/refresh");
+    return response.data;
   },
 
   // SSE Stream

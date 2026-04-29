@@ -18,6 +18,14 @@ from app.db.session import get_db
 from app.models import Agent, OpenCodeAgent, OpenCodeSkill, User
 from app.api.deps import get_current_user
 from app.core.config import settings
+from app.api.v1.endpoints.opencode.utils import (
+    validate_zip_structure,
+    validate_agent_package_structure,
+    parse_skill_frontmatter,
+    parse_agents_directory,
+    parse_skills_directory_for_agent,
+    create_agent_package_with_relations,
+)
 
 router = APIRouter()
 
@@ -26,51 +34,6 @@ def ensure_storage_dirs():
     """确保存储目录存在"""
     os.makedirs(settings.AGENT_PACKAGES_ZIP_STORAGE_PATH, exist_ok=True)
     os.makedirs(settings.AGENT_PACKAGES_EXTRACTED_PATH, exist_ok=True)
-
-
-def validate_zip_structure(zip_ref: zipfile.ZipFile) -> bool:
-    """验证zip包结构是否有效 - 至少包含AGENTS.md、agents目录或skills目录之一"""
-    file_list = zip_ref.namelist()
-
-    has_agents_md = any(
-        f == "AGENTS.md" or (len(f.split("/")) == 2 and f.endswith("/AGENTS.md")) for f in file_list
-    )
-    has_agents = any(f.startswith("agents/") and f.endswith(".md") for f in file_list)
-
-    # 检查是否有skills目录且至少有一个子目录包含SKILL.md
-    has_skills = False
-    skill_dirs = set()
-    for f in file_list:
-        if f.startswith("skills/") and f != "skills/":
-            parts = f.split("/")
-            if len(parts) > 2:
-                skill_dirs.add(parts[1])
-
-    # 检查是否有SKILL.md在skills子目录下
-    for f in file_list:
-        parts = f.split("/")
-        if len(parts) == 3 and parts[0] == "skills" and parts[2] == "SKILL.md":
-            has_skills = True
-            break
-
-    return has_agents_md or has_agents or has_skills
-
-
-def parse_skill_frontmatter(content: str) -> dict:
-    """简单解析Skill的frontmatter"""
-    frontmatter = {}
-    try:
-        if content.startswith("---"):
-            end_idx = content.find("---", 3)
-            if end_idx > 0:
-                fm_content = content[3:end_idx].strip()
-                for line in fm_content.split("\n"):
-                    if ":" in line:
-                        key, value = line.split(":", 1)
-                        frontmatter[key.strip()] = value.strip()
-    except Exception:
-        pass
-    return frontmatter
 
 
 @router.post("/upload")
@@ -462,3 +425,85 @@ async def update_agent_package(
     await db.refresh(agent_package)
 
     return agent_package.to_dict()
+
+
+@router.post("/refresh")
+async def refresh_agents(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    从文件系统刷新 Agents 到数据库（使用 utils.py 工具函数）
+
+    扫描 AGENT_PACKAGES_EXTRACTED_PATH 目录，解析每个子目录，
+    将不存在的 agent 包添加到数据库
+    """
+    ensure_storage_dirs()
+
+    stats = {"scanned": 0, "added": 0, "updated": 0, "skipped": 0}
+    errors = []
+
+    extract_dir = Path(settings.AGENT_PACKAGES_EXTRACTED_PATH)
+
+    for item in os.listdir(extract_dir):
+        pkg_path = os.path.join(extract_dir, item)
+        if not os.path.isdir(pkg_path):
+            continue
+
+        stats["scanned"] += 1
+
+        # 使用工具函数验证结构
+        if not validate_agent_package_structure(pkg_path):
+            errors.append({"directory": item, "error": "Invalid agent package structure"})
+            stats["skipped"] += 1
+            continue
+
+        # 检查是否已存在
+        result = await db.execute(select(Agent).where(Agent.original_filename == item))
+        existing_agent = result.scalars().first()
+
+        if existing_agent:
+            # 已存在，跳过
+            stats["skipped"] += 1
+            continue
+
+        try:
+            # 1. 读取 AGENTS.md
+            agents_md_content = None
+            agents_md_path = os.path.join(pkg_path, "AGENTS.md")
+            if os.path.exists(agents_md_path):
+                with open(agents_md_path, "r", encoding="utf-8") as f:
+                    agents_md_content = f.read()
+
+            # 2. 使用工具函数解析 agents/ 目录
+            package_agents = parse_agents_directory(os.path.join(pkg_path, "agents"))
+
+            # 3. 使用工具函数解析 skills/ 目录
+            package_skills = parse_skills_directory_for_agent(os.path.join(pkg_path, "skills"))
+
+            # 4. 使用工具函数创建 Agent 包及关联记录
+            package_data = {
+                "name": item,
+                "original_filename": item,
+                "extracted_dir_path": pkg_path,
+                "agents_md_content": agents_md_content,
+            }
+
+            new_agent = create_agent_package_with_relations(
+                db, package_data, package_agents, package_skills, current_user
+            )
+
+            await db.commit()
+
+            stats["added"] += 1
+
+        except Exception as e:
+            errors.append({"directory": item, "error": str(e)})
+            stats["skipped"] += 1
+
+    return {
+        "success": True,
+        "message": "Agents refreshed successfully",
+        "stats": stats,
+        "errors": errors,
+    }

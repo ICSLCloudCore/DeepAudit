@@ -25,9 +25,9 @@ from .agent.agent_tasks import router as _agent_tasks_router
 
 from .opencode.sessions import router as _opencode_sessions_router
 from .opencode.skills import router as _opencode_skills_router
-from .opencode.mcp import router as _opencode_mcp_router
+from .opencode.mcps import router as _opencode_mcps_router
 from .opencode.audit_tasks import router as _opencode_audit_tasks_router
-from .opencode.agent_packages import router as _opencode_agent_packages_router
+from .opencode.agents import router as _opencode_agents_router
 
 from .knowledge.security_kb import router as _security_kb_router
 from .knowledge.prompts import router as _prompts_router
@@ -54,9 +54,9 @@ agent_tasks = _RouterWrapper(_agent_tasks_router)
 
 opencode_sessions = _RouterWrapper(_opencode_sessions_router)
 opencode_skills = _RouterWrapper(_opencode_skills_router)
-opencode_mcp = _RouterWrapper(_opencode_mcp_router)
+opencode_mcps = _RouterWrapper(_opencode_mcps_router)
 opencode_audit_tasks = _RouterWrapper(_opencode_audit_tasks_router)
-opencode_agent_packages = _RouterWrapper(_opencode_agent_packages_router)
+opencode_agents = _RouterWrapper(_opencode_agents_router)
 
 security_kb = _RouterWrapper(_security_kb_router)
 prompts = _RouterWrapper(_prompts_router)
@@ -79,9 +79,9 @@ __all__ = [
     "agent_tasks",
     "opencode_sessions",
     "opencode_skills",
-    "opencode_mcp",
+    "opencode_mcps",
     "opencode_audit_tasks",
-    "opencode_agent_packages",
+    "opencode_agents",
     "security_kb",
     "prompts",
     "embedding_config",

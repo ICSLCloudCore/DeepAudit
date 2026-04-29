@@ -10,83 +10,24 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
-import frontmatter
 
 from app.db.session import get_db
 from app.models import OpenCodeSkill, SkillCategory
 from app.api.deps import get_current_user
 from app.core.platform_config import ensure_dir_exists
 from app.core.config import settings
+from app.api.v1.endpoints.opencode.utils import (
+    parse_skill_metadata_from_zip,
+    parse_skill_metadata_from_zip_path,
+    parse_skill_md_from_path,
+    create_or_update_opencode_skill,
+    get_opencode_skills_dir,
+)
 
 router = APIRouter()
 
 # Import asyncio for the sleep
 import asyncio
-
-
-def parse_skill_metadata_from_zip(zip_content: bytes) -> dict:
-    """从 ZIP 文件内容中解析 SKILL.md 的元数据"""
-    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as temp_file:
-        temp_file.write(zip_content)
-        temp_file_path = temp_file.name
-
-    try:
-        with zipfile.ZipFile(temp_file_path, "r") as zip_ref:
-            # 查找 SKILL.md 文件
-            skill_md_path = None
-            skill_dir_name = None
-            for info in zip_ref.infolist():
-                parts = info.filename.split("/")
-                if len(parts) == 2 and parts[1] == "SKILL.md":
-                    skill_md_path = info.filename
-                    skill_dir_name = parts[0]
-                    break
-
-            if not skill_md_path:
-                return {"name": None, "description": None, "skill_dir_name": skill_dir_name}
-
-            # 读取 SKILL.md 内容
-            skill_md_content = zip_ref.read(skill_md_path).decode("utf-8")
-
-            # 使用 python-frontmatter 解析
-            post = frontmatter.loads(skill_md_content)
-
-            return {
-                "name": post.get("name"),
-                "description": post.get("description"),
-                "skill_dir_name": skill_dir_name,
-            }
-    finally:
-        os.unlink(temp_file_path)
-
-
-def parse_skill_metadata_from_zip_path(zip_file_path: str) -> dict:
-    """从 ZIP 文件路径中解析 SKILL.md 的元数据"""
-    with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
-        # 查找 SKILL.md 文件
-        skill_md_path = None
-        skill_dir_name = None
-        for info in zip_ref.infolist():
-            parts = info.filename.split("/")
-            if len(parts) == 2 and parts[1] == "SKILL.md":
-                skill_md_path = info.filename
-                skill_dir_name = parts[0]
-                break
-
-        if not skill_md_path:
-            return {"name": None, "description": None, "skill_dir_name": skill_dir_name}
-
-        # 读取 SKILL.md 内容
-        skill_md_content = zip_ref.read(skill_md_path).decode("utf-8")
-
-        # 使用 python-frontmatter 解析
-        post = frontmatter.loads(skill_md_content)
-
-        return {
-            "name": post.get("name"),
-            "description": post.get("description"),
-            "skill_dir_name": skill_dir_name,
-        }
 
 
 # ==================== Skill Endpoints ====================
@@ -571,3 +512,70 @@ async def batch_upload_skills(
             results["failed"].append({"filename": file.filename or "unknown", "reason": str(e)})
 
     return results
+
+
+@router.post("/skills/refresh")
+async def refresh_skills(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    从文件系统刷新 Skills 到数据库（使用 utils.py 工具函数）
+
+    扫描 ~/.config/opencode/skills/ 目录，解析每个子目录的 SKILL.md，
+    将不存在的 skill 添加到数据库，已存在的更新 name 和 description
+    """
+    skills_dir = get_opencode_skills_dir()
+    ensure_dir_exists(skills_dir)
+
+    stats = {"scanned": 0, "added": 0, "updated": 0, "skipped": 0}
+    errors = []
+
+    # 遍历 skills 目录
+    for item in os.listdir(skills_dir):
+        skill_path = os.path.join(skills_dir, item)
+        if not os.path.isdir(skill_path):
+            continue
+
+        stats["scanned"] += 1
+
+        # 检查 SKILL.md
+        skill_md_path = os.path.join(skill_path, "SKILL.md")
+        if not os.path.exists(skill_md_path):
+            errors.append({"directory": item, "error": "Missing SKILL.md"})
+            stats["skipped"] += 1
+            continue
+
+        try:
+            # 使用工具函数解析 SKILL.md
+            skill_data = parse_skill_md_from_path(skill_md_path)
+            skill_data["opencode_file_path"] = skill_path
+
+            # 检查是否已存在
+            result = await db.execute(
+                select(OpenCodeSkill).where(OpenCodeSkill.opencode_file_path == skill_path)
+            )
+            existing_skill = result.scalar_one_or_none()
+
+            # 使用工具函数创建或更新记录
+            skill, is_new = create_or_update_opencode_skill(
+                db, skill_data, current_user, existing_skill
+            )
+
+            if is_new:
+                stats["added"] += 1
+            else:
+                stats["updated"] += 1
+
+        except Exception as e:
+            errors.append({"directory": item, "error": str(e)})
+            stats["skipped"] += 1
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Skills refreshed successfully",
+        "stats": stats,
+        "errors": errors,
+    }

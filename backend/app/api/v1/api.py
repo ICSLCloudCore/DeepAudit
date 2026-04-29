@@ -14,13 +14,13 @@ from app.api.v1.endpoints import (
     embedding_config,
     ssh_keys,
     opencode_skills,
-    opencode_mcp,
+    opencode_mcps,
     opencode_sessions,
     project_config,
     opencode_audit_tasks,
     security_kb,
     opencode_config,
-    opencode_agent_packages,
+    opencode_agents,
 )
 
 api_router = APIRouter()
@@ -39,15 +39,10 @@ api_router.include_router(embedding_config.router, prefix="/embedding", tags=["e
 api_router.include_router(ssh_keys.router, prefix="/ssh-keys", tags=["ssh-keys"])
 api_router.include_router(opencode_sessions.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(opencode_skills.router, prefix="/opencode", tags=["opencode"])
-api_router.include_router(opencode_mcp.router, prefix="/opencode", tags=["opencode"])
+api_router.include_router(opencode_mcps.router, prefix="/opencode", tags=["opencode"])
 api_router.include_router(project_config.router, prefix="/projects", tags=["project-config"])
 api_router.include_router(
     opencode_audit_tasks.router, prefix="/opencode-audit-tasks", tags=["opencode-audit-tasks"]
 )
 api_router.include_router(security_kb.router, prefix="/security-kb", tags=["security-kb"])
-api_router.include_router(
-    opencode_config.router, prefix="/opencode-config", tags=["opencode-config"]
-)
-api_router.include_router(
-    opencode_agent_packages.router, prefix="/opencode/agent-packages", tags=["opencode"]
-)
+api_router.include_router(opencode_agents.router, prefix="/opencode", tags=["opencode"])
