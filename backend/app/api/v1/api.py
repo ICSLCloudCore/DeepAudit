@@ -45,4 +45,7 @@ api_router.include_router(
     opencode_audit_tasks.router, prefix="/opencode-audit-tasks", tags=["opencode-audit-tasks"]
 )
 api_router.include_router(security_kb.router, prefix="/security-kb", tags=["security-kb"])
+api_router.include_router(
+    opencode_config.router, prefix="/opencode-config", tags=["opencode-config"]
+)
 api_router.include_router(opencode_agents.router, prefix="/opencode", tags=["opencode"])
