@@ -754,14 +754,14 @@ export default function CreateTaskDialog({
                         </div>
                       ) : (
                         <Select
-                          value={selectedAgentPackageId || ""}
-                          onValueChange={(value) => setSelectedAgentPackageId(value || null)}
+                          value={selectedAgentPackageId || "__none__"}
+                          onValueChange={(value) => setSelectedAgentPackageId(value === "__none__" ? null : value)}
                         >
                           <SelectTrigger className="h-10 cyber-input">
                             <SelectValue placeholder="不使用 Agent 包" />
                           </SelectTrigger>
                           <SelectContent className="cyber-dialog border-border">
-                            <SelectItem value="" className="font-mono">
+                            <SelectItem value="__none__" className="font-mono">
                               不使用 Agent 包
                             </SelectItem>
                             {agentPackages.map((pkg) => (
