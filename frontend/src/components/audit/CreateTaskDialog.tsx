@@ -3,7 +3,7 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog,
@@ -136,7 +136,7 @@ export default function CreateTaskDialog({
   const [agentPackagesLoading, setAgentPackagesLoading] = useState(false);
 
   // 加载 Agent 包列表
-  const loadAgentPackages = async () => {
+  const loadAgentPackages = useCallback(async () => {
     try {
       setAgentPackagesLoading(true);
       const response = await opencodeApi.listAgentPackages({ page_size: 100 });
@@ -146,19 +146,14 @@ export default function CreateTaskDialog({
     } finally {
       setAgentPackagesLoading(false);
     }
-  };
-  
-  // Agent 包相关状态
-  const [selectedAgentPackageId, setSelectedAgentPackageId] = useState<string | null>(null);
-  const [agentPackages, setAgentPackages] = useState<AgentPackage[]>([]);
-  const [agentPackagesLoading, setAgentPackagesLoading] = useState(false);
+  }, []);
 
   const { projects, loading, loadProjects } = useProjects();
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
   const zipState = useZipFile(selectedProject, projects);
 
   // 加载 OpenCode 可用提示词
-  const loadAvailableOpencodePrompts = async () => {
+  const loadAvailableOpencodePrompts = useCallback(async () => {
     if (!selectedProjectId) return;
     
     try {
@@ -208,20 +203,7 @@ export default function CreateTaskDialog({
     } finally {
       setLoadingOpencodePrompts(false);
     }
-  };
-
-  // 加载 Agent 包列表
-  const loadAgentPackages = async () => {
-    try {
-      setAgentPackagesLoading(true);
-      const response = await opencodeApi.listAgentPackages({ page_size: 100 });
-      setAgentPackages(response.items || []);
-    } catch (error) {
-      console.error("Failed to load agent packages:", error);
-    } finally {
-      setAgentPackagesLoading(false);
-    }
-  };
+  }, [selectedProjectId]);
 
   // 重置 OpenCode 状态
   const resetOpencodeState = () => {
@@ -318,7 +300,7 @@ export default function CreateTaskDialog({
       loadAvailableOpencodePrompts();
       loadAgentPackages();
     }
-  }, [open, selectedProjectId, auditMode]);
+  }, [open, selectedProjectId, auditMode, loadAvailableOpencodePrompts, loadAgentPackages]);
 
   // 当审计模式切换到 OpenCode 时，重置状态
   useEffect(() => {
