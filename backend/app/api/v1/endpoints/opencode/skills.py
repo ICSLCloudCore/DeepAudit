@@ -33,7 +33,7 @@ import asyncio
 # ==================== Skill Endpoints ====================
 
 
-@router.get("")
+@router.get("/skills")
 async def list_skills(
     category: Optional[str] = Query(None, description="Filter by category"),
     is_public: Optional[bool] = Query(None, description="Filter by public status"),
@@ -82,7 +82,7 @@ async def list_skills(
     }
 
 
-@router.get("/{skill_id}")
+@router.get("/skills/{skill_id}")
 async def get_skill(
     skill_id: str,
     db: AsyncSession = Depends(get_db),
@@ -98,7 +98,7 @@ async def get_skill(
     return skill.to_dict()
 
 
-@router.post("/upload")
+@router.post("/skills/upload")
 async def upload_skill(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
@@ -232,7 +232,7 @@ async def upload_skill(
     return skill.to_dict()
 
 
-@router.get("/{skill_id}/download")
+@router.get("/skills/{skill_id}/download")
 async def download_skill(
     skill_id: str,
     db: AsyncSession = Depends(get_db),
@@ -284,7 +284,7 @@ async def download_skill(
     raise HTTPException(status_code=404, detail="Skill 文件不存在，无法下载")
 
 
-@router.put("/{skill_id}")
+@router.put("/skills/{skill_id}")
 async def update_skill(
     skill_id: str,
     name: Optional[str] = None,
@@ -322,7 +322,7 @@ async def update_skill(
     return skill.to_dict()
 
 
-@router.delete("/{skill_id}")
+@router.delete("/skills/{skill_id}")
 async def delete_skill(
     skill_id: str,
     db: AsyncSession = Depends(get_db),
@@ -357,7 +357,7 @@ async def delete_skill(
     return {"message": "Skill deleted successfully", "deleted_files": deleted_files}
 
 
-@router.post("/batch-upload")
+@router.post("/skills/batch-upload")
 async def batch_upload_skills(
     files: List[UploadFile] = File(...),
     category: str = Form(SkillCategory.CUSTOM),
@@ -514,7 +514,7 @@ async def batch_upload_skills(
     return results
 
 
-@router.post("/refresh")
+@router.post("/skills/refresh")
 async def refresh_skills(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),

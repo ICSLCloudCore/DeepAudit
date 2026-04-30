@@ -36,7 +36,7 @@ def ensure_storage_dirs():
     os.makedirs(settings.AGENT_PACKAGES_EXTRACTED_PATH, exist_ok=True)
 
 
-@router.post("/upload")
+@router.post("/agents/upload")
 async def upload_agent_package(
     file: UploadFile = File(...),
     version: str = Form("1.0.0"),
@@ -239,7 +239,7 @@ async def upload_agent_package(
         )
 
 
-@router.get("")
+@router.get("/agents")
 async def list_agent_packages(
     search: Optional[str] = Query(None, description="搜索Agent包名称或描述"),
     is_public: Optional[bool] = Query(None, description="过滤公开或私有"),
@@ -298,7 +298,7 @@ async def list_agent_packages(
     }
 
 
-@router.get("/{agent_package_id}")
+@router.get("/agents/{agent_package_id}")
 async def get_agent_package(
     agent_package_id: str,
     db: AsyncSession = Depends(get_db),
@@ -322,7 +322,7 @@ async def get_agent_package(
     return agent_package.to_dict()
 
 
-@router.get("/{agent_package_id}/download")
+@router.get("/agents/{agent_package_id}/download")
 async def download_agent_package(
     agent_package_id: str,
     db: AsyncSession = Depends(get_db),
@@ -351,7 +351,7 @@ async def download_agent_package(
     )
 
 
-@router.delete("/{agent_package_id}")
+@router.delete("/agents/{agent_package_id}")
 async def delete_agent_package(
     agent_package_id: str,
     db: AsyncSession = Depends(get_db),
@@ -390,7 +390,7 @@ async def delete_agent_package(
     return {"message": "Agent包删除成功", "deleted_files": deleted_files}
 
 
-@router.put("/{agent_package_id}")
+@router.put("/agents/{agent_package_id}")
 async def update_agent_package(
     agent_package_id: str,
     name: Optional[str] = None,
@@ -427,7 +427,7 @@ async def update_agent_package(
     return agent_package.to_dict()
 
 
-@router.post("/refresh")
+@router.post("/agents/refresh")
 async def refresh_agents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

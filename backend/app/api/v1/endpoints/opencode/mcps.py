@@ -157,7 +157,7 @@ async def fetch_mcp_tools(server_url: str, config: Optional[dict] = None) -> dic
 # ==================== MCP Endpoints ====================
 
 
-@router.get("")
+@router.get("/mcps")
 async def list_mcps(
     mcp_type: Optional[str] = Query(None, description="Filter by MCP type"),
     search: Optional[str] = Query(None, description="Search by name or description"),
@@ -202,7 +202,7 @@ async def list_mcps(
     }
 
 
-@router.get("/{mcp_id}")
+@router.get("/mcps/{mcp_id}")
 async def get_mcp(
     mcp_id: str,
     db: AsyncSession = Depends(get_db),
@@ -218,7 +218,7 @@ async def get_mcp(
     return mcp.to_dict()
 
 
-@router.post("")
+@router.post("/mcps")
 async def create_mcp(
     data: MCPCreate,
     db: AsyncSession = Depends(get_db),
@@ -268,7 +268,7 @@ async def create_mcp(
     return mcp.to_dict()
 
 
-@router.put("/{mcp_id}")
+@router.put("/mcps/{mcp_id}")
 async def update_mcp(
     mcp_id: str,
     data: MCPUpdate,
@@ -311,7 +311,7 @@ async def update_mcp(
     return mcp.to_dict()
 
 
-@router.delete("/{mcp_id}")
+@router.delete("/mcps/{mcp_id}")
 async def delete_mcp(
     mcp_id: str,
     db: AsyncSession = Depends(get_db),
@@ -335,7 +335,7 @@ async def delete_mcp(
     return {"message": "MCP deleted successfully", "mcp_name": mcp_name}
 
 
-@router.post("/{mcp_id}/refresh-tools")
+@router.post("/mcps/{mcp_id}/refresh-tools")
 async def refresh_mcp_tools(
     mcp_id: str,
     db: AsyncSession = Depends(get_db),
@@ -361,7 +361,7 @@ async def refresh_mcp_tools(
         raise HTTPException(status_code=400, detail=tool_result["error"])
 
 
-@router.post("/refresh")
+@router.post("/mcps/refresh")
 async def refresh_mcps(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
