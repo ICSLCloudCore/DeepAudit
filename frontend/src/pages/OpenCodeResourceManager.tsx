@@ -1030,18 +1030,6 @@ export default function OpenCodeResourceManager() {
         <Card className="cyber-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-primary" />
-              Providers
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{providerCount}</div>
-          </CardContent>
-        </Card>
-
-        <Card className="cyber-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
               <Package className="w-4 h-4 text-emerald-400" />
               Models
             </CardTitle>
@@ -1063,17 +1051,29 @@ export default function OpenCodeResourceManager() {
           </CardContent>
         </Card>
 
-          <Card className="cyber-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <Bot className="w-4 h-4 text-amber-400" />
-                Agent 包
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-400">{agentPackageCount}</div>
-            </CardContent>
-          </Card>
+        <Card className="cyber-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Bot className="w-4 h-4 text-amber-400" />
+              编排
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-amber-400">{agentPackageCount}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="cyber-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Bot className="w-4 h-4 text-pink-400" />
+              Agents
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-pink-400">{agentCount}</div>
+          </CardContent>
+        </Card>
 
         <Card className="cyber-card">
           <CardHeader className="pb-2">
