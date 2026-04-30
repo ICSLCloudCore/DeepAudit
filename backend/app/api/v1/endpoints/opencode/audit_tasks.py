@@ -4,6 +4,8 @@ DeepAudit OpenCode 审计任务 API
 
 import json
 import os
+import tempfile
+import asyncio
 from typing import Any, List, Optional, Dict
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
@@ -896,21 +898,67 @@ async def export_report_md(
         logger.info(f"[OpenCode Report Export] MD file {i + 1}: {f}")
 
     if not report_files:
-        logger.error(f"[OpenCode Report Export] No MD report files found!")
-        raise HTTPException(status_code=404, detail="未找到 Markdown 报告文件")
+        logger.warning(
+            f"[OpenCode Report Export] No MD report files found, returning default content"
+        )
 
-    latest_file = report_files[0]
-    logger.info(f"[OpenCode Report Export] Serving latest MD file: {latest_file}")
-    logger.info(f"[OpenCode Report Export] File exists: {latest_file.exists()}")
-    logger.info(
-        f"[OpenCode Report Export] File size: {latest_file.stat().st_size if latest_file.exists() else 0} bytes"
-    )
+        # 创建临时 Markdown 文件，返回"无报告"内容
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", delete=False, encoding="utf-8"
+        ) as f:
+            f.write("# OpenCode 审计报告\n\n")
+            f.write("## 状态\n\n")
+            f.write("暂无报告生成，请等待审计任务完成后重试。\n\n")
+            f.write("## 任务信息\n\n")
+            f.write(f"- 任务 ID: {task_id}\n")
+            f.write(f"- 任务状态: {task.status}\n")
+            f.write(f"- 创建时间: {task.created_at}\n")
+            if task.started_at:
+                f.write(f"- 开始时间: {task.started_at}\n")
+            temp_md_path = f.name
 
-    filename = f"opencode-audit-report-{task_id[:8]}.md"
-    logger.info(f"[OpenCode Report Export] Download filename: {filename}")
-    logger.info(f"[OpenCode Report Export] ========== EXPORT MD REPORT END ==========")
+        try:
+            filename = f"opencode-audit-report-{task_id[:8]}-no-report.md"
+            logger.info(f"[OpenCode Report Export] Serving default MD content: {filename}")
+            logger.info(f"[OpenCode Report Export] ========== EXPORT MD REPORT END ==========")
 
-    return FileResponse(path=str(latest_file), media_type="text/markdown", filename=filename)
+            # 延迟删除临时文件
+            async def delete_temp_file():
+                await asyncio.sleep(1)
+                try:
+                    Path(temp_md_path).unlink(missing_ok=True)
+                    logger.info(
+                        f"[OpenCode Report Export] Deleted temporary MD file: {temp_md_path}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"[OpenCode Report Export] Failed to delete temporary MD file: {e}"
+                    )
+
+            asyncio.create_task(delete_temp_file())
+            return FileResponse(
+                path=str(temp_md_path), media_type="text/markdown", filename=filename
+            )
+        except Exception:
+            # 确保临时文件被删除
+            try:
+                Path(temp_md_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
+    else:
+        latest_file = report_files[0]
+        logger.info(f"[OpenCode Report Export] Serving latest MD file: {latest_file}")
+        logger.info(f"[OpenCode Report Export] File exists: {latest_file.exists()}")
+        logger.info(
+            f"[OpenCode Report Export] File size: {latest_file.stat().st_size if latest_file.exists() else 0} bytes"
+        )
+
+        filename = f"opencode-audit-report-{task_id[:8]}.md"
+        logger.info(f"[OpenCode Report Export] Download filename: {filename}")
+        logger.info(f"[OpenCode Report Export] ========== EXPORT MD REPORT END ==========")
+
+        return FileResponse(path=str(latest_file), media_type="text/markdown", filename=filename)
 
 
 @router.get("/{task_id}/export-report-json")
@@ -964,18 +1012,75 @@ async def export_report_json(
         logger.info(f"[OpenCode Report Export] JSON file {i + 1}: {f}")
 
     if not report_files:
-        logger.error(f"[OpenCode Report Export] No JSON report files found!")
-        raise HTTPException(status_code=404, detail="未找到 JSON 报告文件")
+        logger.warning(
+            f"[OpenCode Report Export] No JSON report files found, returning default content"
+        )
 
-    latest_file = report_files[0]
-    logger.info(f"[OpenCode Report Export] Serving latest JSON file: {latest_file}")
-    logger.info(f"[OpenCode Report Export] File exists: {latest_file.exists()}")
-    logger.info(
-        f"[OpenCode Report Export] File size: {latest_file.stat().st_size if latest_file.exists() else 0} bytes"
-    )
+        # 创建临时 JSON 文件，返回"无报告"内容
+        default_json = {
+            "metadata": {
+                "export_date": datetime.now(timezone.utc).isoformat(),
+                "version": "1.0.0",
+                "format": "JSON",
+                "status": "no_report_available",
+            },
+            "task": {
+                "id": task_id,
+                "status": task.status,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "started_at": task.started_at.isoformat() if task.started_at else None,
+                "project_id": task.project_id,
+            },
+            "message": "暂无报告生成，请等待审计任务完成后重试。",
+            "issues": [],
+            "summary": {"total_issues": 0, "critical": 0, "high": 0, "medium": 0, "low": 0},
+        }
 
-    filename = f"opencode-audit-report-{task_id[:8]}.json"
-    logger.info(f"[OpenCode Report Export] Download filename: {filename}")
-    logger.info(f"[OpenCode Report Export] ========== EXPORT JSON REPORT END ==========")
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as f:
+            json.dump(default_json, f, indent=2, ensure_ascii=False)
+            temp_json_path = f.name
 
-    return FileResponse(path=str(latest_file), media_type="application/json", filename=filename)
+        try:
+            filename = f"opencode-audit-report-{task_id[:8]}-no-report.json"
+            logger.info(f"[OpenCode Report Export] Serving default JSON content: {filename}")
+            logger.info(f"[OpenCode Report Export] ========== EXPORT JSON REPORT END ==========")
+
+            # 延迟删除临时文件
+            async def delete_temp_file():
+                await asyncio.sleep(1)
+                try:
+                    Path(temp_json_path).unlink(missing_ok=True)
+                    logger.info(
+                        f"[OpenCode Report Export] Deleted temporary JSON file: {temp_json_path}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"[OpenCode Report Export] Failed to delete temporary JSON file: {e}"
+                    )
+
+            asyncio.create_task(delete_temp_file())
+            return FileResponse(
+                path=str(temp_json_path), media_type="application/json", filename=filename
+            )
+        except Exception:
+            # 确保临时文件被删除
+            try:
+                Path(temp_json_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
+    else:
+        latest_file = report_files[0]
+        logger.info(f"[OpenCode Report Export] Serving latest JSON file: {latest_file}")
+        logger.info(f"[OpenCode Report Export] File exists: {latest_file.exists()}")
+        logger.info(
+            f"[OpenCode Report Export] File size: {latest_file.stat().st_size if latest_file.exists() else 0} bytes"
+        )
+
+        filename = f"opencode-audit-report-{task_id[:8]}.json"
+        logger.info(f"[OpenCode Report Export] Download filename: {filename}")
+        logger.info(f"[OpenCode Report Export] ========== EXPORT JSON REPORT END ==========")
+
+        return FileResponse(path=str(latest_file), media_type="application/json", filename=filename)

@@ -384,9 +384,9 @@ function OpenCodeAuditPageContent() {
           <div className="flex-shrink-0 p-4 bg-card border-b border-border">
             <StatsPanel session={session} />
           </div>
-          
-          {/* 查看问题按钮 - 仅在任务完成时显示 */}
-          {auditTask?.status === 'completed' && (
+
+          {/* 查看问题和导出按钮 - 始终显示 */}
+          {auditTask && (
             <div className="flex-shrink-0 p-4 border-t border-border space-y-3">
               <Button
                 className="w-full gap-2"
@@ -399,7 +399,7 @@ function OpenCodeAuditPageContent() {
                 <FileText className="w-4 h-4" />
                 查看问题
               </Button>
-              
+
               <Button
                 className="w-full gap-2"
                 variant="secondary"
@@ -413,7 +413,7 @@ function OpenCodeAuditPageContent() {
                 )}
                 导出 Markdown 报告
               </Button>
-              
+
               <Button
                 className="w-full gap-2"
                 variant="secondary"
