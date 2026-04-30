@@ -219,6 +219,7 @@ export interface StartAuditWithPromptRequest {
   prompt_template_id?: string;
   prompt_content?: string;
   variables?: Record<string, string>;
+  agent_package_id?: string;  // 新增：选择的 Agent 包 ID
 }
 
 export interface StartAuditWithPromptResponse {

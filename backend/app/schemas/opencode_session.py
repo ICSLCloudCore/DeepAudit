@@ -38,6 +38,7 @@ class StartAuditWithPromptRequest(BaseModel):
     prompt_template_id: Optional[str] = Field(None, description="提示词模板ID")
     prompt_content: Optional[str] = Field(None, description="自定义提示词内容")
     variables: Optional[Dict[str, str]] = Field(default_factory=dict, description="变量值")
+    agent_package_id: Optional[str] = Field(None, description="Agent 包 ID（可选）")
 
 
 class StartAuditWithPromptResponse(BaseModel):

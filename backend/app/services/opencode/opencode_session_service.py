@@ -47,6 +47,81 @@ def ensure_dir_exists(path: str):
     logger.info(f"[OpenCode] Ensured directory exists: {path}")
 
 
+def link_agent_package_to_project(project_dir: str, agent_package):
+    """
+    将 Agent 包内容通过软链接链接到项目目录的 .opencode 文件夹
+
+    Args:
+        project_dir: 项目目录路径
+        agent_package: Agent 包对象，需包含 extracted_dir_path
+    """
+    logger.info(f"[OpenCode] Linking agent package to project: {agent_package.name}")
+
+    # 验证 Agent 包解压目录存在
+    if not agent_package.extracted_dir_path:
+        raise ValueError("Agent package has no extracted directory path")
+
+    agent_source_dir = Path(agent_package.extracted_dir_path)
+    if not agent_source_dir.exists():
+        raise FileNotFoundError(f"Agent package directory not found: {agent_source_dir}")
+
+    # 创建 .opencode 目录（如果已存在则先清理）
+    opencode_dir = Path(project_dir) / ".opencode"
+
+    if opencode_dir.exists():
+        logger.info(f"[OpenCode] Cleaning existing .opencode directory: {opencode_dir}")
+        # 安全删除：检查是否都是软链接
+        import shutil
+
+        shutil.rmtree(opencode_dir)
+
+    # 创建新的 .opencode 目录
+    opencode_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"[OpenCode] Created .opencode directory: {opencode_dir}")
+
+    # 遍历 Agent 包解压目录的内容，创建软链接
+    linked_count = 0
+    for item in agent_source_dir.iterdir():
+        target_path = opencode_dir / item.name
+        source_path = item.absolute()
+
+        # 创建软链接
+        try:
+            os.symlink(source_path, target_path)
+            linked_count += 1
+            logger.info(f"[OpenCode] Created symlink: {target_path} -> {source_path}")
+        except OSError as e:
+            logger.error(f"[OpenCode] Failed to create symlink for {item.name}: {e}")
+            raise
+
+    logger.info(f"[OpenCode] Successfully linked {linked_count} items from agent package")
+
+
+def cleanup_agent_package_links(project_dir: str):
+    """
+    清理项目目录中的 .opencode 文件夹及其软链接
+
+    Args:
+        project_dir: 项目目录路径
+    """
+    opencode_dir = Path(project_dir) / ".opencode"
+
+    if not opencode_dir.exists():
+        logger.info(f"[OpenCode] .opencode directory not found, skipping cleanup")
+        return
+
+    logger.info(f"[OpenCode] Cleaning up .opencode directory: {opencode_dir}")
+
+    try:
+        import shutil
+
+        shutil.rmtree(opencode_dir)
+        logger.info(f"[OpenCode] Successfully cleaned up .opencode directory")
+    except Exception as e:
+        logger.error(f"[OpenCode] Failed to cleanup .opencode directory: {e}")
+        # 不抛出异常，继续执行后续流程
+
+
 async def log_opencode_interaction_to_db(
     db: AsyncSession,
     session_id: str,
@@ -406,7 +481,7 @@ class OpenCodeSessionService:
         return None
 
     async def start_opencode_server(
-        self, project: Project, current_user_id: str, opencode_session_id: str
+        self, project: Project, current_user_id: str, opencode_session_id: str, agent_package=None
     ) -> OpenCodeServerStatus:
         logger.info("[OpenCode] run start_opencode_server")
 
@@ -506,6 +581,10 @@ class OpenCodeSessionService:
                 ensure_dir_exists(project_path)
 
             logger.info(f"[OpenCode] Final project path: {project_path}")
+
+            # 链接 Agent 包（如果有）
+            if agent_package:
+                link_agent_package_to_project(project_path, agent_package)
 
             log_dir = f"/tmp/opencode_logs" if sys.platform != "win32" else "C:/temp/opencode_logs"
             ensure_dir_exists(log_dir)
@@ -731,6 +810,7 @@ class OpenCodeSessionService:
         current_user: User,
         prompt_template_id: Optional[str] = None,
         prompt_content: Optional[str] = None,
+        agent_package=None,
     ) -> tuple[OpenCodeSession, OpenCodeServerStatus]:
         """
         创建完整的OpenCode会话（包含启动server、等待RUNNING、创建服务器会话和数据库记录）
@@ -768,7 +848,10 @@ class OpenCodeSessionService:
             or server_status == OpenCodeServerStatus.ERROR
         ):
             server_status = await self.start_opencode_server(
-                project, current_user.id, opencode_session_id=session.id
+                project,
+                current_user.id,
+                opencode_session_id=session.id,
+                agent_package=agent_package,
             )
 
         if server_status == OpenCodeServerStatus.ERROR:
@@ -1008,6 +1091,7 @@ class OpenCodeSessionService:
         prompt_content: Optional[str],
         variables: Optional[Dict[str, str]],
         current_user: User,
+        agent_package=None,
     ) -> tuple[OpenCodeSession, OpenCodeServerStatus, Any]:
         """
         启动带提示词的OpenCode审计
@@ -1043,7 +1127,12 @@ class OpenCodeSessionService:
         else:
             # 创建新的完整 OpenCodeSession（包含 server session）
             db_session, server_status = await self.create_full_opencode_session(
-                project_id, project, current_user, prompt_template_id, final_prompt_content
+                project_id,
+                project,
+                current_user,
+                prompt_template_id,
+                final_prompt_content,
+                agent_package,
             )
             server_session_id = db_session.opencode_server_session_id
 

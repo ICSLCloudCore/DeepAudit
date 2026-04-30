@@ -477,6 +477,29 @@ async def start_audit_with_prompt(
 ):
     """启动OpenCode审计（带Prompt选择）"""
     try:
+        from app.models.opencode.agent import Agent
+
+        agent_package = None
+        if audit_in.agent_package_id:
+            result = await db.execute(select(Agent).where(Agent.id == audit_in.agent_package_id))
+            agent_package = result.scalar_one_or_none()
+
+            if not agent_package:
+                raise HTTPException(
+                    status_code=404, detail=f"Agent package not found: {audit_in.agent_package_id}"
+                )
+
+            # 验证权限
+            if not agent_package.is_public and agent_package.created_by != current_user.id:
+                raise HTTPException(
+                    status_code=403, detail="You don't have permission to use this agent package"
+                )
+
+            if not agent_package.extracted_dir_path:
+                raise HTTPException(
+                    status_code=400, detail="Agent package has no extracted directory"
+                )
+
         service = OpenCodeSessionService(db)
         session, server_status, audit_task = await service.start_audit_with_prompt(
             project_id=project_id,
@@ -484,6 +507,7 @@ async def start_audit_with_prompt(
             prompt_content=audit_in.prompt_content,
             variables=audit_in.variables,
             current_user=current_user,
+            agent_package=agent_package,
         )
 
         return StartAuditWithPromptResponse(

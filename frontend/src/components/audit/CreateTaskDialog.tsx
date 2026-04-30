@@ -40,6 +40,7 @@ import {
   FolderOpen,
   Settings2,
   Package,
+  Package2,
   Globe,
   Shield,
   Loader2,
@@ -59,6 +60,7 @@ import {
   opencodeApi,
   type AvailablePromptItem,
   type StartAuditWithPromptResponse,
+  type AgentPackage,
 } from "@/shared/api/opencode";
 
 import { useProjects } from "./hooks/useTaskForm";
@@ -127,6 +129,29 @@ export default function CreateTaskDialog({
   const [autoStartServer, setAutoStartServer] = useState(true);
   const [availableOpencodePrompts, setAvailableOpencodePrompts] = useState<AvailablePromptItem[]>([]);
   const [loadingOpencodePrompts, setLoadingOpencodePrompts] = useState(false);
+  
+  // Agent 包相关状态
+  const [selectedAgentPackageId, setSelectedAgentPackageId] = useState<string | null>(null);
+  const [agentPackages, setAgentPackages] = useState<AgentPackage[]>([]);
+  const [agentPackagesLoading, setAgentPackagesLoading] = useState(false);
+
+  // 加载 Agent 包列表
+  const loadAgentPackages = async () => {
+    try {
+      setAgentPackagesLoading(true);
+      const response = await opencodeApi.listAgentPackages({ page_size: 100 });
+      setAgentPackages(response.items || []);
+    } catch (error) {
+      console.error("Failed to load agent packages:", error);
+    } finally {
+      setAgentPackagesLoading(false);
+    }
+  };
+  
+  // Agent 包相关状态
+  const [selectedAgentPackageId, setSelectedAgentPackageId] = useState<string | null>(null);
+  const [agentPackages, setAgentPackages] = useState<AgentPackage[]>([]);
+  const [agentPackagesLoading, setAgentPackagesLoading] = useState(false);
 
   const { projects, loading, loadProjects } = useProjects();
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
@@ -185,12 +210,26 @@ export default function CreateTaskDialog({
     }
   };
 
+  // 加载 Agent 包列表
+  const loadAgentPackages = async () => {
+    try {
+      setAgentPackagesLoading(true);
+      const response = await opencodeApi.listAgentPackages({ page_size: 100 });
+      setAgentPackages(response.items || []);
+    } catch (error) {
+      console.error("Failed to load agent packages:", error);
+    } finally {
+      setAgentPackagesLoading(false);
+    }
+  };
+
   // 重置 OpenCode 状态
   const resetOpencodeState = () => {
     setOpencodeMode("template");
     setSelectedOpencodeTemplateId("");
     setCustomOpencodePrompt("");
     setAutoStartServer(true);
+    setSelectedAgentPackageId(null);
   };
 
   const selectedOpencodeTemplate = useMemo(
@@ -273,10 +312,11 @@ export default function CreateTaskDialog({
     loadRulesAndPrompts();
   }, []);
 
-  // 当对话框打开或选中项目改变时，加载 OpenCode 提示词
+  // 当对话框打开或选中项目改变时，加载 OpenCode 提示词和 Agent 包
   useEffect(() => {
     if (open && selectedProjectId && auditMode === "opencode") {
       loadAvailableOpencodePrompts();
+      loadAgentPackages();
     }
   }, [open, selectedProjectId, auditMode]);
 
@@ -362,6 +402,7 @@ export default function CreateTaskDialog({
         const response = await opencodeApi.startAuditWithPrompt(selectedProject.id, {
           prompt_template_id,
           prompt_content,
+          agent_package_id: selectedAgentPackageId || undefined,
         });
 
         toast.success(response.message || "审计已启动");
@@ -714,6 +755,47 @@ export default function CreateTaskDialog({
                         </div>
                       </TabsContent>
                     </Tabs>
+
+                    {/* Agent 包选择器 */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-mono font-bold uppercase text-muted-foreground flex items-center gap-1">
+                        <Package2 className="w-4 h-4 text-primary" />
+                        Agent 包（可选）
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        选择已上传的 Agent 包，将通过软链接集成到审计环境
+                      </p>
+                      {agentPackagesLoading ? (
+                        <div className="flex items-center gap-2 p-3 border border-border rounded bg-muted/50">
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          <span className="text-sm font-mono text-muted-foreground">加载中...</span>
+                        </div>
+                      ) : (
+                        <Select
+                          value={selectedAgentPackageId || ""}
+                          onValueChange={(value) => setSelectedAgentPackageId(value || null)}
+                        >
+                          <SelectTrigger className="h-10 cyber-input">
+                            <SelectValue placeholder="不使用 Agent 包" />
+                          </SelectTrigger>
+                          <SelectContent className="cyber-dialog border-border">
+                            <SelectItem value="" className="font-mono">
+                              不使用 Agent 包
+                            </SelectItem>
+                            {agentPackages.map((pkg) => (
+                              <SelectItem key={pkg.id} value={pkg.id} className="font-mono">
+                                <div className="flex items-center justify-between w-full">
+                                  <span>{pkg.name}</span>
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    v{pkg.version} · {pkg.agents_count} Agents · {pkg.skills_count} Skills
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
 
                     {/* 选项 */}
                     <div className="flex items-center space-x-3 p-3 border border-dashed border-border rounded bg-muted/50">
