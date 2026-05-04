@@ -1,5 +1,17 @@
 import { Link } from "react-router-dom";
-import { FileText, Play, Activity } from "lucide-react";
+import {
+  FileText,
+  Play,
+  Activity,
+  Terminal,
+  XCircle,
+  Download,
+  ArrowUpRight,
+  Bot,
+  Code2,
+  Calendar,
+  CheckCircle
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,8 +25,142 @@ export function ProjectTasksTab(props: {
   formatDate: (dateString: string) => string;
   renderStatusBadge: (status: string) => React.ReactNode;
   renderStatusIcon: (status: string) => React.ReactNode;
+  // 新增 props
+  handleCancelTask: (taskId: string) => void;
+  handleCancelAgentTask: (taskId: string) => void;
+  handleCancelOpenCodeTask: (taskId: string) => void;
+  handleOpenExportDialog: (task: any) => void;
+  handleOpenAgentExportDialog: (task: any) => void;
+  cancellingTaskId: string | null;
+  cancellingAgentTaskId: string | null;
+  cancellingOpenCodeTaskId: string | null;
+  exportingTaskId: string | null;
 }) {
-  const { unifiedTasks, onCreateTask, formatDate, renderStatusBadge, renderStatusIcon } = props;
+  const {
+    unifiedTasks,
+    onCreateTask,
+    formatDate,
+    renderStatusBadge,
+    renderStatusIcon,
+    // 新增 props 解构
+    handleCancelTask,
+    handleCancelAgentTask,
+    handleCancelOpenCodeTask,
+    handleOpenExportDialog,
+    handleOpenAgentExportDialog,
+    cancellingTaskId,
+    cancellingAgentTaskId,
+    cancellingOpenCodeTaskId,
+    exportingTaskId,
+  } = props;
+
+  // ============ 按钮渲染函数 ============
+  // Agent 任务按钮
+  const renderAgentTaskButtons = (task: any) => (
+    <div className="flex gap-3">
+      {(task.status === 'running' || task.status === 'pending') && (
+        <>
+          <Link to={`/agent-audit/${task.id}`}>
+            <Button size="sm" className="cyber-btn bg-sky-500/90 border-sky-500/50 text-foreground hover:bg-sky-500 h-9">
+              <Terminal className="w-4 h-4 mr-2" />
+              查看实时流
+            </Button>
+          </Link>
+          <Button
+            size="sm"
+            className="cyber-btn bg-rose-500/90 border-rose-500/50 text-foreground hover:bg-rose-500 h-9"
+            onClick={() => handleCancelAgentTask(task.id)}
+            disabled={cancellingAgentTaskId === task.id}
+          >
+            <XCircle className="w-4 h-4 mr-2" />
+            {cancellingAgentTaskId === task.id ? '取消中...' : '取消'}
+          </Button>
+        </>
+      )}
+      {(task.status === 'completed' || (task.findings_count != null && task.findings_count > 0)) && (
+        <Button
+          size="sm"
+          className="cyber-btn-outline h-9"
+          onClick={() => handleOpenAgentExportDialog(task)}
+          disabled={exportingTaskId === task.id}
+        >
+          <Download className="w-4 h-4 mr-2" />
+          {exportingTaskId === task.id ? '加载中...' : '导出报告'}
+        </Button>
+      )}
+      <Link to={`/agent-audit/${task.id}`}>
+        <Button size="sm" className="cyber-btn-outline h-9">
+          <FileText className="w-4 h-4 mr-2" />
+          查看详情
+        </Button>
+      </Link>
+    </div>
+  );
+
+  // 普通审计任务按钮
+  const renderAuditTaskButtons = (task: any) => (
+    <div className="flex gap-3">
+      {(task.status === 'running' || task.status === 'pending') && (
+        <Button
+          size="sm"
+          className="cyber-btn bg-rose-500/90 border-rose-500/50 text-foreground hover:bg-rose-500 h-9"
+          onClick={() => handleCancelTask(task.id)}
+          disabled={cancellingTaskId === task.id}
+        >
+          <XCircle className="w-4 h-4 mr-2" />
+          {cancellingTaskId === task.id ? '取消中...' : '取消'}
+        </Button>
+      )}
+      {(task.issues_count > 0 || task.status === 'completed') && (
+        <Button
+          size="sm"
+          className="cyber-btn-outline h-9"
+          onClick={() => handleOpenExportDialog(task)}
+          disabled={exportingTaskId === task.id}
+        >
+          <Download className="w-4 h-4 mr-2" />
+          {exportingTaskId === task.id ? '加载中...' : '导出报告'}
+        </Button>
+      )}
+      <Link to={`/tasks/${task.id}`}>
+        <Button size="sm" className="cyber-btn-outline h-9">
+          <FileText className="w-4 h-4 mr-2" />
+          查看详情
+        </Button>
+      </Link>
+    </div>
+  );
+
+  // OpenCode 任务按钮
+  const renderOpenCodeTaskButtons = (task: any) => (
+    <div className="flex gap-3">
+      {(task.status === 'running' || task.status === 'pending') && (
+        <Button
+          size="sm"
+          className="cyber-btn bg-rose-500/90 border-rose-500/50 text-foreground hover:bg-rose-500 h-9"
+          onClick={() => handleCancelOpenCodeTask(task.id)}
+          disabled={cancellingOpenCodeTaskId === task.id}
+        >
+          <XCircle className="w-4 h-4 mr-2" />
+          {cancellingOpenCodeTaskId === task.id ? '取消中...' : '取消'}
+        </Button>
+      )}
+      {task.opencode_session_id && (
+        <Link to={`/opencode-audit/${task.opencode_session_id}/tasks/${task.id}`}>
+          <Button size="sm" className="cyber-btn-outline h-9">
+            <Terminal className="w-4 h-4 mr-2" />
+            查看实时流
+          </Button>
+        </Link>
+      )}
+      <Link to={`/tasks/opencode/${task.id}/vulnerabilities`}>
+        <Button size="sm" className="cyber-btn-outline h-9">
+          <FileText className="w-4 h-4 mr-2" />
+          查看问题
+        </Button>
+      </Link>
+    </div>
+  );
 
   return (
     <>
@@ -144,13 +290,28 @@ export function ProjectTasksTab(props: {
                   </div>
                 )}
 
-                <div className="flex justify-end space-x-2 pt-4 border-t border-border">
-                  <Link to={detailLink}>
-                    <Button variant="outline" size="sm" className="cyber-btn-outline">
-                      <FileText className="w-4 h-4 mr-2" />
-                      查看详情
-                    </Button>
-                  </Link>
+                <div className="flex items-center justify-between pt-4 border-t border-border">
+                  <div className="flex items-center space-x-4 text-sm text-muted-foreground font-mono">
+                    <div className="flex items-center">
+                      <Calendar className="w-4 h-4 mr-2" />
+                      {formatDate(task.created_at)}
+                    </div>
+                    {task.completed_at && (
+                      <div className="flex items-center">
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        {formatDate(task.completed_at)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
+                    {isAgentTask ? (
+                      renderAgentTaskButtons(task)
+                    ) : isOpenCodeTask ? (
+                      renderOpenCodeTaskButtons(task)
+                    ) : (
+                      renderAuditTaskButtons(task)
+                    )}
+                  </div>
                 </div>
               </div>
             );

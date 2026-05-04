@@ -26,18 +26,22 @@ import {
   FileText,
   Upload,
   GitBranch,
-  Terminal
+  Terminal,
+  Download,
+  ArrowUpRight
 } from "lucide-react";
 import { api } from "@/shared/config/database";
 import type { Project, AuditTask, CreateProjectForm, AuditIssue } from "@/shared/types";
 import type { AgentFinding, AgentTask } from "@/shared/api/agentTasks";
-import { getAgentTasks, updateAgentFinding } from "@/shared/api/agentTasks";
-import { getOpenCodeAuditTasks, getVulnerabilities, type OpenCodeAuditTask, type AuditVulnerability } from "@/shared/api/opencodeAuditTasks";
+import { getAgentTasks, updateAgentFinding, cancelAgentTask, getAgentFindings } from "@/shared/api/agentTasks";
+import { getOpenCodeAuditTasks, getVulnerabilities, cancelOpenCodeAuditTask, type OpenCodeAuditTask, type AuditVulnerability } from "@/shared/api/opencodeAuditTasks";
 import { apiClient } from "@/shared/api/serverClient";
 import { isRepositoryProject, getSourceTypeLabel, getRepositoryPlatformLabel } from "@/shared/utils/projectUtils";
 import { toast } from "sonner";
 import CreateTaskDialog from "@/components/audit/CreateTaskDialog";
 import TerminalProgressDialog from "@/components/audit/TerminalProgressDialog";
+import ExportReportDialog from "@/components/reports/ExportReportDialog";
+import ReportExportDialog from "@/pages/AgentAudit/components/ReportExportDialog";
 import { SUPPORTED_LANGUAGES, REPOSITORY_PLATFORMS } from "@/shared/constants";
 import type { AggregatedAgentFinding, AggregatedAuditIssue, IssuesSummary, LatestProblem, UnifiedTask } from "@/shared/types";
 import {
@@ -87,6 +91,21 @@ export default function ProjectDetail() {
     isLimited: false,
     maxTasks: 20
   });
+
+  // ============ 任务操作相关状态 ============
+  // 取消任务相关状态
+  const [cancellingTaskId, setCancellingTaskId] = useState<string | null>(null);
+  const [cancellingAgentTaskId, setCancellingAgentTaskId] = useState<string | null>(null);
+  const [cancellingOpenCodeTaskId, setCancellingOpenCodeTaskId] = useState<string | null>(null);
+
+  // 导出报告相关状态
+  const [exportingTaskId, setExportingTaskId] = useState<string | null>(null);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportTask, setExportTask] = useState<any>(null);
+  const [exportIssues, setExportIssues] = useState<any[]>([]);
+  const [showAgentExportDialog, setShowAgentExportDialog] = useState(false);
+  const [exportAgentTask, setExportAgentTask] = useState<any>(null);
+  const [exportAgentFindings, setExportAgentFindings] = useState<any[]>([]);
 
   // ============ Helpers ============
 
@@ -621,6 +640,83 @@ export default function ProjectDetail() {
     setShowTerminalDialog(true);
   };
 
+  // ============ 取消任务函数 ============
+  const handleCancelTask = async (taskId: string) => {
+    if (cancellingTaskId) return;
+    try {
+      setCancellingTaskId(taskId);
+      await api.cancelAuditTask(taskId);
+      toast.success("任务已取消");
+      await loadProjectData();
+    } catch (error: any) {
+      console.error('取消任务失败:', error);
+      toast.error(error?.response?.data?.detail || "取消任务失败");
+    } finally {
+      setCancellingTaskId(null);
+    }
+  };
+
+  const handleCancelAgentTask = async (taskId: string) => {
+    if (cancellingAgentTaskId) return;
+    try {
+      setCancellingAgentTaskId(taskId);
+      await cancelAgentTask(taskId);
+      toast.success("Agent任务已取消");
+      await loadProjectData();
+    } catch (error: any) {
+      console.error('取消Agent任务失败:', error);
+      toast.error(error?.response?.data?.detail || "取消Agent任务失败");
+    } finally {
+      setCancellingAgentTaskId(null);
+    }
+  };
+
+  const handleCancelOpenCodeTask = async (taskId: string) => {
+    if (cancellingOpenCodeTaskId) return;
+    try {
+      setCancellingOpenCodeTaskId(taskId);
+      await cancelOpenCodeAuditTask(taskId);
+      toast.success("OpenCode任务已取消");
+      await loadProjectData();
+    } catch (error: any) {
+      console.error('取消OpenCode任务失败:', error);
+      toast.error(error?.response?.data?.detail || "取消OpenCode任务失败");
+    } finally {
+      setCancellingOpenCodeTaskId(null);
+    }
+  };
+
+  // ============ 导出报告函数 ============
+  const handleOpenExportDialog = async (task: any) => {
+    try {
+      setExportingTaskId(task.id);
+      const issuesResponse = await apiClient.get(`/tasks/${task.id}/issues`);
+      setExportTask(task);
+      setExportIssues(issuesResponse.data || []);
+      setShowExportDialog(true);
+    } catch (error: any) {
+      console.error('获取问题列表失败:', error);
+      toast.error("获取问题列表失败");
+    } finally {
+      setExportingTaskId(null);
+    }
+  };
+
+  const handleOpenAgentExportDialog = async (task: any) => {
+    try {
+      setExportingTaskId(task.id);
+      const findings = await getAgentFindings(task.id);
+      setExportAgentTask(task);
+      setExportAgentFindings(findings);
+      setShowAgentExportDialog(true);
+    } catch (error: any) {
+      console.error('获取 findings 列表失败:', error);
+      toast.error("获取审计结果失败");
+    } finally {
+      setExportingTaskId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -936,6 +1032,16 @@ export default function ProjectDetail() {
             formatDate={formatDate}
             renderStatusBadge={getStatusBadge}
             renderStatusIcon={getStatusIcon}
+            // 新增 props
+            handleCancelTask={handleCancelTask}
+            handleCancelAgentTask={handleCancelAgentTask}
+            handleCancelOpenCodeTask={handleCancelOpenCodeTask}
+            handleOpenExportDialog={handleOpenExportDialog}
+            handleOpenAgentExportDialog={handleOpenAgentExportDialog}
+            cancellingTaskId={cancellingTaskId}
+            cancellingAgentTaskId={cancellingAgentTaskId}
+            cancellingOpenCodeTaskId={cancellingOpenCodeTaskId}
+            exportingTaskId={exportingTaskId}
           />
         </TabsContent>
 
@@ -1122,6 +1228,26 @@ export default function ProjectDetail() {
         newStatus={pendingStatusChange?.newStatus || ""}
         onConfirm={handleConfirmStatusChange}
       />
+
+      {/* 快速扫描任务导出对话框 */}
+      {exportTask && (
+        <ExportReportDialog
+          open={showExportDialog}
+          onOpenChange={setShowExportDialog}
+          task={exportTask}
+          issues={exportIssues}
+        />
+      )}
+
+      {/* Agent 任务导出对话框 */}
+      {exportAgentTask && (
+        <ReportExportDialog
+          open={showAgentExportDialog}
+          onOpenChange={setShowAgentExportDialog}
+          task={exportAgentTask}
+          findings={exportAgentFindings}
+        />
+      )}
     </div>
   );
 }
