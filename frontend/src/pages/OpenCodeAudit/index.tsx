@@ -369,7 +369,7 @@ function OpenCodeAuditPageContent() {
                   }
                 `}
               >
-                <Sparkle className="w-3.5 h-3.5" />
+                <Sparkles className="w-3.5 h-3.5" />
                 <span>THINKING</span>
               </button>
               
