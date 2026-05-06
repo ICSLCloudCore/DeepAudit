@@ -422,7 +422,7 @@ async def update_opencode_audit_task_status(
     return result.scalars().first()
 
 
-@router.post("/{task_id}/manual-complete")
+@router.post("/{task_id}/manual-complete", response_model=OpenCodeAuditTaskResponse)
 async def manual_complete_opencode_audit_task(
     task_id: str,
     db: AsyncSession = Depends(get_db),
@@ -531,7 +531,7 @@ async def safe_delete_opencode_audit_task(
     return {"message": "任务已成功删除", "task_id": task_id}
 
 
-@router.post("/{task_id}/cancel")
+@router.post("/{task_id}/cancel", response_model=OpenCodeAuditTaskResponse)
 async def cancel_opencode_audit_task(
     task_id: str,
     db: AsyncSession = Depends(get_db),

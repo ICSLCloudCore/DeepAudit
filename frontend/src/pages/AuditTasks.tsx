@@ -1318,146 +1318,91 @@ export default function AuditTasks() {
                          </Button>
                        </Link>
 
-                      {/* 操作下拉菜单 - 运行/待处理任务 */}
-                      {(task.status === 'running' || task.status === 'pending') && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button size="sm" className="cyber-btn-outline h-9 w-9 p-0">
-                              {processingTaskId === task.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <MoreVertical className="w-4 h-4" />
-                              )}
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuLabel>任务操作</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
+                       {/* 操作下拉菜单 - 所有任务状态都显示 */}
+                       <DropdownMenu>
+                         <DropdownMenuTrigger asChild>
+                           <Button size="sm" className="cyber-btn-outline h-9 w-9 p-0">
+                             {processingTaskId === task.id ? (
+                               <Loader2 className="w-4 h-4 animate-spin" />
+                             ) : (
+                               <MoreVertical className="w-4 h-4" />
+                             )}
+                           </Button>
+                         </DropdownMenuTrigger>
+                         <DropdownMenuContent align="end" className="w-56">
+                           <DropdownMenuLabel>任务操作</DropdownMenuLabel>
+                           <DropdownMenuSeparator />
 
-                            <DropdownMenuItem
-                              onClick={() => handleManualCompleteTask(task.id)}
-                              disabled={processingTaskId === task.id}
-                              className="text-emerald-600 dark:text-emerald-400 cursor-pointer"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              手动完成
-                            </DropdownMenuItem>
+                           <DropdownMenuItem
+                             onClick={() => handleManualCompleteTask(task.id)}
+                             disabled={processingTaskId === task.id || !(task.status === 'running' || task.status === 'pending')}
+                             className="text-emerald-600 dark:text-emerald-400 cursor-pointer"
+                           >
+                             <CheckCircle className="w-4 h-4 mr-2" />
+                             手动完成
+                           </DropdownMenuItem>
 
-                            <DropdownMenuItem
-                              onClick={() => handleCancelOpenCodeTask(task.id)}
-                              disabled={processingTaskId === task.id}
-                              className="text-amber-600 dark:text-amber-400 cursor-pointer"
-                            >
-                              <XCircle className="w-4 h-4 mr-2" />
-                              取消任务
-                            </DropdownMenuItem>
+                           <DropdownMenuItem
+                             onClick={() => handleCancelOpenCodeTask(task.id)}
+                             disabled={processingTaskId === task.id || !(task.status === 'running' || task.status === 'pending')}
+                             className="text-amber-600 dark:text-amber-400 cursor-pointer"
+                           >
+                             <XCircle className="w-4 h-4 mr-2" />
+                             取消任务
+                           </DropdownMenuItem>
 
-                            <DropdownMenuSeparator />
+                           <DropdownMenuSeparator />
 
-                            <AlertDialog open={deleteConfirmOpen === task.id} onOpenChange={(open) => {
-                              if (!open) setDeleteConfirmOpen(null);
-                            }}>
-                              <AlertDialogTrigger asChild>
-                                <DropdownMenuItem
-                                  onSelect={(e) => {
-                                    e.preventDefault();
-                                    setDeleteConfirmOpen(task.id);
-                                  }}
-                                  disabled={processingTaskId === task.id}
-                                  className="text-rose-600 dark:text-rose-400 cursor-pointer"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  删除任务
-                                </DropdownMenuItem>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent className="bg-card border border-border">
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                  <AlertDialogDescription className="text-muted-foreground">
-                                    此操作将永久删除任务及其关联数据，包括：
-                                    <ul className="list-disc ml-4 mt-2 space-y-1">
-                                      <li>任务记录</li>
-                                      <li>漏洞发现</li>
-                                      <li>项目临时文件</li>
-                                    </ul>
-                                    <br />
-                                    此操作无法撤销，确定要继续吗？
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel className="cyber-btn-outline">取消</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    className="bg-rose-600 hover:bg-rose-700 text-white border-rose-600"
-                                    onClick={() => handleDeleteTask(task.id)}
-                                  >
-                                    {processingTaskId === task.id ? (
-                                      <div className="flex items-center gap-2">
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        删除中...
-                                      </div>
-                                    ) : (
-                                      "确认删除"
-                                    )}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-
-                      {/* 已完成/失败/已取消任务 - 只显示删除按钮 */}
-                      {(task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') && (
-                        <AlertDialog open={deleteConfirmOpen === task.id} onOpenChange={(open) => {
-                          if (!open) setDeleteConfirmOpen(null);
-                        }}>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              size="sm"
-                              className="cyber-btn-outline h-9 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
-                              disabled={processingTaskId === task.id}
-                            >
-                              {processingTaskId === task.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                              ) : (
-                                <Trash2 className="w-4 h-4 mr-2" />
-                              )}
-                              删除
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="bg-card border border-border">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>确认删除</AlertDialogTitle>
-                              <AlertDialogDescription className="text-muted-foreground">
-                                此操作将永久删除任务及其关联数据，包括：
-                                <ul className="list-disc ml-4 mt-2 space-y-1">
-                                  <li>任务记录</li>
-                                  <li>漏洞发现</li>
-                                  <li>项目临时文件</li>
-                                </ul>
-                                <br />
-                                此操作无法撤销，确定要继续吗？
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel className="cyber-btn-outline">取消</AlertDialogCancel>
-                              <AlertDialogAction
-                                className="bg-rose-600 hover:bg-rose-700 text-white border-rose-600"
-                                onClick={() => handleDeleteTask(task.id)}
-                              >
-                                {processingTaskId === task.id ? (
-                                  <div className="flex items-center gap-2">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    删除中...
-                                  </div>
-                                ) : (
-                                  "确认删除"
-                                )}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
+                           <AlertDialog open={deleteConfirmOpen === task.id} onOpenChange={(open) => {
+                             if (!open) setDeleteConfirmOpen(null);
+                           }}>
+                             <AlertDialogTrigger asChild>
+                               <DropdownMenuItem
+                                 onSelect={(e) => {
+                                   e.preventDefault();
+                                   setDeleteConfirmOpen(task.id);
+                                 }}
+                                 disabled={processingTaskId === task.id}
+                                 className="text-rose-600 dark:text-rose-400 cursor-pointer"
+                               >
+                                 <Trash2 className="w-4 h-4 mr-2" />
+                                 删除任务
+                               </DropdownMenuItem>
+                             </AlertDialogTrigger>
+                             <AlertDialogContent className="bg-card border border-border">
+                               <AlertDialogHeader>
+                                 <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                 <AlertDialogDescription className="text-muted-foreground">
+                                   此操作将永久删除任务及其关联数据，包括：
+                                   <ul className="list-disc ml-4 mt-2 space-y-1">
+                                     <li>任务记录</li>
+                                     <li>漏洞发现</li>
+                                     <li>项目临时文件</li>
+                                   </ul>
+                                   <br />
+                                   此操作无法撤销，确定要继续吗？
+                                 </AlertDialogDescription>
+                               </AlertDialogHeader>
+                               <AlertDialogFooter>
+                                 <AlertDialogCancel className="cyber-btn-outline">取消</AlertDialogCancel>
+                                 <AlertDialogAction
+                                   className="bg-rose-600 hover:bg-rose-700 text-white border-rose-600"
+                                   onClick={() => handleDeleteTask(task.id)}
+                                 >
+                                   {processingTaskId === task.id ? (
+                                     <div className="flex items-center gap-2">
+                                       <Loader2 className="w-4 h-4 animate-spin" />
+                                       删除中...
+                                     </div>
+                                   ) : (
+                                     "确认删除"
+                                   )}
+                                 </AlertDialogAction>
+                               </AlertDialogFooter>
+                             </AlertDialogContent>
+                           </AlertDialog>
+                         </DropdownMenuContent>
+                       </DropdownMenu>
 
                        {task.project && (
                          <Link to={`/projects/${task.project.id}`}>
