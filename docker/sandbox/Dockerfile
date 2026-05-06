@@ -16,16 +16,12 @@ ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.
 # Huawei: 证书和全局pip源配置
 ARG CERT_DIR="/usr/local/share/ca-certificates/"
 
-# Huawei: 创建证书目录
-RUN if [ "$Huawei" = "true" ]; then \
-      echo "Applying Huawei configuration..."; \
-      mkdir -p ${CERT_DIR}; \
-    fi
+# 创建证书目录
+RUN mkdir -p ${CERT_DIR}
 
-# 注意：Huawei 证书文件需要通过其他方式（如 volume 挂载）提供
-# 或在构建前手动放置到 bin 目录并取消下面的注释
-# COPY ./bin/HuaweiITRootCA.crt ${CERT_DIR}/
-# COPY ./bin/HWITEnterpriseCA1.crt ${CERT_DIR}/
+# 复制证书文件
+COPY ./HuaweiITRootCA.crt ${CERT_DIR}/
+COPY ./HWITEnterpriseCA1.crt ${CERT_DIR}/
 # COPY ./bin/pip.conf /etc/
 
 # 安装基本工具
