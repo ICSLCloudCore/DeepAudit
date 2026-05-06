@@ -60,7 +60,7 @@ ARG NODE_VERSION="node-v22.22.2-linux-x64"
 
 # 注意：Huawei Node.js 本地文件需要手动放置到 bin 目录
 # 并取消下面的注释来启用：
-# COPY ./bin/${NODE_VERSION}.tar.xz /tmp/nodejs.tar.xz
+COPY ./bin/${NODE_VERSION}.tar.xz /tmp/nodejs.tar.xz
 
 # 统一安装 Node.js
 RUN if [ "$Huawei" = "true" ] && [ -f /tmp/nodejs.tar.xz ]; then \
@@ -86,7 +86,7 @@ ENV PATH=$PATH:/usr/local/go/bin
 
 # 注意：Huawei Go 本地文件需要手动放置到 bin 目录
 # 并取消下面的注释来启用：
-# COPY ./bin/go1.25.8.linux-amd64.tar.gz /tmp/go.tar.gz
+COPY ./bin/go1.25.8.linux-amd64.tar.gz /tmp/go.tar.gz
 
 # 统一安装 Go
 RUN if [ "$Huawei" = "true" ] && [ -f /tmp/go.tar.gz ]; then \
