@@ -6,12 +6,17 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Terminal, Loader2, ArrowDown, Sparkle, FileText, FileJson } from "lucide-react";
+import { Terminal, Loader2, ArrowDown, Sparkles, FileText, FileJson } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { exportOpenCodeToMD, exportOpenCodeToJSON } from "@/features/reports/services/reportExport";
-import { getOpenCodeAuditTask, type OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";
+import {
+  getOpenCodeAuditTask,
+  type OpenCodeAuditTask,
+  cancelOpenCodeAuditTask,
+  manualCompleteOpenCodeAuditTask,
+} from "@/shared/api/opencodeAuditTasks";
 
 import { SplashScreen, Header, LogEntry, StatsPanel, MessageList } from "./components";
 import { useOpenCodeAuditState } from "./hooks";
@@ -252,6 +257,64 @@ function OpenCodeAuditPageContent() {
     }
   };
 
+  // 取消审计任务
+  const handleCancel = async () => {
+    if (!taskId) {
+      toast.error("缺少必要参数");
+      return;
+    }
+
+    try {
+      toast.loading("正在取消审计...");
+
+      // 使用新的 API，后端会处理所有清理工作
+      const updatedTask = await cancelOpenCodeAuditTask(taskId);
+      setAuditTask(updatedTask);
+
+      // 断开 SSE 连接（如果有）
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
+      toast.dismiss();
+      toast.success("审计已取消");
+    } catch (error) {
+      console.error("取消失败:", error);
+      toast.dismiss();
+      toast.error("取消失败，请重试");
+    }
+  };
+
+  // 完成审计任务
+  const handleComplete = async () => {
+    if (!taskId) {
+      toast.error("缺少必要参数");
+      return;
+    }
+
+    try {
+      toast.loading("正在完成审计...");
+
+      // 使用新的 API，后端会处理所有清理和漏洞导入工作
+      const updatedTask = await manualCompleteOpenCodeAuditTask(taskId);
+      setAuditTask(updatedTask);
+
+      // 断开 SSE 连接（如果有）
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
+      toast.dismiss();
+      toast.success("审计已完成");
+    } catch (error) {
+      console.error("完成失败:", error);
+      toast.dismiss();
+      toast.error("完成失败，请重试");
+    }
+  };
+
   if (showSplash && !sessionId) {
     return <SplashScreen onComplete={handleSplashComplete} />;
   }
@@ -278,6 +341,8 @@ function OpenCodeAuditPageContent() {
         isRunning={isRunning}
         onNewAudit={handleNewAudit}
         auditTask={auditTask}
+        onCancel={handleCancel}
+        onComplete={handleComplete}
       />
 
       <div className="flex-1 flex overflow-hidden relative">

@@ -25,6 +25,13 @@ from app.models.project.project import Project
 from app.models.user.user import User
 from app.models.audit.audit_vulnerabilities import AuditVulnerability
 from app.services.opencode.opencode_session_service import OpenCodeSessionService
+from app.utils.opencode_task_utils import (
+    close_opencode_session_by_task,
+    stop_opencode_server_by_project,
+    delete_project_directory,
+    update_task_status,
+    delete_task_vulnerabilities,
+)
 
 router = APIRouter()
 
@@ -415,6 +422,115 @@ async def update_opencode_audit_task_status(
     return result.scalars().first()
 
 
+@router.post("/{task_id}/manual-complete")
+async def manual_complete_opencode_audit_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    手动完成OpenCode审计任务
+    """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Manually completing task: {task_id}")
+
+    result = await db.execute(
+        select(OpenCodeAuditTask)
+        .options(selectinload(OpenCodeAuditTask.project))
+        .where(OpenCodeAuditTask.id == task_id)
+    )
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    # 检查权限
+    if task.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="无权操作此任务")
+
+    project = task.project
+
+    # 1. 更新任务状态
+    await update_task_status(task, OpenCodeAuditTaskStatus.COMPLETED, db=db)
+
+    # 2. 关闭会话
+    await close_opencode_session_by_task(task, db)
+
+    # 3. 停止服务器
+    if project:
+        await stop_opencode_server_by_project(project, db)
+
+    # 4. 扫描并导入漏洞（不影响主流程）
+    try:
+        service = OpenCodeSessionService(db)
+        await service.auto_import_vulnerabilities(db, task_id, task.project_id)
+    except Exception as e:
+        logger.warning(f"[OpenCode Audit Tasks] 漏洞导入失败，但任务已标记完成: {e}")
+
+    # 5. 刷新任务数据
+    await db.refresh(task)
+
+    # 重新查询包含项目信息的任务
+    result = await db.execute(
+        select(OpenCodeAuditTask)
+        .options(selectinload(OpenCodeAuditTask.project))
+        .where(OpenCodeAuditTask.id == task_id)
+    )
+    task = result.scalars().first()
+
+    logger.info(f"[OpenCode Audit Tasks] Task manually completed: {task_id}")
+    return task
+
+
+@router.post("/{task_id}/safe-delete")
+async def safe_delete_opencode_audit_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    安全删除OpenCode审计任务
+    """
+    from app.utils.log import logger
+
+    logger.info(f"[OpenCode Audit Tasks] Safely deleting task: {task_id}")
+
+    result = await db.execute(
+        select(OpenCodeAuditTask)
+        .options(selectinload(OpenCodeAuditTask.project))
+        .where(OpenCodeAuditTask.id == task_id)
+    )
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    # 检查权限
+    if task.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="无权删除此任务")
+
+    project = task.project
+
+    # 1. 关闭会话
+    await close_opencode_session_by_task(task, db)
+
+    # 2. 停止服务器
+    if project:
+        await stop_opencode_server_by_project(project, db)
+
+    # 3. 删除漏洞
+    await delete_task_vulnerabilities(task_id, db)
+
+    # 4. 删除项目目录
+    await delete_project_directory(task)
+
+    # 5. 删除任务记录
+    await db.delete(task)
+    await db.commit()
+
+    logger.info(f"[OpenCode Audit Tasks] Task completely deleted: {task_id}")
+    return {"message": "任务已成功删除", "task_id": task_id}
+
+
 @router.post("/{task_id}/cancel")
 async def cancel_opencode_audit_task(
     task_id: str,
@@ -428,7 +544,11 @@ async def cancel_opencode_audit_task(
 
     logger.info(f"[OpenCode Audit Tasks] Cancelling task: {task_id}")
 
-    result = await db.execute(select(OpenCodeAuditTask).where(OpenCodeAuditTask.id == task_id))
+    result = await db.execute(
+        select(OpenCodeAuditTask)
+        .options(selectinload(OpenCodeAuditTask.project))
+        .where(OpenCodeAuditTask.id == task_id)
+    )
     task = result.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -437,17 +557,31 @@ async def cancel_opencode_audit_task(
     if task.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="无权取消此任务")
 
-    if task.status not in [OpenCodeAuditTaskStatus.PENDING, OpenCodeAuditTaskStatus.RUNNING]:
-        raise HTTPException(status_code=400, detail="只能取消待处理或运行中的任务")
+    project = task.project
 
-    # 更新数据库状态
-    task.status = OpenCodeAuditTaskStatus.CANCELLED
-    task.completed_at = datetime.now(timezone.utc)
-    await db.commit()
+    # 1. 更新任务状态
+    await update_task_status(task, OpenCodeAuditTaskStatus.CANCELLED, db=db)
+
+    # 2. 关闭会话
+    await close_opencode_session_by_task(task, db)
+
+    # 3. 停止服务器
+    if project:
+        await stop_opencode_server_by_project(project, db)
+
+    # 4. 刷新任务数据
+    await db.refresh(task)
+
+    # 重新查询包含项目信息的任务
+    result = await db.execute(
+        select(OpenCodeAuditTask)
+        .options(selectinload(OpenCodeAuditTask.project))
+        .where(OpenCodeAuditTask.id == task_id)
+    )
+    task = result.scalars().first()
 
     logger.info(f"[OpenCode Audit Tasks] Task cancelled: {task_id}")
-
-    return {"message": "任务已取消", "task_id": task_id}
+    return task
 
 
 @router.delete("/{task_id}")

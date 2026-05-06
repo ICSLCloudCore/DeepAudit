@@ -2,12 +2,12 @@
  * OpenCode Audit Header Component
  */
 
-import { Sparkles, Server } from "lucide-react";
+import { Sparkles, Server, X, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { HeaderProps } from "../types";
 import { SESSION_STATUS_CONFIG, SERVER_STATUS_CONFIG } from "../constants";
 
-export function Header({ session, isRunning, onNewAudit, auditTask }: HeaderProps) {
+export function Header({ session, isRunning, onNewAudit, auditTask, onCancel, onComplete }: HeaderProps & { onCancel?: () => void; onComplete?: () => void }) {
   return (
     <header className="flex-shrink-0 h-16 border-b border-border/50 flex items-center justify-between px-6 bg-card/80 backdrop-blur-md relative overflow-hidden">
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
@@ -75,6 +75,28 @@ export function Header({ session, isRunning, onNewAudit, auditTask }: HeaderProp
       </div>
 
       <div className="flex items-center gap-3 relative z-10">
+        {auditTask && auditTask.status !== 'cancelled' && auditTask.status !== 'completed' && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="h-9 px-4 text-xs font-mono uppercase tracking-wider text-rose-500 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-500/50 transition-all duration-300 rounded-md"
+            >
+              <X className="w-3.5 h-3.5 mr-2" />
+              <span>取消</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onComplete}
+              className="h-9 px-4 text-xs font-mono uppercase tracking-wider text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 transition-all duration-300 rounded-md"
+            >
+              <CheckCircle className="w-3.5 h-3.5 mr-2" />
+              <span>完成</span>
+            </Button>
+          </>
+        )}
         <Button
           variant="ghost"
           size="sm"

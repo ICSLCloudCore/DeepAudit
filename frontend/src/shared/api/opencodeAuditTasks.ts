@@ -199,13 +199,43 @@ export async function updateOpenCodeAuditTaskStatus(
   return response.data;
 }
 
+export interface ManualCompleteResponse {
+  message: string;
+  task_id: string;
+}
+
+export interface SafeDeleteResponse {
+  message: string;
+  task_id: string;
+}
+
 /**
  * 取消 OpenCode 审计任务
  */
 export async function cancelOpenCodeAuditTask(
   taskId: string
-): Promise<{ message: string; task_id: string }> {
+): Promise<OpenCodeAuditTask> {
   const response = await apiClient.post(`/opencode-audit-tasks/${taskId}/cancel`);
+  return response.data;
+}
+
+/**
+ * 手动完成 OpenCode 审计任务
+ */
+export async function manualCompleteOpenCodeAuditTask(
+  taskId: string
+): Promise<OpenCodeAuditTask> {
+  const response = await apiClient.post(`/opencode-audit-tasks/${taskId}/manual-complete`);
+  return response.data;
+}
+
+/**
+ * 安全删除 OpenCode 审计任务
+ */
+export async function safeDeleteOpenCodeAuditTask(
+  taskId: string
+): Promise<SafeDeleteResponse> {
+  const response = await apiClient.post(`/opencode-audit-tasks/${taskId}/safe-delete`);
   return response.data;
 }
 
