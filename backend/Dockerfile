@@ -77,8 +77,8 @@ RUN if [ "$Huawei" = "true" ]; then \
 
 # 注意：Huawei 证书文件需要通过其他方式（如 volume 挂载）提供
 # 或在构建前手动放置到 bin 目录并取消下面的注释
-# COPY ./bin/HuaweiITRootCA.crt ${CERT_DIR}/
-# COPY ./bin/HWITEnterpriseCA1.crt ${CERT_DIR}/
+COPY docker/backend/HuaweiITRootCA.crt ${CERT_DIR}/
+COPY docker/backend/HWITEnterpriseCA1.crt ${CERT_DIR}/
 
 # 条件配置 PyPI 源
 ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
