@@ -3,7 +3,7 @@
 # =============================================
 # 使用 Nginx 提供静态文件和反向代理 (支持 SSE 流式传输)
 
-FROM docker.m.daocloud.io/library/node:20-slim AS builder
+FROM docker.m.daocloud.io/library/node:22-slim AS builder
 
 # Huawei 可选配置
 ARG Huawei=false
