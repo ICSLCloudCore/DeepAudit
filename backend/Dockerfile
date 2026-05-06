@@ -168,7 +168,8 @@ ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.
 RUN npm install -g bun \
     && if [ "$Huawei" = "true" ]; then \
         echo "Using Huawei bun mirror..."; \
-        eval "${TEMP_PROXY}" && BUN_CONFIG_REGISTRY=https://mirrors.tools.huawei.com/npm bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
+        # eval "${TEMP_PROXY}" && BUN_CONFIG_REGISTRY=https://mirrors.tools.huawei.com/npm bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
+        BUN_CONFIG_REGISTRY=https://mirrors.tools.huawei.com/npm bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
     else \
         echo "Using Taobao bun mirror..."; \
         BUN_CONFIG_REGISTRY=https://registry.npmmirror.com bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
