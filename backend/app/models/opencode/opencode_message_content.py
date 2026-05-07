@@ -17,6 +17,9 @@ class OpenCodeMessageContentType(str, enum.Enum):
     RESPONSE = "response"
     REASONING = "reasoning"
     USER_PROMPT = "user_prompt"
+    TOOL = "tool"
+    STEP_START = "step_start"
+    STEP_FINISH = "step_finish"
 
 
 class OpenCodeMessageContent(Base):

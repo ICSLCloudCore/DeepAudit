@@ -32,6 +32,16 @@ from app.models.opencode.opencode_message_content import (
     OpenCodeMessageContent,
     OpenCodeMessageContentType,
 )
+from app.services.opencode.opencode_message_parser import OpenCodeMessageParser
+from app.schemas.opencode_message import (
+    Part,
+    PartType,
+    TextPart,
+    ReasoningPart,
+    ToolPart,
+    StepStartPart,
+    StepFinishPart,
+)
 from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
 from app.models.audit.audit_vulnerabilities import AuditVulnerability
 from app.models.knowledge.prompt_template import PromptTemplate
@@ -1241,23 +1251,44 @@ class OpenCodeSessionService:
 
         if not message_id:
             logger.info(f"[OpenCode] No message_id provided, cannot poll")
-            return "Error: No message ID provided"
+            return False
 
         url = self.get_opencode_server_url(project)
         message_url = f"{url}/session/{server_session_id}/message"
 
-        async def save_data_to_database(msg_index: int, msg_type, msg_content: str) -> None:
+        async def save_part_to_database(
+            msg_index: int,
+            part: Part,
+            db_session_id: str,
+            audit_task_id: Optional[str],
+            opencode_message_id: Optional[str],
+        ) -> None:
+            """保存单个 Part 到数据库"""
             async with AsyncSessionLocal() as db_session_local:
                 try:
-                    # 将枚举转为字符串值，确保与数据库中的存储格式一致
-                    content_type_str = (
-                        msg_type.value
-                        if isinstance(msg_type, OpenCodeMessageContentType)
-                        else str(msg_type)
-                    )
+                    # 类型映射
+                    content_type_map = {
+                        PartType.TEXT: OpenCodeMessageContentType.RESPONSE,
+                        PartType.REASONING: OpenCodeMessageContentType.REASONING,
+                        PartType.TOOL: OpenCodeMessageContentType.TOOL,
+                        PartType.STEP_START: OpenCodeMessageContentType.STEP_START,
+                        PartType.STEP_FINISH: OpenCodeMessageContentType.STEP_FINISH,
+                    }
+
+                    content_type = content_type_map.get(part.type)
+                    if not content_type:
+                        logger.warning(f"[OpenCode] Unknown part type: {part.type}, skipping")
+                        return
+
+                    # 生成 text_content
+                    if isinstance(part, (TextPart, ReasoningPart)):
+                        text_content = part.text
+                    else:
+                        text_content = json.dumps(part.dict(), ensure_ascii=False)
+
+                    content_type_str = content_type.value
 
                     # 先检查是否已经存在相同的消息
-                    # 同时检查 session_id、message_index、content_type
                     existing_result = await db_session_local.execute(
                         select(OpenCodeMessageContent)
                         .where(OpenCodeMessageContent.session_id == db_session_id)
@@ -1268,27 +1299,24 @@ class OpenCodeSessionService:
 
                     if existing_message:
                         logger.info(
-                            f"[OpenCode] Message already exists (same session_id, index, content_type, and audit_task_id), skipping save"
-                        )
-                        logger.info(f"[OpenCode]   - Existing message ID: {existing_message.id}")
-                        logger.info(
-                            f"[OpenCode]   - Existing audit_task_id: {existing_message.audit_task_id}"
+                            f"[OpenCode] Message already exists (same session_id, index, content_type), skipping save"
                         )
                         return
 
-                    # 如果不存在，才保存新消息
+                    # 保存新消息
                     message_content = OpenCodeMessageContent(
                         session_id=db_session_id,
                         message_index=msg_index,
                         content_type=content_type_str,
-                        text_content=msg_content,
-                        opencode_message_id=message_id,
+                        text_content=text_content,
+                        opencode_message_id=opencode_message_id,
                         audit_task_id=audit_task_id,
                     )
                     db_session_local.add(message_content)
                     await db_session_local.commit()
-                    logger.info(f"[OpenCode] Message saved successfully!")
+                    logger.info(f"[OpenCode] Message saved successfully! Type: {content_type_str}")
                 except Exception as e:
+                    logger.error(f"[OpenCode] Failed to save part: {e}")
                     await db_session_local.rollback()
 
         for poll_count in range(max_polls):
@@ -1298,37 +1326,41 @@ class OpenCodeSessionService:
 
                     if response.status_code == 200:
                         data: list = response.json()
+
                         # 当处理完成的次数与总数相同10次时，认为处理ok
                         if record_index == len(data):
                             same_time += 1
                         if same_time == 10:
                             return True
 
-                        for item in data[record_index:]:
-                            info = item.get("info", {})
-                            if info.get("role") == "user":
+                        # 使用解析器解析消息
+                        messages = OpenCodeMessageParser.parse_message_array(data)
+
+                        for msg in messages[record_index:]:
+                            # 跳过用户消息
+                            if msg.info.role == "user":
                                 continue
 
-                            if info.get("finish") != None:
-                                part_sum = 0
-                                for part in item.get("parts", []):
-                                    part_sum += 1
-                                    if (part_type := part.get("type")) == "text":
-                                        await save_data_to_database(
-                                            record_index,
-                                            OpenCodeMessageContentType.RESPONSE,
-                                            part.get("text", ""),
-                                        )
-                                    elif part_type == "reasoning":
-                                        await save_data_to_database(
-                                            record_index,
-                                            OpenCodeMessageContentType.REASONING,
-                                            part.get("text", ""),
-                                        )
-                                if part_sum == 2:
-                                    return True
-                                # 索引往前推
+                            # 处理每个 part
+                            for part in msg.parts:
+                                await save_part_to_database(
+                                    msg_index=record_index,
+                                    part=part,
+                                    db_session_id=db_session_id,
+                                    audit_task_id=audit_task_id,
+                                    opencode_message_id=message_id,
+                                )
+
+                            # 检测完成标记
+                            if msg.info.finish is not None:
                                 record_index += 1
+
+                                # 检查是否有完成的响应
+                                has_text = any(isinstance(p, TextPart) for p in msg.parts)
+                                has_reasoning = any(isinstance(p, ReasoningPart) for p in msg.parts)
+                                if has_text and has_reasoning:
+                                    return True
+
                 await asyncio.sleep(poll_interval)
 
             except Exception as e:
