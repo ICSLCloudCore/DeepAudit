@@ -141,20 +141,39 @@ RUN if [ "$Huawei" = "true" ]; then \
 
 # 安装 Python 安全工具
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
-    requests \
-    httpx \
-    aiohttp \
-    beautifulsoup4 \
-    lxml \
-    pycryptodome \
-    paramiko \
-    pyjwt \
-    python-jose \
-    sqlparse \
-    semgrep \
-    bandit \
-    safety
+    if [ "$Huawei" = "true" ]; then \
+      echo "Using Huawei PyPI mirror..."; \
+      pip install --no-cache-dir -i http://mirrors.tools.huawei.com/pypi/simple \
+        requests \
+        httpx \
+        aiohttp \
+        beautifulsoup4 \
+        lxml \
+        pycryptodome \
+        paramiko \
+        pyjwt \
+        python-jose \
+        sqlparse \
+        semgrep \
+        bandit \
+        safety; \
+    else \
+      echo "Using Tsinghua PyPI mirror..."; \
+      pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+        requests \
+        httpx \
+        aiohttp \
+        beautifulsoup4 \
+        lxml \
+        pycryptodome \
+        paramiko \
+        pyjwt \
+        python-jose \
+        sqlparse \
+        semgrep \
+        bandit \
+        safety; \
+    fi
 
 # 安装 Gitleaks
 COPY bin/gitleaks_8.18.2_linux_x64.tar.gz /tmp/
