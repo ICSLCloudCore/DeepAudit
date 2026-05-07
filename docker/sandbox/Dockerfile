@@ -143,7 +143,7 @@ RUN if [ "$Huawei" = "true" ]; then \
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
     if [ "$Huawei" = "true" ]; then \
       echo "Using Huawei PyPI mirror..."; \
-      pip install --no-cache-dir -i http://mirrors.tools.huawei.com/pypi/simple \
+      pip install --no-cache-dir -i http://mirrors.tools.huawei.com/pypi/simple --trusted-host mirrors.tools.huawei.com \
         requests \
         httpx \
         aiohttp \
