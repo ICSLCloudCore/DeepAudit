@@ -562,16 +562,10 @@ export default function Dashboard() {
                   即时代码分析
                 </Button>
               </Link>
-              <Link to="/skill-marketplace" className="block">
+              <Link to="/opencode" className="block">
                 <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
-                  <GitBranch className="w-4 h-4 mr-2" />
-                  Skill
-                </Button>
-              </Link>
-              <Link to="/mcp-marketplace" className="block">
-                <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
-                  <Shield className="w-4 h-4 mr-2" />
-                  MCP
+                  <Terminal className="w-4 h-4 mr-2" />
+                  OpenCode 管理
                 </Button>
               </Link>
             </div>
