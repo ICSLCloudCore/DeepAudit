@@ -42,6 +42,15 @@ if [ $retry_count -eq $max_retries ]; then
     exit 1
 fi
 
+# 运行数据库迁移
+echo "🔄 运行数据库迁移 (alembic upgrade head)..."
+.venv/bin/alembic upgrade head
+echo "✅ 数据库迁移完成"
+
 # 启动 uvicorn
 echo "🌐 启动 API 服务..."
-exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+if [ "$1" = "--reload" ]; then
+    exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+else
+    exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+fi
