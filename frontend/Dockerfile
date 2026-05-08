@@ -39,9 +39,9 @@ RUN if [ "$Huawei" = "true" ]; then \
 COPY package.json pnpm-lock.yaml ./
 
 # 增加网络超时设置和并发数限制，防止 ARM 架构构建卡死
-RUN pnpm config set network-timeout 300000 && \
-    pnpm config set fetch-retries 5 && \
-    pnpm install --no-frozen-lockfile --network-concurrency 1
+ENV PNPM_NETWORK_TIMEOUT=300000
+ENV PNPM_FETCH_RETRIES=5
+RUN pnpm install --no-frozen-lockfile --network-concurrency 1
 
 # 复制源代码
 COPY . .
