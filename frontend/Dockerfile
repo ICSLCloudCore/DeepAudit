@@ -36,7 +36,7 @@ RUN if [ "$Huawei" = "true" ]; then \
     fi
 
 # 复制依赖文件
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # 增加网络超时设置和并发数限制，防止 ARM 架构构建卡死
 ENV PNPM_NETWORK_TIMEOUT=300000
