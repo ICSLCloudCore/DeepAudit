@@ -1262,6 +1262,7 @@ class OpenCodeSessionService:
             db_session_id: str,
             audit_task_id: Optional[str],
             opencode_message_id: Optional[str],
+            role: str = "assistant",
         ) -> None:
             """保存单个 Part 到数据库"""
             async with AsyncSessionLocal() as db_session_local:
@@ -1275,7 +1276,12 @@ class OpenCodeSessionService:
                         PartType.STEP_FINISH: OpenCodeMessageContentType.STEP_FINISH,
                     }
 
-                    content_type = content_type_map.get(part.type)
+                    # 用户消息特殊处理
+                    if role == "user" and part.type == PartType.TEXT:
+                        content_type = OpenCodeMessageContentType.USER_PROMPT
+                    else:
+                        content_type = content_type_map.get(part.type)
+
                     if not content_type:
                         logger.warning(f"[OpenCode] Unknown part type: {part.type}, skipping")
                         return
@@ -1337,10 +1343,6 @@ class OpenCodeSessionService:
                         messages = OpenCodeMessageParser.parse_message_array(data)
 
                         for msg in messages[record_index:]:
-                            # 跳过用户消息
-                            if msg.info.role == "user":
-                                continue
-
                             # 处理每个 part
                             for part in msg.parts:
                                 await save_part_to_database(
@@ -1349,6 +1351,7 @@ class OpenCodeSessionService:
                                     db_session_id=db_session_id,
                                     audit_task_id=audit_task_id,
                                     opencode_message_id=message_id,
+                                    role=msg.info.role,
                                 )
 
                             # 检测完成标记

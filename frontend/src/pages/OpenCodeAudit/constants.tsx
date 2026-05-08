@@ -57,6 +57,33 @@ export const LOG_TYPE_CONFIG: Record<string, {
     borderColor: "border-l-cyan-500",
     bgColor: "bg-cyan-500/10"
   },
+  tool: {
+    icon: React.createElement(Code, { className: "w-4 h-4 text-orange-600 dark:text-orange-400" }),
+    borderColor: "border-l-orange-500",
+    bgColor: "bg-orange-500/10"
+  },
+  step_start: {
+    icon: React.createElement(Activity, { className: "w-4 h-4 text-blue-600 dark:text-blue-400" }),
+    borderColor: "border-l-blue-500",
+    bgColor: "bg-blue-500/10"
+  },
+  step_finish: {
+    icon: React.createElement(CheckCircle2, { className: "w-4 h-4 text-purple-600 dark:text-purple-400" }),
+    borderColor: "border-l-purple-500",
+    bgColor: "bg-purple-500/10"
+  },
+};
+
+export const LOG_TYPE_LABELS: Record<string, string> = {
+  prompt: 'PROMPT',
+  response: 'RESP',
+  status: 'STATUS',
+  error: 'ERROR',
+  info: 'INFO',
+  progress: 'PROG',
+  tool: 'TOOL',
+  step_start: 'START',
+  step_finish: 'DONE',
 };
 
 // ============ Session Status Configurations ============

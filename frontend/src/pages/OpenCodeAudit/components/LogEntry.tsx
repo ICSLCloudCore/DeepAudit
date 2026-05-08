@@ -5,25 +5,38 @@
 import { memo, useState } from "react";
 import { ChevronDown, ChevronUp, Zap, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
-import { LOG_TYPE_CONFIG } from "../constants";
+import { LOG_TYPE_CONFIG, LOG_TYPE_LABELS } from "../constants";
 import type { LogEntryProps } from "../types";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-const LOG_TYPE_LABELS: Record<string, string> = {
-  prompt: 'PROMPT',
-  response: 'RESP',
-  status: 'STATUS',
-  error: 'ERROR',
-  info: 'INFO',
-  progress: 'PROG',
-};
 
 export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: LogEntryProps) {
   const config = LOG_TYPE_CONFIG[item.type] || LOG_TYPE_CONFIG.info;
   const isCollapsible = item.content && item.type !== 'prompt';
   const showContent = isExpanded || item.type === 'prompt';
   const [copied, setCopied] = useState(false);
+
+  // 对于TOOL类型，解析内容显示 tool + " " + state.title
+  const displayContent = (() => {
+    if (item.type === 'tool') {
+      try {
+        const data = JSON.parse(item.content || '{}');
+        const toolName = data.tool || '';
+        const title = data.state?.title || '';
+        if (toolName && title) {
+          return `${toolName} ${title}`;
+        } else if (toolName) {
+          return toolName;
+        } else if (title) {
+          return title;
+        }
+        return item.content;
+      } catch {
+        return item.content;
+      }
+    }
+    return item.content;
+  })();
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -58,11 +71,14 @@ export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: L
             <span className={`
               text-xs font-mono font-bold uppercase tracking-wider px-2 py-1 rounded-md border
               ${item.type === 'prompt' ? 'bg-violet-500/20 text-violet-600 dark:text-violet-300 border-violet-500/30' : ''}
-              ${item.type === 'response' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/30' : ''}
+              ${item.type === 'response' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' : ''}
               ${item.type === 'status' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/30' : ''}
               ${item.type === 'error' ? 'bg-red-500/20 text-red-600 dark:text-red-300 border-red-500/30' : ''}
               ${item.type === 'info' ? 'bg-muted/80 text-foreground border-border/50' : ''}
-              ${item.type === 'progress' ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 border-cyan-500/30' : ''}
+              ${item.type === 'progress' ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/30' : ''}
+              ${item.type === 'tool' ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/30' : ''}
+              ${item.type === 'step_start' ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30' : ''}
+              ${item.type === 'step_finish' ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30' : ''}
               flex-shrink-0
             `}>
               {LOG_TYPE_LABELS[item.type] || 'LOG'}
@@ -119,7 +135,11 @@ export const LogEntry = memo(function LogEntry({ item, isExpanded, onToggle }: L
                   </button>
                 </div>
                 <pre className="p-4 text-sm font-mono text-foreground/85 max-h-64 overflow-y-auto custom-scrollbar whitespace-pre-wrap break-words">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+                  {item.type === 'tool' ? (
+                    displayContent
+                  ) : (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+                  )}
                 </pre>
               </div>
             </div>

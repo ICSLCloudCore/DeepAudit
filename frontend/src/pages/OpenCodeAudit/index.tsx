@@ -141,11 +141,16 @@ function OpenCodeAuditPageContent() {
 
       eventSource.addEventListener('message', (event) => {
         const { content_type, text_content, time } = JSON.parse(event.data);
+        const logType = 
+          content_type === 'response' ? 'response' : 
+          content_type === 'reasoning' ? 'progress' :
+          content_type === 'user_prompt' ? 'prompt' :
+          content_type === 'tool' ? 'tool' :
+          content_type === 'step_start' ? 'step_start' :
+          content_type === 'step_finish' ? 'step_finish' : 'info';
         addLog({
-          type: content_type === 'response' ? 'response' : 
-                content_type === 'reasoning' ? 'progress' :
-                content_type === 'user_prompt' ? 'prompt' : 'info',
-          title: content_type === 'user_prompt' ? '用户发送的 Prompt' : "",
+          type: logType,
+          title: '',
           content: text_content,
           isStreaming: false,
           time,
@@ -411,7 +416,13 @@ function OpenCodeAuditPageContent() {
               </div>
             ) : (
               <div className="space-y-3">
-                {logs.filter(item => showProgressLogs || item.type !== 'progress').map(item => (
+                {logs.filter(item => {
+                  const showByDefault = 
+                    item.type === 'prompt' || 
+                    item.type === 'tool' || 
+                    item.type === 'response';
+                  return showProgressLogs || showByDefault;
+                }).map(item => (
                   <LogEntry
                     key={item.id}
                     item={item}

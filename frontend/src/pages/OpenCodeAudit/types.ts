@@ -14,7 +14,10 @@ export type LogType =
   | 'status'
   | 'error'
   | 'info'
-  | 'progress';
+  | 'progress'
+  | 'tool'
+  | 'step_start'
+  | 'step_finish';
 
 export interface LogItem {
   id: string;
