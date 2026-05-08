@@ -1921,43 +1921,109 @@ class OpenCodeSessionService:
 
         return result_stats
 
+    def _is_valid_opencode_process(self, pid: int) -> bool:
+        """
+        验证PID是否是有效的OpenCode进程
+        """
+        try:
+            if pid <= 1:
+                logger.warning(f"[OpenCode] PID {pid} is a special PID, skipping")
+                return False
+
+            proc_path = Path(f"/proc/{pid}")
+            if not proc_path.exists():
+                logger.info(f"[OpenCode] PID {pid} does not exist in /proc")
+                return False
+
+            cmdline_path = proc_path / "cmdline"
+            if cmdline_path.exists():
+                try:
+                    with open(cmdline_path, "r") as f:
+                        cmdline = f.read()
+                    if "opencode" in cmdline.lower():
+                        logger.info(f"[OpenCode] PID {pid} verified as opencode process")
+                        return True
+                except Exception as e:
+                    logger.warning(f"[OpenCode] Error reading cmdline for PID {pid}: {e}")
+
+            comm_path = proc_path / "comm"
+            if comm_path.exists():
+                try:
+                    with open(comm_path, "r") as f:
+                        comm = f.read().strip()
+                    if "opencode" in comm.lower():
+                        logger.info(f"[OpenCode] PID {pid} verified as opencode process via comm")
+                        return True
+                except Exception as e:
+                    logger.warning(f"[OpenCode] Error reading comm for PID {pid}: {e}")
+
+            logger.warning(f"[OpenCode] PID {pid} is not a valid opencode process")
+            return False
+        except Exception as e:
+            logger.warning(f"[OpenCode] Error validating PID {pid}: {e}")
+            return False
+
     async def stop_opencode_server(self, project: Project) -> bool:
         """
-        停止OpenCode服务器
+        停止OpenCode服务器 - 安全版本
         """
         logger.info(f"[OpenCode] Stopping OpenCode server for project {project.id}")
 
         if not project.opencode_pid:
             logger.info(f"[OpenCode] No PID found, server is already stopped")
-            return True
-
-        try:
-            import os
-            import signal
-
-            pid_int = int(project.opencode_pid)
-            logger.info(f"[OpenCode] Attempting to stop PID {pid_int}")
-
-            # 尝试优雅停止
+        else:
             try:
-                os.kill(pid_int, signal.SIGTERM)
-                logger.info(f"[OpenCode] Sent SIGTERM to PID {pid_int}")
+                import os
+                import signal
 
-                # 等待一段时间检查是否停止
-                await asyncio.sleep(1)
+                pid_int = int(project.opencode_pid)
+                logger.info(f"[OpenCode] Attempting to stop PID {pid_int}")
 
-                # 检查是否还在运行
-                try:
-                    os.kill(pid_int, 0)
-                    # 还在运行，强制杀死
-                    logger.info(f"[OpenCode] PID {pid_int} still running, sending SIGKILL")
-                    os.kill(pid_int, signal.SIGKILL)
-                except OSError:
-                    logger.info(f"[OpenCode] PID {pid_int} successfully stopped")
-            except OSError as e:
-                logger.info(f"[OpenCode] PID {pid_int} already stopped: {e}")
+                if self._is_valid_opencode_process(pid_int):
+                    try:
+                        pgid = None
+                        try:
+                            pgid = os.getpgid(pid_int)
+                            logger.info(f"[OpenCode] Killing process group {pgid}")
+                            os.killpg(pgid, signal.SIGTERM)
+                        except (OSError, ProcessLookupError):
+                            logger.info(
+                                f"[OpenCode] Process group not available, killing PID {pid_int} directly"
+                            )
+                            os.kill(pid_int, signal.SIGTERM)
 
-            # 重置项目字段
+                        logger.info(f"[OpenCode] Sent SIGTERM to opencode process")
+                        await asyncio.sleep(1.5)
+
+                        try:
+                            os.kill(pid_int, 0)
+                            logger.info(f"[OpenCode] Process still running, sending SIGKILL")
+                            try:
+                                if pgid is not None:
+                                    os.killpg(pgid, signal.SIGKILL)
+                                else:
+                                    os.kill(pid_int, signal.SIGKILL)
+                            except Exception:
+                                logger.info(
+                                    f"[OpenCode] Error sending SIGKILL, but will continue with cleanup"
+                                )
+                        except OSError:
+                            logger.info(f"[OpenCode] Process successfully stopped")
+                    except OSError as e:
+                        logger.info(f"[OpenCode] Process already stopped or error stopping: {e}")
+                else:
+                    logger.warning(
+                        f"[OpenCode] PID {pid_int} is not a valid opencode process, skipping kill but will cleanup"
+                    )
+
+            except ValueError as e:
+                logger.info(f"[OpenCode] Invalid PID format: {e}")
+            except Exception as e:
+                logger.info(f"[OpenCode] Error during process kill: {e}")
+                logger.info(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+
+        logger.info(f"[OpenCode] Starting cleanup (always runs)")
+        try:
             project.opencode_pid = None
             project.opencode_port = None
             project.opencode_log_path = None
@@ -1965,9 +2031,7 @@ class OpenCodeSessionService:
             project.opencode_current_session_id = None
             project.updated_at = datetime.now(timezone.utc)
 
-            # 清理活跃会话相关
             if project.opencode_active_session_id:
-                # 1. 清理 tmp 目录
                 session_id = project.opencode_active_session_id
                 session_dir = (
                     Path(f"/tmp/{session_id}")
@@ -1975,36 +2039,36 @@ class OpenCodeSessionService:
                     else Path(f"C:/temp/{session_id}")
                 )
                 if session_dir.exists():
-                    import shutil
+                    try:
+                        import shutil
 
-                    shutil.rmtree(session_dir)
-                    logger.info(f"[OpenCode] Cleaned up session directory: {session_dir}")
+                        shutil.rmtree(session_dir)
+                        logger.info(f"[OpenCode] Cleaned up session directory: {session_dir}")
+                    except Exception as e:
+                        logger.warning(f"[OpenCode] Error cleaning session directory: {e}")
 
-                # 2. 更新 OpenCodeSession 状态为 CLOSED
                 from app.models.opencode.opencode_session import (
                     OpenCodeSession,
                     OpenCodeSessionStatus,
                 )
 
-                result = await self.db.execute(
-                    select(OpenCodeSession).where(OpenCodeSession.id == session_id)
-                )
-                session = result.scalar_one_or_none()
-                if session:
-                    session.status = OpenCodeSessionStatus.CLOSED
-                    session.completed_at = datetime.now(timezone.utc)
+                try:
+                    result = await self.db.execute(
+                        select(OpenCodeSession).where(OpenCodeSession.id == session_id)
+                    )
+                    session = result.scalar_one_or_none()
+                    if session:
+                        session.status = OpenCodeSessionStatus.CLOSED
+                        session.completed_at = datetime.now(timezone.utc)
+                except Exception as e:
+                    logger.warning(f"[OpenCode] Error updating session status: {e}")
 
-                # 3. 清除 project 的活跃会话引用
                 project.opencode_active_session_id = None
 
             await self.db.commit()
-            logger.info(f"[OpenCode] Server stopped and project fields reset")
+            logger.info(f"[OpenCode] Cleanup completed successfully")
             return True
-
-        except ValueError as e:
-            logger.info(f"[OpenCode] Invalid PID format: {e}")
-            return False
         except Exception as e:
-            logger.info(f"[OpenCode] Error stopping server: {e}")
-            logger.info(f"[OpenCode] Error traceback: {traceback.format_exc()}")
+            logger.error(f"[OpenCode] Error during cleanup: {e}")
+            logger.error(f"[OpenCode] Error traceback: {traceback.format_exc()}")
             return False
