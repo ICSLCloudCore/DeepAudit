@@ -393,13 +393,12 @@ async def session_stream(
                             "data": json.dumps(msg),
                         }
                         try:
-                            await asyncio.sleep(0.5)
+                            await asyncio.sleep(0.1)
                         except asyncio.CancelledError:
-                            logger.error(
-                                f"[SSE] Client disconnected during message send for session {session_id}"
+                            logger.warning(
+                                f"[SSE] Client disconnected during message send for session {session_id}, will try to continue"
                             )
-                            should_continue = False
-                            break
+                            # 不要立即停止，继续发送剩余的消息
 
                     if not should_continue:
                         break

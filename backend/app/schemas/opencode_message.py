@@ -67,8 +67,8 @@ class ReasoningPart(BasePart):
 class ToolState(BaseModel):
     status: str
     input: Dict[str, Any]
-    output: Any
-    title: str
+    output: Optional[Any] = None
+    title: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     time: Optional[TimeInfo] = None
 
