@@ -1256,6 +1256,22 @@ class OpenCodeSessionService:
         url = self.get_opencode_server_url(project)
         message_url = f"{url}/session/{server_session_id}/message"
 
+        def is_part_completed(part: Part) -> bool:
+            """判断part是否已完成"""
+            # TextPart 和 ReasoningPart: 检查 time.end
+            if isinstance(part, (TextPart, ReasoningPart)):
+                return part.time is not None and part.time.end is not None
+
+            # ToolPart: 检查 state.time.end 或 state.status == "completed"
+            elif isinstance(part, ToolPart):
+                time_complete = part.state.time is not None and part.state.time.end is not None
+                status_complete = part.state.status == "completed"
+                return time_complete or status_complete
+
+            # StepStartPart 和 StepFinishPart: 总是认为已完成
+            else:
+                return True
+
         async def save_part_to_database(
             msg_index: int,
             part: Part,
@@ -1345,6 +1361,13 @@ class OpenCodeSessionService:
                         for msg in messages[record_index:]:
                             # 处理每个 part
                             for part in msg.parts:
+                                # 只在完成时写入
+                                if not is_part_completed(part):
+                                    logger.debug(
+                                        f"[OpenCode] Part not completed yet, skipping: type={part.type}, id={part.id}"
+                                    )
+                                    continue
+
                                 await save_part_to_database(
                                     msg_index=record_index,
                                     part=part,
