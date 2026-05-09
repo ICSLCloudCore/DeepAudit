@@ -57,6 +57,8 @@ export interface OpenCodeAuditState {
   expandedLogIds: Set<string>;
   expandedParts: Set<string>; // 新增：展开的 Part ID 集合
   showProgressLogs: boolean; // 新增：是否显示进度日志
+  tokens?: number; // 新增：总 token 数
+  cost?: number; // 新增：总成本
 }
 
 // ============ Action Types ============
@@ -79,6 +81,7 @@ export type OpenCodeAuditAction =
   | { type: 'ADD_PART'; payload: { messageId: string; part: Part } }
   | { type: 'TOGGLE_PART_EXPANDED'; payload: string }
   | { type: 'TOGGLE_SHOW_PROGRESS_LOGS' }
+  | { type: 'SET_STATS'; payload: { tokens?: number; cost?: number } } // 新增：设置统计数据
   | { type: 'RESET' };
 
 // ============ Component Props ============
@@ -91,6 +94,8 @@ export interface LogEntryProps {
 
 export interface StatsPanelProps {
   session: OpenCodeSession | null;
+  tokens?: number;
+  cost?: number;
 }
 
 import type { OpenCodeAuditTask } from "@/shared/api/opencodeAuditTasks";

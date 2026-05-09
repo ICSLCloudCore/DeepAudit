@@ -2,11 +2,11 @@
  * OpenCode Audit Stats Panel Component
  */
 
-import { Server, Clock, FileText, Activity } from "lucide-react";
+import { Server, Clock, FileText, Activity, Zap, Coins } from "lucide-react";
 import type { StatsPanelProps } from "../types";
 import { SESSION_STATUS_CONFIG, SERVER_STATUS_CONFIG } from "../constants";
 
-export function StatsPanel({ session }: StatsPanelProps) {
+export function StatsPanel({ session, tokens, cost }: StatsPanelProps) {
   if (!session) {
     return (
       <div className="p-4 space-y-4">
@@ -79,6 +79,32 @@ export function StatsPanel({ session }: StatsPanelProps) {
             {durationMinutes}:{remainingSeconds.toString().padStart(2, '0')}
           </span>
         </div>
+
+        {/* Tokens 统计 */}
+        {tokens !== undefined && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" />
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Tokens</span>
+            </div>
+            <span className="text-sm font-mono text-foreground">
+              {tokens.toLocaleString()} tokens
+            </span>
+          </div>
+        )}
+
+        {/* Cost 统计 */}
+        {cost !== undefined && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Coins className="w-4 h-4 text-primary" />
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Cost</span>
+            </div>
+            <span className="text-sm font-mono text-foreground">
+              ${cost.toFixed(4)}
+            </span>
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

@@ -28,10 +28,10 @@ export const PartRenderer: React.FC<PartRendererProps> = ({ part }) => {
     return <ToolPartComponent part={part} />;
   }
   if (isStepStartPart(part)) {
-    return <StepStartPartComponent part={part} />;
+    return null; // 隐藏 step-start
   }
   if (isStepFinishPart(part)) {
-    return <StepFinishPartComponent part={part} />;
+    return null; // 隐藏 step-finish
   }
   return <div>Unknown part type</div>;
 };

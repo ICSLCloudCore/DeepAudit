@@ -29,9 +29,9 @@ function OpenCodeAuditPageContent() {
   const navigate = useNavigate();
   
   const {
-    session, logs, messages, isLoading,
+    session, logs, messages, isLoading, tokens, cost,
     isAutoScroll, expandedLogIds, isRunning, isComplete, showProgressLogs,
-    setSession, addLog,
+    setSession, addLog, setStats,
     setLoading, setError, setAutoScroll, toggleLogExpanded, toggleShowProgressLogs,
     reset,
   } = useOpenCodeAuditState();
@@ -141,6 +141,22 @@ function OpenCodeAuditPageContent() {
 
       eventSource.addEventListener('message', (event) => {
         const { content_type, text_content, time } = JSON.parse(event.data);
+        
+        // 如果是 step_finish，提取 tokens 和 cost 数据
+        if (content_type === 'step_finish' && text_content) {
+          try {
+            const finishData = JSON.parse(text_content);
+            if (finishData.tokens || finishData.cost !== undefined) {
+              setStats({
+                tokens: finishData.tokens?.total,
+                cost: finishData.cost
+              });
+            }
+          } catch (e) {
+            console.error('Failed to parse step_finish data:', e);
+          }
+        }
+        
         const logType = 
           content_type === 'response' ? 'response' : 
           content_type === 'reasoning' ? 'progress' :
@@ -458,7 +474,7 @@ function OpenCodeAuditPageContent() {
 
         <div className="w-1/4 flex flex-col bg-background relative">
           <div className="flex-shrink-0 p-4 bg-card border-b border-border">
-            <StatsPanel session={session} />
+            <StatsPanel session={session} tokens={tokens} cost={cost} />
           </div>
 
           {/* 查看问题和导出按钮 - 始终显示 */}

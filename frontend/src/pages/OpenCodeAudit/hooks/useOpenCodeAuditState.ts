@@ -28,6 +28,8 @@ const initialState: OpenCodeAuditState = {
   expandedLogIds: new Set(),
   expandedParts: new Set(), // 新增：空的展开 part 集合
   showProgressLogs: false, // 新增：是否显示思考过程
+  tokens: undefined, // 新增：token 统计
+  cost: undefined, // 新增：cost 统计
 };
 
 // ============ Reducer ============
@@ -138,6 +140,13 @@ function openCodeAuditReducer(
     case 'TOGGLE_SHOW_PROGRESS_LOGS':
       return { ...state, showProgressLogs: !state.showProgressLogs };
 
+    case 'SET_STATS': // 新增：设置统计数据
+      return { 
+        ...state, 
+        tokens: action.payload.tokens,
+        cost: action.payload.cost
+      };
+
     case 'RESET':
       return { ...initialState };
 
@@ -220,6 +229,10 @@ export function useOpenCodeAuditState() {
     dispatch({ type: 'TOGGLE_SHOW_PROGRESS_LOGS' });
   }, []);
 
+  const setStats = useCallback((stats: { tokens?: number; cost?: number }) => {
+    dispatch({ type: 'SET_STATS', payload: stats });
+  }, []);
+
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' });
   }, []);
@@ -258,6 +271,7 @@ export function useOpenCodeAuditState() {
     addPart,
     togglePartExpanded,
     toggleShowProgressLogs,
+    setStats, // 新增：设置统计数据
     reset,
 
     // Direct dispatch for complex operations
