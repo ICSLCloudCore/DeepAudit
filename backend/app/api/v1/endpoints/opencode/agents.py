@@ -42,6 +42,7 @@ async def upload_agent_package(
     version: str = Form("1.0.0"),
     description: Optional[str] = Form(None),
     is_public: bool = Form(False),
+    category: str = Form("OTHER"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -183,6 +184,7 @@ async def upload_agent_package(
                 agents_count=len(package_agents),
                 skills_count=len(package_skills),
                 is_public=is_public,
+                category=category,
                 created_by=current_user.id if hasattr(current_user, "id") else None,
             )
 
@@ -243,6 +245,7 @@ async def upload_agent_package(
 async def list_agent_packages(
     search: Optional[str] = Query(None, description="搜索Agent包名称或描述"),
     is_public: Optional[bool] = Query(None, description="过滤公开或私有"),
+    category: Optional[str] = Query(None, description="分类过滤"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -258,6 +261,9 @@ async def list_agent_packages(
     else:
         # 默认只显示自己的和公开的
         filters.append(or_(Agent.is_public == True, Agent.created_by == current_user.id))
+
+    if category:
+        filters.append(Agent.category == category)
 
     if search:
         filters.append(

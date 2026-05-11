@@ -130,6 +130,9 @@ export default function OpenCodeResourceManager() {
   });
   const [showAgentPackageUploadDialog, setShowAgentPackageUploadDialog] = useState(false);
   const [agentPackageUploading, setAgentPackageUploading] = useState(false);
+  const [agentPackageUploadForm, setAgentPackageUploadForm] = useState({
+    category: "OTHER" as string,
+  });
   const [showAgentPackageDeleteDialog, setShowAgentPackageDeleteDialog] = useState(false);
   const [agentPackageToDelete, setAgentPackageToDelete] = useState<AgentPackage | null>(null);
   const [agentPackageDeleting, setAgentPackageDeleting] = useState(false);
@@ -751,9 +754,14 @@ export default function OpenCodeResourceManager() {
       setAgentPackageUploading(true);
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("category", agentPackageUploadForm.category);
       await opencodeApi.uploadAgentPackage(formData);
       toast.success("Agent 包上传成功！");
       setShowAgentPackageUploadDialog(false);
+      // 重置表单
+      setAgentPackageUploadForm({
+        category: "OTHER"
+      });
       loadAgentPackages();
     } catch (error: any) {
       console.error("Failed to upload agent package:", error);
@@ -2822,43 +2830,61 @@ export default function OpenCodeResourceManager() {
              </DialogTitle>
            </DialogHeader>
 
-           <div className="p-6 space-y-4">
-             <div className="space-y-4">
-               <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">Agent 包文件 *</Label>
+            <div className="p-6 space-y-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">分类</Label>
+                  <Select
+                    value={agentPackageUploadForm.category}
+                    onValueChange={(val) => setAgentPackageUploadForm({ ...agentPackageUploadForm, category: val })}
+                  >
+                    <SelectTrigger className="cyber-input">
+                      <SelectValue placeholder="选择分类" />
+                    </SelectTrigger>
+                    <SelectContent className="cyber-dialog border-border">
+                      <SelectItem value="ANALYZE">威胁分析</SelectItem>
+                      <SelectItem value="WHITE">白盒分析</SelectItem>
+                      <SelectItem value="BLACK">黑盒分析</SelectItem>
+                      <SelectItem value="OTHER">其他</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-               <div
-                 className="border border-dashed border-border bg-muted/50 rounded p-6 text-center hover:bg-muted hover:border-border transition-colors cursor-pointer group"
-                 onClick={() => agentPackageFileInputRef.current?.click()}
-               >
-                 <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3 group-hover:text-primary transition-colors" />
-                 <h3 className="text-base font-bold text-foreground uppercase mb-1">上传 Agent 包</h3>
-                 <p className="text-xs font-mono text-muted-foreground mb-3">选择 .zip Agent 包文件</p>
-                 <input
-                   ref={agentPackageFileInputRef}
-                   type="file"
-                   accept=".zip"
-                   onChange={(e) => {
-                     const file = e.target.files?.[0];
-                     if (file) handleAgentPackageUpload(file);
-                   }}
-                   className="hidden"
-                   disabled={agentPackageUploading}
-                   required
-                 />
-                 <Button
-                   type="button"
-                   variant="outline"
-                   className="cyber-btn-outline h-8 text-xs"
-                   disabled={agentPackageUploading}
-                   onClick={(e) => {
-                     e.stopPropagation();
-                     agentPackageFileInputRef.current?.click();
-                   }}
-                 >
-                   <FileText className="w-3 h-3 mr-2" />
-                   选择文件
-                 </Button>
-               </div>
+                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">Agent 包文件 *</Label>
+
+                <div
+                  className="border border-dashed border-border bg-muted/50 rounded p-6 text-center hover:bg-muted hover:border-border transition-colors cursor-pointer group"
+                  onClick={() => agentPackageFileInputRef.current?.click()}
+                >
+                  <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3 group-hover:text-primary transition-colors" />
+                  <h3 className="text-base font-bold text-foreground uppercase mb-1">上传 Agent 包</h3>
+                  <p className="text-xs font-mono text-muted-foreground mb-3">选择 .zip Agent 包文件</p>
+                  <input
+                    ref={agentPackageFileInputRef}
+                    type="file"
+                    accept=".zip"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleAgentPackageUpload(file);
+                    }}
+                    className="hidden"
+                    disabled={agentPackageUploading}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="cyber-btn-outline h-8 text-xs"
+                    disabled={agentPackageUploading}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      agentPackageFileInputRef.current?.click();
+                    }}
+                  >
+                    <FileText className="w-3 h-3 mr-2" />
+                    选择文件
+                  </Button>
+                </div>
 
                <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded">
                  <div className="flex items-start space-x-3">

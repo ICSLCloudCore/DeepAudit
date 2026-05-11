@@ -485,6 +485,7 @@ export const opencodeApi = {
   listAgentPackages: async (params?: {
     search?: string;
     is_public?: boolean;
+    category?: string;
     page?: number;
     page_size?: number;
   }) => {
