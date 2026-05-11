@@ -878,12 +878,12 @@ async def get_project_branches(
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[Branch] 获取分支列表失败: {error_msg}")
-         # 返回默认分支作为后备
-         return {
-             "branches": [project.default_branch or "main"],
-             "default_branch": project.default_branch or "main",
-             "error": str(e),
-         }
+        # 返回默认分支作为后备
+        return {
+            "branches": [project.default_branch or "main"],
+            "default_branch": project.default_branch or "main",
+            "error": str(e),
+        }
 
 
 @router.get("/{id}/agents")
