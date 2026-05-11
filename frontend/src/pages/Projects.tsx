@@ -56,6 +56,16 @@ const getProjectTypeLabel = (projectType?: string): string => {
   return typeMap[projectType || 'WHITE'] || '白盒分析';
 };
 
+// 获取项目类型Badge样式
+const getProjectTypeBadgeClass = (projectType?: string): string => {
+  const classMap: Record<string, string> = {
+    'ANALYZE': 'cyber-badge-danger',
+    'WHITE': 'cyber-badge-success',
+    'BLACK': 'cyber-badge-warning',
+  };
+  return 'cyber-badge ' + (classMap[projectType || 'WHITE'] || 'cyber-badge-success');
+};
+
 // 技术栈选项映射
 const TECH_STACK_OPTIONS: Record<string, string[]> = {
   ANALYZE: ['PS', 'CS&IMS', 'HV', 'PLT'],
@@ -943,7 +953,7 @@ export default function Projects() {
                     </Link>
                   </h3>
                 </div>
-            <Badge className="cyber-badge">
+            <Badge className={getProjectTypeBadgeClass(project.project_type)}>
               {getProjectTypeLabel(project.project_type)}
             </Badge>
               </div>
