@@ -41,16 +41,26 @@ import {
 
 // 项目类型选项
 const PROJECT_TYPE_OPTIONS = [
-  { value: "ANALYZE", label: "威胁分析", icon: Zap },
-  { value: "WHITE", label: "白盒分析", icon: Code },
-  { value: "BLACK", label: "黑盒分析", icon: Lock },
+  { value: 'ANALYZE', label: '威胁分析', icon: Zap },
+  { value: 'WHITE', label: '白盒分析', icon: Code },
+  { value: 'BLACK', label: '黑盒分析', icon: Lock },
 ];
+
+// 获取项目类型的中文标签
+const getProjectTypeLabel = (projectType?: string): string => {
+  const typeMap: Record<string, string> = {
+    'ANALYZE': '威胁分析',
+    'WHITE': '白盒分析',
+    'BLACK': '黑盒分析'
+  };
+  return typeMap[projectType || 'WHITE'] || '白盒分析';
+};
 
 // 技术栈选项映射
 const TECH_STACK_OPTIONS: Record<string, string[]> = {
-  ANALYZE: ["PS", "CS&IMS", "融合视频", "电信云平台"],
-  WHITE: ["c", "go", "通用"],
-  BLACK: ["裸机", "docker", "kubelte", "CSP", "CGP"],
+  ANALYZE: ['PS', 'CS&IMS', 'HV', 'PLT'],
+  WHITE: ['c', 'go', 'normal'],
+  BLACK: ['linux', 'docker', 'kubeletes', 'CSP', 'CGP'],
 };
 import { api } from "@/shared/config/database";
 import { validateZipFile } from "@/features/projects/services";
@@ -933,14 +943,9 @@ export default function Projects() {
                     </Link>
                   </h3>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Badge className={`cyber-badge ${project.is_active ? 'cyber-badge-success' : 'cyber-badge-muted'}`}>
-                    {project.is_active ? '活跃' : '暂停'}
-                  </Badge>
-                  <Badge className={`cyber-badge ${isRepositoryProject(project) ? 'cyber-badge-info' : 'cyber-badge-warning'}`}>
-                    {getSourceTypeBadge(project.source_type)}
-                  </Badge>
-                </div>
+            <Badge className="cyber-badge">
+              {getProjectTypeLabel(project.project_type)}
+            </Badge>
               </div>
 
               {/* Card Body */}
