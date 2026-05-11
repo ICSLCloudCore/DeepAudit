@@ -34,8 +34,24 @@ import {
   Github,
   Folder,
   ArrowUpRight,
-  Key
+  Key,
+  Zap,
+  Lock
 } from "lucide-react";
+
+// 项目类型选项
+const PROJECT_TYPE_OPTIONS = [
+  { value: "ANALYZE", label: "威胁分析", icon: Zap },
+  { value: "WHITE", label: "白盒分析", icon: Code },
+  { value: "BLACK", label: "黑盒分析", icon: Lock },
+];
+
+// 技术栈选项映射
+const TECH_STACK_OPTIONS: Record<string, string[]> = {
+  ANALYZE: ["PS", "CS&IMS", "融合视频", "电信云平台"],
+  WHITE: ["c", "go", "通用"],
+  BLACK: ["裸机", "docker", "kubelte", "CSP", "CGP"],
+};
 import { api } from "@/shared/config/database";
 import { validateZipFile } from "@/features/projects/services";
 import type { Project, CreateProjectForm } from "@/shared/types";
@@ -67,6 +83,7 @@ export default function Projects() {
     name: "",
     description: "",
     source_type: "repository",
+    project_type: "WHITE",
     repository_url: "",
     repository_type: "github",
     default_branch: "main",
@@ -76,6 +93,7 @@ export default function Projects() {
     name: "",
     description: "",
     source_type: "repository",
+    project_type: "WHITE",
     repository_url: "",
     repository_type: "github",
     default_branch: "main",
@@ -173,6 +191,7 @@ export default function Projects() {
       name: "",
       description: "",
       source_type: "repository",
+      project_type: "WHITE",
       repository_url: "",
       repository_type: "github",
       default_branch: "main",
@@ -294,17 +313,18 @@ export default function Projects() {
     setShowCreateTaskDialog(true);
   };
 
-  const handleEditClick = async (project: Project) => {
-    setProjectToEdit(project);
-    setEditForm({
-      name: project.name,
-      description: project.description || "",
-      source_type: project.source_type || "repository",
-      repository_url: project.repository_url || "",
-      repository_type: project.repository_type || "github",
-      default_branch: project.default_branch || "main",
-      programming_languages: project.programming_languages ? JSON.parse(project.programming_languages) : []
-    });
+   const handleEditClick = async (project: Project) => {
+     setProjectToEdit(project);
+     setEditForm({
+       name: project.name,
+       description: project.description || "",
+       source_type: project.source_type || "repository",
+       project_type: (project as any).project_type || "WHITE",
+       repository_url: project.repository_url || "",
+       repository_type: project.repository_type || "github",
+       default_branch: project.default_branch || "main",
+       programming_languages: project.programming_languages ? JSON.parse(project.programming_languages) : []
+     });
     setEditZipFile(null);
     setEditZipInfo(null);
     setShowEditDialog(true);
@@ -513,6 +533,36 @@ export default function Projects() {
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">项目类型</Label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {PROJECT_TYPE_OPTIONS.map((option) => {
+                      const Icon = option.icon;
+                      const isSelected = createForm.project_type === option.value;
+                      return (
+                        <div
+                          key={option.value}
+                          onClick={() => {
+                            setCreateForm({
+                              ...createForm,
+                              project_type: option.value,
+                              programming_languages: []
+                            });
+                          }}
+                          className={`p-4 border rounded-lg cursor-pointer transition-all flex flex-col items-center justify-center space-y-2 ${
+                            isSelected
+                              ? 'border-primary bg-primary/10'
+                              : 'border-border hover:border-border'
+                          }`}
+                        >
+                          <Icon className="w-6 h-6 text-primary" />
+                          <span className="text-sm font-bold text-foreground">{option.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <Label htmlFor="repository_url" className="font-mono font-bold uppercase text-xs text-muted-foreground">仓库地址</Label>
@@ -547,40 +597,40 @@ export default function Projects() {
                       placeholder="main"
                       className="cyber-input"
                     />
-                  </div>
-                </div>
+                   </div>
+                 </div>
 
-                <div className="space-y-2">
-                  <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">技术栈</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {supportedLanguages.map((lang) => (
-                      <label key={lang} className={`flex items-center space-x-2 px-3 py-1.5 border cursor-pointer transition-all rounded ${createForm.programming_languages.includes(lang)
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border hover:border-border text-muted-foreground'
-                        }`}>
-                        <input
-                          type="checkbox"
-                          checked={createForm.programming_languages.includes(lang)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCreateForm({
-                                ...createForm,
-                                programming_languages: [...createForm.programming_languages, lang]
-                              });
-                            } else {
-                              setCreateForm({
-                                ...createForm,
-                                programming_languages: createForm.programming_languages.filter(l => l !== lang)
-                              });
-                            }
-                          }}
-                          className="rounded border border-border w-3.5 h-3.5 text-primary focus:ring-0 bg-transparent"
-                        />
-                        <span className="text-xs font-mono font-bold uppercase">{lang}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                 <div className="space-y-2">
+                   <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">技术栈</Label>
+                   <div className="flex flex-wrap gap-2">
+                     {(TECH_STACK_OPTIONS[createForm.project_type || 'WHITE'] || []).map((lang) => (
+                       <label key={lang} className={`flex items-center space-x-2 px-3 py-1.5 border cursor-pointer transition-all rounded ${createForm.programming_languages.includes(lang)
+                         ? 'border-primary bg-primary/10 text-primary'
+                         : 'border-border hover:border-border text-muted-foreground'
+                         }`}>
+                         <input
+                           type="checkbox"
+                           checked={createForm.programming_languages.includes(lang)}
+                           onChange={(e) => {
+                             if (e.target.checked) {
+                               setCreateForm({
+                                 ...createForm,
+                                 programming_languages: [...createForm.programming_languages, lang]
+                               });
+                             } else {
+                               setCreateForm({
+                                 ...createForm,
+                                 programming_languages: createForm.programming_languages.filter(l => l !== lang)
+                               });
+                             }
+                           }}
+                           className="rounded border border-border w-3.5 h-3.5 text-primary focus:ring-0 bg-transparent"
+                         />
+                         <span className="text-xs font-mono font-bold uppercase">{lang}</span>
+                       </label>
+                     ))}
+                   </div>
+                 </div>
 
                 <div className="flex justify-end space-x-4 pt-4 border-t border-border">
                   <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="cyber-btn-outline">
@@ -592,61 +642,91 @@ export default function Projects() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="upload" className="flex flex-col gap-5 mt-5">
-                <div className="space-y-1.5">
-                  <Label htmlFor="upload-name" className="font-mono font-bold uppercase text-xs text-muted-foreground">项目名称 *</Label>
-                  <Input
-                    id="upload-name"
-                    value={createForm.name}
-                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                    placeholder="输入项目名称"
-                    className="cyber-input"
-                  />
-                </div>
+               <TabsContent value="upload" className="flex flex-col gap-5 mt-5">
+                 <div className="space-y-1.5">
+                   <Label htmlFor="upload-name" className="font-mono font-bold uppercase text-xs text-muted-foreground">项目名称 *</Label>
+                   <Input
+                     id="upload-name"
+                     value={createForm.name}
+                     onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                     placeholder="输入项目名称"
+                     className="cyber-input"
+                   />
+                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="upload-description" className="font-mono font-bold uppercase text-xs text-muted-foreground">描述</Label>
-                  <Textarea
-                    id="upload-description"
-                    value={createForm.description}
-                    onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                    placeholder="// 项目描述..."
-                    rows={3}
-                    className="cyber-input min-h-[80px]"
-                  />
-                </div>
+                 <div className="space-y-1.5">
+                   <Label htmlFor="upload-description" className="font-mono font-bold uppercase text-xs text-muted-foreground">描述</Label>
+                   <Textarea
+                     id="upload-description"
+                     value={createForm.description}
+                     onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                     placeholder="// 项目描述..."
+                     rows={3}
+                     className="cyber-input min-h-[80px]"
+                   />
+                 </div>
 
-                <div className="space-y-2">
-                  <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">技术栈</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {supportedLanguages.map((lang) => (
-                      <label key={lang} className={`flex items-center space-x-2 px-3 py-1.5 border cursor-pointer transition-all rounded ${createForm.programming_languages.includes(lang)
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border hover:border-border text-muted-foreground'
-                        }`}>
-                        <input
-                          type="checkbox"
-                          checked={createForm.programming_languages.includes(lang)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCreateForm({
-                                ...createForm,
-                                programming_languages: [...createForm.programming_languages, lang]
-                              });
-                            } else {
-                              setCreateForm({
-                                ...createForm,
-                                programming_languages: createForm.programming_languages.filter(l => l !== lang)
-                              });
-                            }
-                          }}
-                          className="rounded border border-border w-3.5 h-3.5 text-primary focus:ring-0 bg-transparent"
-                        />
-                        <span className="text-xs font-mono font-bold uppercase">{lang}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                 <div className="space-y-2">
+                   <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">项目类型</Label>
+                   <div className="grid grid-cols-3 gap-3">
+                     {PROJECT_TYPE_OPTIONS.map((option) => {
+                       const Icon = option.icon;
+                       const isSelected = createForm.project_type === option.value;
+                       return (
+                         <div
+                           key={option.value}
+                           onClick={() => {
+                             setCreateForm({
+                               ...createForm,
+                               project_type: option.value,
+                               programming_languages: []
+                             });
+                           }}
+                           className={`p-4 border rounded-lg cursor-pointer transition-all flex flex-col items-center justify-center space-y-2 ${
+                             isSelected
+                               ? 'border-primary bg-primary/10'
+                               : 'border-border hover:border-border'
+                           }`}
+                         >
+                           <Icon className="w-6 h-6 text-primary" />
+                           <span className="text-sm font-bold text-foreground">{option.label}</span>
+                         </div>
+                       );
+                     })}
+                   </div>
+                 </div>
+
+                 <div className="space-y-2">
+                   <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">技术栈</Label>
+                   <div className="flex flex-wrap gap-2">
+                     {(TECH_STACK_OPTIONS[createForm.project_type || 'WHITE'] || []).map((lang) => (
+                       <label key={lang} className={`flex items-center space-x-2 px-3 py-1.5 border cursor-pointer transition-all rounded ${createForm.programming_languages.includes(lang)
+                         ? 'border-primary bg-primary/10 text-primary'
+                         : 'border-border hover:border-border text-muted-foreground'
+                         }`}>
+                         <input
+                           type="checkbox"
+                           checked={createForm.programming_languages.includes(lang)}
+                           onChange={(e) => {
+                             if (e.target.checked) {
+                               setCreateForm({
+                                 ...createForm,
+                                 programming_languages: [...createForm.programming_languages, lang]
+                               });
+                             } else {
+                               setCreateForm({
+                                 ...createForm,
+                                 programming_languages: createForm.programming_languages.filter(l => l !== lang)
+                               });
+                             }
+                           }}
+                           className="rounded border border-border w-3.5 h-3.5 text-primary focus:ring-0 bg-transparent"
+                         />
+                         <span className="text-xs font-mono font-bold uppercase">{lang}</span>
+                       </label>
+                     ))}
+                   </div>
+                 </div>
 
                 <div className="space-y-4">
                   <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">源代码</Label>
@@ -993,31 +1073,98 @@ export default function Projects() {
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* 基本信息 */}
-            <div className="space-y-4">
-              <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">基本信息</h3>
-              <div>
-                <Label htmlFor="edit-name" className="font-mono font-bold uppercase text-xs text-muted-foreground">项目名称 *</Label>
-                <Input
-                  id="edit-name"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="cyber-input mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-description" className="font-mono font-bold uppercase text-xs text-muted-foreground">描述</Label>
-                <Textarea
-                  id="edit-description"
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  rows={3}
-                  className="cyber-input mt-1"
-                />
-              </div>
-            </div>
+             {/* 基本信息 */}
+             <div className="space-y-4">
+               <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">基本信息</h3>
+               <div>
+                 <Label htmlFor="edit-name" className="font-mono font-bold uppercase text-xs text-muted-foreground">项目名称 *</Label>
+                 <Input
+                   id="edit-name"
+                   value={editForm.name}
+                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                   className="cyber-input mt-1"
+                 />
+               </div>
+               <div>
+                 <Label htmlFor="edit-description" className="font-mono font-bold uppercase text-xs text-muted-foreground">描述</Label>
+                 <Textarea
+                   id="edit-description"
+                   value={editForm.description}
+                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                   rows={3}
+                   className="cyber-input mt-1"
+                 />
+               </div>
+             </div>
 
-            {/* 仓库信息 - 仅远程仓库类型显示 */}
+             {/* 项目类型和技术栈 */}
+             <div className="space-y-4">
+               <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">项目配置</h3>
+               
+               <div className="space-y-2">
+                 <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">项目类型</Label>
+                 <div className="grid grid-cols-3 gap-3">
+                   {PROJECT_TYPE_OPTIONS.map((option) => {
+                     const Icon = option.icon;
+                     const isSelected = editForm.project_type === option.value;
+                     return (
+                       <div
+                         key={option.value}
+                         onClick={() => {
+                           setEditForm({
+                             ...editForm,
+                             project_type: option.value,
+                             programming_languages: []
+                           });
+                         }}
+                         className={`p-4 border rounded-lg cursor-pointer transition-all flex flex-col items-center justify-center space-y-2 ${
+                           isSelected
+                             ? 'border-primary bg-primary/10'
+                             : 'border-border hover:border-border'
+                         }`}
+                       >
+                         <Icon className="w-6 h-6 text-primary" />
+                         <span className="text-sm font-bold text-foreground">{option.label}</span>
+                       </div>
+                     );
+                   })}
+                 </div>
+               </div>
+
+               <div className="space-y-2">
+                 <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">技术栈</Label>
+                 <div className="flex flex-wrap gap-2">
+                   {(TECH_STACK_OPTIONS[editForm.project_type || 'WHITE'] || []).map((lang) => (
+                     <label key={lang} className={`flex items-center space-x-2 px-3 py-1.5 border cursor-pointer transition-all rounded ${editForm.programming_languages.includes(lang)
+                       ? 'border-primary bg-primary/10 text-primary'
+                       : 'border-border hover:border-border text-muted-foreground'
+                       }`}>
+                       <input
+                         type="checkbox"
+                         checked={editForm.programming_languages.includes(lang)}
+                         onChange={(e) => {
+                           if (e.target.checked) {
+                             setEditForm({
+                               ...editForm,
+                               programming_languages: [...editForm.programming_languages, lang]
+                             });
+                           } else {
+                             setEditForm({
+                               ...editForm,
+                               programming_languages: editForm.programming_languages.filter(l => l !== lang)
+                             });
+                           }
+                         }}
+                         className="rounded border border-border w-3.5 h-3.5 text-primary focus:ring-0 bg-transparent"
+                       />
+                       <span className="text-xs font-mono font-bold uppercase">{lang}</span>
+                     </label>
+                   ))}
+                 </div>
+               </div>
+             </div>
+
+             {/* 仓库信息 - 仅远程仓库类型显示 */}
             {editForm.source_type === 'repository' && (
               <div className="space-y-4">
                 <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2 flex items-center gap-2">

@@ -126,6 +126,7 @@ export default function OpenCodeResourceManager() {
   const [agentPackageFilters, setAgentPackageFilters] = useState({
     search: "",
     is_public: undefined as boolean | undefined,
+    category: undefined as string | undefined,
   });
   const [showAgentPackageUploadDialog, setShowAgentPackageUploadDialog] = useState(false);
   const [agentPackageUploading, setAgentPackageUploading] = useState(false);
@@ -619,7 +620,7 @@ export default function OpenCodeResourceManager() {
   const resetSkillUploadForm = () => {
     setSkillUploadForm({
       version: "1.0.0",
-      category: "custom",
+      category: "OTHER",
       is_public: false,
       files: [],
     });
@@ -687,12 +688,12 @@ export default function OpenCodeResourceManager() {
 
   const getSkillCategoryIcon = (category: string) => {
     switch (category) {
-      case "security":
+      case "ANALYZE":
         return <Shield className="w-4 h-4" />;
-      case "analysis":
-        return <Cpu className="w-4 h-4" />;
-      case "utility":
-        return <Database className="w-4 h-4" />;
+      case "WHITE":
+        return <Code2 className="w-4 h-4" />;
+      case "BLACK":
+        return <Bot className="w-4 h-4" />;
       default:
         return <Package className="w-4 h-4" />;
     }
@@ -700,11 +701,11 @@ export default function OpenCodeResourceManager() {
 
   const getSkillCategoryColor = (category: string) => {
     switch (category) {
-      case "security":
+      case "ANALYZE":
         return "text-rose-400 bg-rose-500/20";
-      case "analysis":
+      case "WHITE":
         return "text-sky-400 bg-sky-500/20";
-      case "utility":
+      case "BLACK":
         return "text-amber-400 bg-amber-500/20";
       default:
         return "text-violet-400 bg-violet-500/20";
@@ -1398,13 +1399,13 @@ export default function OpenCodeResourceManager() {
                       <SelectTrigger className="cyber-input">
                         <SelectValue placeholder="全部分类" />
                       </SelectTrigger>
-                      <SelectContent className="cyber-dialog border-border">
-                        <SelectItem value="all">全部分类</SelectItem>
-                        <SelectItem value="security">安全</SelectItem>
-                        <SelectItem value="analysis">分析</SelectItem>
-                        <SelectItem value="utility">工具</SelectItem>
-                        <SelectItem value="custom">自定义</SelectItem>
-                      </SelectContent>
+                       <SelectContent className="cyber-dialog border-border">
+                         <SelectItem value="all">全部分类</SelectItem>
+                         <SelectItem value="ANALYZE">威胁分析</SelectItem>
+                         <SelectItem value="WHITE">白盒分析</SelectItem>
+                         <SelectItem value="BLACK">黑盒分析</SelectItem>
+                         <SelectItem value="OTHER">其他</SelectItem>
+                       </SelectContent>
                     </Select>
                   </div>
                 </div>
@@ -1490,12 +1491,13 @@ export default function OpenCodeResourceManager() {
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </TabsContent>
+                     ))}
+                   </div>
+                   )
+                 })()}
+               </div>
+             </div>
+           </TabsContent>
 
         {/* ============== AGENTS TAB CONTENT (AGENT PACKAGES) ============== */}
         <TabsContent value="agents" className="mt-6 space-y-6">
@@ -1524,59 +1526,91 @@ export default function OpenCodeResourceManager() {
             {/* Main content */}
             <div className="cyber-card p-0">
               <div className="p-6 space-y-6">
-                {/* Filters */}
-                <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
-                      <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                        <Search className="w-3 h-3" />
-                        搜索
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder="搜索 Agent 包..."
-                        className="cyber-input"
-                        value={agentPackageFilters.search}
-                        onChange={(e) => setAgentPackageFilters({ ...agentPackageFilters, search: e.target.value })}
-                      />
-                    </div>
-                    <div className="sm:w-48">
-                      <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
-                        <Filter className="w-3 h-3" />
-                        可见性
-                      </label>
-                      <Select
-                        value={agentPackageFilters.is_public === undefined ? "all" : agentPackageFilters.is_public ? "public" : "private"}
-                        onValueChange={(val) => setAgentPackageFilters({ ...agentPackageFilters, is_public: val === "all" ? undefined : val === "public" })}
-                      >
-                        <SelectTrigger className="cyber-input">
-                          <SelectValue placeholder="全部" />
-                        </SelectTrigger>
-                        <SelectContent className="cyber-dialog border-border">
-                          <SelectItem value="all">全部</SelectItem>
-                          <SelectItem value="public">公开</SelectItem>
-                          <SelectItem value="private">私有</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
+                 {/* Filters */}
+                 <div className="cyber-bg-elevated border border-border p-4 rounded-lg mb-6">
+                   <div className="flex flex-col sm:flex-row gap-4">
+                     <div className="flex-1">
+                       <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                         <Search className="w-3 h-3" />
+                         搜索
+                       </label>
+                       <Input
+                         type="text"
+                         placeholder="搜索 Agent 包..."
+                         className="cyber-input"
+                         value={agentPackageFilters.search}
+                         onChange={(e) => setAgentPackageFilters({ ...agentPackageFilters, search: e.target.value })}
+                       />
+                     </div>
+                     <div className="sm:w-48">
+                       <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                         <Filter className="w-3 h-3" />
+                         分类
+                       </label>
+                       <Select
+                         value={(agentPackageFilters as any).category || "all"}
+                         onValueChange={(val) => setAgentPackageFilters({ ...agentPackageFilters, category: val === "all" ? undefined : val })}
+                       >
+                         <SelectTrigger className="cyber-input">
+                           <SelectValue placeholder="全部分类" />
+                         </SelectTrigger>
+                         <SelectContent className="cyber-dialog border-border">
+                           <SelectItem value="all">全部分类</SelectItem>
+                           <SelectItem value="ANALYZE">威胁分析</SelectItem>
+                           <SelectItem value="WHITE">白盒分析</SelectItem>
+                           <SelectItem value="BLACK">黑盒分析</SelectItem>
+                           <SelectItem value="OTHER">其他</SelectItem>
+                         </SelectContent>
+                       </Select>
+                     </div>
+                     <div className="sm:w-48">
+                       <label className="text-xs font-bold text-muted-foreground uppercase mb-2 block flex items-center gap-2">
+                         <Filter className="w-3 h-3" />
+                         可见性
+                       </label>
+                       <Select
+                         value={agentPackageFilters.is_public === undefined ? "all" : agentPackageFilters.is_public ? "public" : "private"}
+                         onValueChange={(val) => setAgentPackageFilters({ ...agentPackageFilters, is_public: val === "all" ? undefined : val === "public" })}
+                       >
+                         <SelectTrigger className="cyber-input">
+                           <SelectValue placeholder="全部" />
+                         </SelectTrigger>
+                         <SelectContent className="cyber-dialog border-border">
+                           <SelectItem value="all">全部</SelectItem>
+                           <SelectItem value="public">公开</SelectItem>
+                           <SelectItem value="private">私有</SelectItem>
+                         </SelectContent>
+                       </Select>
+                     </div>
+                   </div>
+                 </div>
 
-                {/* Agent Packages grid */}
-                {agentPackagesLoading ? (
-                  <div className="text-center py-12">
-                    <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
-                    <p className="text-muted-foreground font-mono">加载中...</p>
-                  </div>
-                ) : agentPackages.length === 0 ? (
-                  <div className="empty-state">
-                    <Bot className="empty-state-icon" />
-                    <p className="empty-state-title">暂无 Agent 包</p>
-                    <p className="empty-state-description">点击上方按钮上传 Agent 包</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {agentPackages.map((pkg) => (
+                 {/* Agent Packages grid */}
+                 {agentPackagesLoading ? (
+                   <div className="text-center py-12">
+                     <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
+                     <p className="text-muted-foreground font-mono">加载中...</p>
+                   </div>
+                 ) : (() => {
+                   const filtered = agentPackages.filter((pkg) => {
+                     const matchesSearch = !agentPackageFilters.search || 
+                       pkg.name.toLowerCase().includes(agentPackageFilters.search.toLowerCase()) || 
+                       pkg.description?.toLowerCase().includes(agentPackageFilters.search.toLowerCase());
+                     const matchesPublic = agentPackageFilters.is_public === undefined || pkg.is_public === agentPackageFilters.is_public;
+                     const matchesCategory = !agentPackageFilters.category || 
+                       (pkg as any).category === agentPackageFilters.category;
+                     return matchesSearch && matchesPublic && matchesCategory;
+                   });
+                   
+                   return filtered.length === 0 ? (
+                     <div className="empty-state">
+                       <Bot className="empty-state-icon" />
+                       <p className="empty-state-title">暂无匹配的 Agent 包</p>
+                       <p className="empty-state-description">调整筛选条件或上传新的 Agent 包</p>
+                     </div>
+                   ) : (
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                       {filtered.map((pkg) => (
                       <div key={pkg.id} className="cyber-card p-4 hover:border-primary transition-all group">
                         <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
                           <div className="flex items-start space-x-3">
@@ -1593,14 +1627,19 @@ export default function OpenCodeResourceManager() {
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {pkg.is_public && (
-                              <Badge className="cyber-badge-muted">
-                                <Globe className="w-3 h-3 mr-1" />
-                                公开
-                              </Badge>
-                            )}
-                          </div>
+                           <div className="flex items-center gap-2">
+                             {(pkg as any).category && (
+                               <Badge className="cyber-badge-muted">
+                                 {(pkg as any).category}
+                               </Badge>
+                             )}
+                             {pkg.is_public && (
+                               <Badge className="cyber-badge-muted">
+                                 <Globe className="w-3 h-3 mr-1" />
+                                 公开
+                               </Badge>
+                             )}
+                           </div>
                         </div>
 
                         <div className="space-y-3">
@@ -2114,12 +2153,12 @@ export default function OpenCodeResourceManager() {
                   <SelectTrigger className="cyber-input">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    <SelectItem value="security">安全</SelectItem>
-                    <SelectItem value="analysis">分析</SelectItem>
-                    <SelectItem value="utility">工具</SelectItem>
-                    <SelectItem value="custom">自定义</SelectItem>
-                  </SelectContent>
+                   <SelectContent className="cyber-dialog border-border">
+                     <SelectItem value="ANALYZE">威胁分析</SelectItem>
+                     <SelectItem value="WHITE">白盒分析</SelectItem>
+                     <SelectItem value="BLACK">黑盒分析</SelectItem>
+                     <SelectItem value="OTHER">其他</SelectItem>
+                   </SelectContent>
                 </Select>
               </div>
 

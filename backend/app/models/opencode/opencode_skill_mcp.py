@@ -19,11 +19,22 @@ from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 
-class SkillCategory:
-    SECURITY = "security"
-    ANALYSIS = "analysis"
-    UTILITY = "utility"
-    CUSTOM = "custom"
+from enum import Enum
+
+
+class SkillCategory(str, Enum):
+    """Skill 分类枚举"""
+
+    ANALYZE = "ANALYZE"  # 威胁分析
+    WHITE = "WHITE"  # 白盒分析
+    BLACK = "BLACK"  # 黑盒分析
+    OTHER = "OTHER"  # 其他（向后兼容）
+
+    # 保留旧值用于兼容性（作为别名）
+    SECURITY = "OTHER"
+    ANALYSIS = "OTHER"
+    UTILITY = "OTHER"
+    CUSTOM = "OTHER"
 
 
 class OpenCodeSkill(Base):

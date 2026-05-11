@@ -87,6 +87,24 @@ export const api = {
     }
   },
 
+  async getProjectAgents(id: string): Promise<{ items: Array<{ id: string; name: string; author: string; version: string; description: string; category: string }>; total: number }> {
+    try {
+      const res = await apiClient.get(`/projects/${id}/agents`);
+      return res.data;
+    } catch (e) {
+      return { items: [], total: 0 };
+    }
+  },
+
+  async getProjectSkills(id: string): Promise<{ items: Array<{ id: string; name: string; author: string; version: string; description: string; category: string }>; total: number }> {
+    try {
+      const res = await apiClient.get(`/projects/${id}/skills`);
+      return res.data;
+    } catch (e) {
+      return { items: [], total: 0 };
+    }
+  },
+
   async uploadProjectZip(id: string, file: File): Promise<{ message: string; original_filename: string; file_size: number }> {
     const formData = new FormData();
     formData.append('file', file);
@@ -101,6 +119,7 @@ export const api = {
       name: project.name,
       description: project.description,
       source_type: project.source_type || 'repository',
+      project_type: project.project_type || 'WHITE',
       repository_url: project.repository_url,
       repository_type: project.repository_type,
       default_branch: project.default_branch,

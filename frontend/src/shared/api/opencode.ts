@@ -68,6 +68,7 @@ export interface AgentPackage {
   agents_count: number;
   skills_count: number;
   is_public: boolean;
+  category?: string; // 新增：分类
   package_agents?: AgentPackageAgent[];
   package_skills?: AgentPackageSkill[];
 }

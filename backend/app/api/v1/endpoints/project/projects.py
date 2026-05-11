@@ -14,6 +14,8 @@ import json
 from app.api import deps
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.project.project import Project
+from app.models.opencode.agent import Agent
+from app.models.opencode.opencode_skill_mcp import OpenCodeSkill
 from app.models.user.user import User
 from app.models.audit.audit import AuditTask, AuditIssue
 from app.models.agent.agent_task import AgentTask, AgentTaskStatus, AgentFinding
@@ -47,6 +49,7 @@ router = APIRouter()
 class ProjectCreate(BaseModel):
     name: str
     source_type: Optional[str] = "repository"  # 'repository' 或 'zip'
+    project_type: Optional[str] = "WHITE"  # 'ANALYZE', 'WHITE', 'BLACK'
     repository_url: Optional[str] = None
     repository_type: Optional[str] = "other"  # github, gitlab, other
     description: Optional[str] = None
@@ -57,6 +60,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     source_type: Optional[str] = None
+    project_type: Optional[str] = None
     repository_url: Optional[str] = None
     repository_type: Optional[str] = None
     description: Optional[str] = None
@@ -80,6 +84,7 @@ class ProjectResponse(BaseModel):
     name: str
     description: Optional[str] = None
     source_type: Optional[str] = "repository"  # 'repository' 或 'zip'
+    project_type: Optional[str] = "WHITE"  # 'ANALYZE', 'WHITE', 'BLACK'
     repository_url: Optional[str] = None
     repository_type: Optional[str] = None  # github, gitlab, other
     default_branch: Optional[str] = None
@@ -127,6 +132,7 @@ async def create_project(
     project = Project(
         name=project_in.name,
         source_type=source_type,
+        project_type=project_in.project_type or "WHITE",
         repository_url=project_in.repository_url if source_type == "repository" else None,
         repository_type=project_in.repository_type or "other"
         if source_type == "repository"
@@ -872,9 +878,91 @@ async def get_project_branches(
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[Branch] 获取分支列表失败: {error_msg}")
-        # 返回默认分支作为后备
-        return {
-            "branches": [project.default_branch or "main"],
-            "default_branch": project.default_branch or "main",
-            "error": str(e),
-        }
+         # 返回默认分支作为后备
+         return {
+             "branches": [project.default_branch or "main"],
+             "default_branch": project.default_branch or "main",
+             "error": str(e),
+         }
+
+
+@router.get("/{id}/agents")
+async def get_project_agents(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    获取项目对应类型的Agent列表
+    """
+    project = await db.get(Project, id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    # 检查权限
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权查看此项目")
+
+    # 获取项目类型
+    project_type = project.project_type or "WHITE"
+
+    # 查询同类型的Agent
+    query = select(Agent).where(Agent.category == project_type)
+    result = await db.execute(query)
+    agents = result.scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "author": a.author,
+                "version": a.version,
+                "description": a.description,
+                "category": a.category,
+            }
+            for a in agents
+        ],
+        "total": len(agents),
+    }
+
+
+@router.get("/{id}/skills")
+async def get_project_skills(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    获取项目对应类型的Skill列表
+    """
+    project = await db.get(Project, id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    # 检查权限
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权查看此项目")
+
+    # 获取项目类型
+    project_type = project.project_type or "WHITE"
+
+    # 查询同类型的Skill
+    query = select(OpenCodeSkill).where(OpenCodeSkill.category == project_type)
+    result = await db.execute(query)
+    skills = result.scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "version": s.version,
+                "description": s.description,
+                "author": s.author,
+                "category": s.category,
+            }
+            for s in skills
+        ],
+        "total": len(skills),
+    }

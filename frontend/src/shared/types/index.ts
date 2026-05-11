@@ -6,6 +6,27 @@ export interface Option {
   withCount?: boolean;
 }
 
+// 分类枚举
+export enum SkillCategory {
+  ANALYZE = 'ANALYZE',
+  WHITE = 'WHITE',
+  BLACK = 'BLACK',
+  OTHER = 'OTHER'
+}
+
+export enum AgentCategory {
+  ANALYZE = 'ANALYZE',
+  WHITE = 'WHITE',
+  BLACK = 'BLACK',
+  OTHER = 'OTHER'
+}
+
+export enum ProjectType {
+  ANALYZE = 'ANALYZE',
+  WHITE = 'WHITE',
+  BLACK = 'BLACK'
+}
+
 // 用户相关类型
 export interface Profile {
   id: string;
@@ -32,6 +53,7 @@ export interface Project {
   name: string;
   description?: string;
   source_type: ProjectSourceType;  // 项目来源: 'repository' (远程仓库) 或 'zip' (ZIP上传)
+  project_type?: ProjectType;      // 项目类型: 威胁分析, 白盒分析, 黑盒分析
   repository_url?: string;         // 仅 source_type='repository' 时有效
   repository_type?: RepositoryPlatform;  // 仓库平台: github, gitlab, other
   default_branch: string;
@@ -164,6 +186,7 @@ export interface CreateProjectForm {
   name: string;
   description?: string;
   source_type?: ProjectSourceType;  // 项目来源类型
+  project_type?: ProjectType;        // 项目类型
   repository_url?: string;          // 仅 source_type='repository' 时需要
   repository_type?: RepositoryPlatform;  // 仓库平台
   default_branch?: string;

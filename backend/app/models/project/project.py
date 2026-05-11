@@ -1,8 +1,17 @@
 import uuid
+from enum import Enum
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+
+
+class ProjectType(str, Enum):
+    """项目类型枚举"""
+
+    ANALYZE = "ANALYZE"  # 威胁分析
+    WHITE = "WHITE"  # 白盒分析
+    BLACK = "BLACK"  # 黑盒分析
 
 
 class Project(Base):
@@ -11,6 +20,7 @@ class Project(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, index=True, nullable=False)
     description = Column(Text, nullable=True)
+    project_type = Column(String(20), default=ProjectType.WHITE, index=True)
 
     # 项目来源类型: 'repository' (远程仓库) 或 'zip' (ZIP上传)
     source_type = Column(String(20), default="repository", nullable=False)

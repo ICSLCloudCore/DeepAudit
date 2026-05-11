@@ -3,10 +3,20 @@ Agent 模型 - Agents 表
 """
 
 import uuid
+from enum import Enum
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Integer
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+
+
+class AgentCategory(str, Enum):
+    """Agent 分类枚举"""
+
+    ANALYZE = "ANALYZE"  # 威胁分析
+    WHITE = "WHITE"  # 白盒分析
+    BLACK = "BLACK"  # 黑盒分析
+    OTHER = "OTHER"  # 其他
 
 
 class Agent(Base):
@@ -17,6 +27,7 @@ class Agent(Base):
     author = Column(String(255), nullable=True)
     version = Column(String(20), default="1.0.0")
     description = Column(Text, nullable=True)
+    category = Column(String(20), default=AgentCategory.OTHER, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
@@ -47,6 +58,7 @@ class Agent(Base):
             "author": self.author,
             "version": self.version,
             "description": self.description,
+            "category": self.category,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "created_by": self.created_by,

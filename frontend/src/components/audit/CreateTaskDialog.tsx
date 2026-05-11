@@ -76,6 +76,8 @@ import {
 } from "@/features/projects/services/repoZipScan";
 import { isRepositoryProject, isZipProject } from "@/shared/utils/projectUtils";
 import type { Project } from "@/shared/types";
+import { api } from "@/shared/config/database";
+import { Zap, Code, Lock, BookOpen } from "lucide-react";
 
 interface CreateTaskDialogProps {
   open: boolean;
@@ -134,17 +136,58 @@ export default function CreateTaskDialog({
   const [selectedAgentPackageId, setSelectedAgentPackageId] = useState<string | null>(null);
   const [agentPackages, setAgentPackages] = useState<AgentPackage[]>([]);
   const [agentPackagesLoading, setAgentPackagesLoading] = useState(false);
+  const [filteredAgentPackages, setFilteredAgentPackages] = useState<AgentPackage[]>([]);
+  
+  // Skill 相关状态
+  const [projectSkills, setProjectSkills] = useState<any[]>([]);
+  const [projectSkillsLoading, setProjectSkillsLoading] = useState(false);
 
   // 加载 Agent 包列表
-  const loadAgentPackages = useCallback(async () => {
+  const loadAgentPackages = useCallback(async (projectId?: string) => {
     try {
       setAgentPackagesLoading(true);
-      const response = await opencodeApi.listAgentPackages({ page_size: 100 });
-      setAgentPackages(response.items || []);
+      if (projectId) {
+        // 使用新的 API 获取项目对应的 Agent
+        const response = await api.getProjectAgents(projectId);
+        // 转换数据格式
+        const formatted: AgentPackage[] = (response.items || []).map(item => ({
+          id: item.id,
+          name: item.name,
+          author: item.author,
+          version: item.version,
+          description: item.description,
+          created_at: new Date().toISOString(),
+          created_by: '',
+          agents_count: 0,
+          skills_count: 0,
+          is_public: false,
+          category: item.category,
+        }));
+        setAgentPackages(formatted);
+        setFilteredAgentPackages(formatted);
+      } else {
+        const response = await opencodeApi.listAgentPackages({ page_size: 100 });
+        setAgentPackages(response.items || []);
+        setFilteredAgentPackages(response.items || []);
+      }
     } catch (error) {
       console.error("Failed to load agent packages:", error);
     } finally {
       setAgentPackagesLoading(false);
+    }
+  }, []);
+
+  // 加载项目对应的 Skill
+  const loadProjectSkills = useCallback(async (projectId?: string) => {
+    if (!projectId) return;
+    try {
+      setProjectSkillsLoading(true);
+      const response = await api.getProjectSkills(projectId);
+      setProjectSkills(response.items || []);
+    } catch (error) {
+      console.error("Failed to load project skills:", error);
+    } finally {
+      setProjectSkillsLoading(false);
     }
   }, []);
 
@@ -298,9 +341,10 @@ export default function CreateTaskDialog({
   useEffect(() => {
     if (open && selectedProjectId && auditMode === "opencode") {
       loadAvailableOpencodePrompts();
-      loadAgentPackages();
+      loadAgentPackages(selectedProjectId);
+      loadProjectSkills(selectedProjectId);
     }
-  }, [open, selectedProjectId, auditMode, loadAvailableOpencodePrompts, loadAgentPackages]);
+  }, [open, selectedProjectId, auditMode, loadAvailableOpencodePrompts, loadAgentPackages, loadProjectSkills]);
 
   // 当审计模式切换到 OpenCode 时，重置状态
   useEffect(() => {
@@ -745,7 +789,7 @@ export default function CreateTaskDialog({
                         Agent 包（可选）
                       </Label>
                       <p className="text-xs text-muted-foreground">
-                        选择已上传的 Agent 包，将通过软链接集成到审计环境
+                        选择与项目类型匹配的 Agent 包，将通过软链接集成到审计环境
                       </p>
                       {agentPackagesLoading ? (
                         <div className="flex items-center gap-2 p-3 border border-border rounded bg-muted/50">
@@ -756,7 +800,7 @@ export default function CreateTaskDialog({
                         <Select
                           value={selectedAgentPackageId || "__none__"}
                           onValueChange={(value) => setSelectedAgentPackageId(value === "__none__" ? null : value)}
-                        >
+                          >
                           <SelectTrigger className="h-10 cyber-input">
                             <SelectValue placeholder="不使用 Agent 包" />
                           </SelectTrigger>
@@ -764,7 +808,7 @@ export default function CreateTaskDialog({
                             <SelectItem value="__none__" className="font-mono">
                               不使用 Agent 包
                             </SelectItem>
-                            {agentPackages.map((pkg) => (
+                            {filteredAgentPackages.map((pkg) => (
                               <SelectItem key={pkg.id} value={pkg.id} className="font-mono">
                                 <div className="flex items-center justify-between w-full">
                                   <span>{pkg.name}</span>
@@ -776,6 +820,39 @@ export default function CreateTaskDialog({
                             ))}
                           </SelectContent>
                         </Select>
+                      )}
+                    </div>
+
+                    {/* Skill 展示部分 */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-mono font-bold uppercase text-muted-foreground flex items-center gap-1">
+                        <BookOpen className="w-4 h-4 text-primary" />
+                        可用 Skill（仅展示）
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        与项目类型匹配的 Skill，仅用于参考展示，不可选择
+                      </p>
+                      {projectSkillsLoading ? (
+                        <div className="flex items-center gap-2 p-3 border border-border rounded bg-muted/50">
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          <span className="text-sm font-mono text-muted-foreground">加载中...</span>
+                        </div>
+                      ) : projectSkills.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                          {projectSkills.map((skill) => (
+                            <div key={skill.id} className="p-2 border border-border rounded bg-muted/30">
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono text-sm font-bold">{skill.name}</span>
+                                <span className="text-xs text-muted-foreground">v{skill.version}</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{skill.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-3 border border-border rounded bg-muted/30 text-center">
+                          <p className="text-xs text-muted-foreground font-mono">暂无匹配的 Skill</p>
+                        </div>
                       )}
                     </div>
 
