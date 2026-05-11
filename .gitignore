@@ -196,5 +196,4 @@ __init__.py
 backend/uploads
 frontend/src/pages/OpenCodeAudit/nul
 docs/example/cloudecore-audit/
-docs/sdd/opencode_message_parser_integration_sdd.md
-docs/sdd/opencode_message_types_sdd.md
+docs/sdd/
