@@ -46,7 +46,9 @@ class Agent(Base):
         "OpenCodeAgent", back_populates="agent_package", cascade="all, delete-orphan"
     )
     # 关系 - 关联到 OpenCodeSkill（包内的 Skills）
-    package_skills = relationship("OpenCodeSkill", back_populates="agent_package")
+    package_skills = relationship(
+        "OpenCodeSkill", back_populates="agent_package", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"&lt;Agent {self.name}&gt;"

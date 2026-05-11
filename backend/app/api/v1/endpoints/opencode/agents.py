@@ -212,7 +212,7 @@ async def upload_agent_package(
                     version=ps["version"],
                     description=ps["description"],
                     author=ps["author"],
-                    category=ps["category"],
+                    category=category,
                     file_path=ps["file_path"],
                     agent_package_id=new_agent.id,
                     is_public=False,
@@ -403,6 +403,7 @@ async def update_agent_package(
     description: Optional[str] = None,
     version: Optional[str] = None,
     is_public: Optional[bool] = None,
+    category: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -427,6 +428,17 @@ async def update_agent_package(
     if is_public is not None:
         agent_package.is_public = is_public
 
+    # 更新category并同步Skill
+    if category is not None:
+        agent_package.category = category
+        # 同步更新该包所有Skill的category
+        result = await db.execute(
+            select(OpenCodeSkill).where(OpenCodeSkill.agent_package_id == agent_package_id)
+        )
+        skills = result.scalars().all()
+        for skill in skills:
+            skill.category = category
+
     await db.commit()
     await db.refresh(agent_package)
 
@@ -439,10 +451,16 @@ async def refresh_agents(
     current_user: User = Depends(get_current_user),
 ):
     """
-    从文件系统刷新 Agents 到数据库（使用 utils.py 工具函数）
+    从文件系统刷新 Agents 到数据库（完全刷新）
 
-    扫描 AGENT_PACKAGES_EXTRACTED_PATH 目录，解析每个子目录，
-    将不存在的 agent 包添加到数据库
+    对于已存在的Agent包：
+    - 删除旧的关联记录，重新创建
+    - 同步Skill的category为Agent包的category
+    - 更新agents_count和skills_count
+
+    对于新增的Agent包：
+    - 默认category为OTHER
+    - Skill的category也为OTHER
     """
     ensure_storage_dirs()
 
@@ -468,11 +486,6 @@ async def refresh_agents(
         result = await db.execute(select(Agent).where(Agent.original_filename == item))
         existing_agent = result.scalars().first()
 
-        if existing_agent:
-            # 已存在，跳过
-            stats["skipped"] += 1
-            continue
-
         try:
             # 1. 读取 AGENTS.md
             agents_md_content = None
@@ -487,21 +500,51 @@ async def refresh_agents(
             # 3. 使用工具函数解析 skills/ 目录
             package_skills = parse_skills_directory_for_agent(os.path.join(pkg_path, "skills"))
 
-            # 4. 使用工具函数创建 Agent 包及关联记录
-            package_data = {
-                "name": item,
-                "original_filename": item,
-                "extracted_dir_path": pkg_path,
-                "agents_md_content": agents_md_content,
-            }
+            if existing_agent:
+                # === 更新已存在的Agent包 ===
 
-            new_agent = create_agent_package_with_relations(
-                db, package_data, package_agents, package_skills, current_user
-            )
+                # 更新Agent包基础信息
+                existing_agent.agents_count = len(package_agents)
+                existing_agent.skills_count = len(package_skills)
+
+                # 删除旧的关联记录
+                await db.execute(
+                    select(OpenCodeAgent).where(OpenCodeAgent.agent_package_id == existing_agent.id)
+                )
+                await db.execute(
+                    select(OpenCodeSkill).where(OpenCodeSkill.agent_package_id == existing_agent.id)
+                )
+
+                # 重新创建关联记录
+                for pa in package_agents:
+                    op_agent = create_opencode_agent_record(existing_agent.id, pa)
+                    db.add(op_agent)
+
+                for ps in package_skills:
+                    op_skill = create_opencode_skill_for_agent(
+                        existing_agent.id, ps, current_user, category=existing_agent.category
+                    )
+                    db.add(op_skill)
+
+                stats["updated"] += 1
+            else:
+                # === 新增Agent包 ===
+
+                package_data = {
+                    "name": item,
+                    "original_filename": item,
+                    "extracted_dir_path": pkg_path,
+                    "agents_md_content": agents_md_content,
+                }
+
+                # 创建，传入category="OTHER"
+                new_agent = create_agent_package_with_relations(
+                    db, package_data, package_agents, package_skills, current_user, category="OTHER"
+                )
+
+                stats["added"] += 1
 
             await db.commit()
-
-            stats["added"] += 1
 
         except Exception as e:
             errors.append({"directory": item, "error": str(e)})

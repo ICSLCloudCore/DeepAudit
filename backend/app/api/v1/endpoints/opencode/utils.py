@@ -277,7 +277,7 @@ def create_opencode_agent_record(agent_package_id: str, agent_data: dict) -> Ope
 
 
 def create_opencode_skill_for_agent(
-    agent_package_id: str, skill_data: dict, current_user
+    agent_package_id: str, skill_data: dict, current_user, category: Optional[str] = None
 ) -> OpenCodeSkill:
     """创建 OpenCodeSkill 记录（用于 Agent 包）"""
     return OpenCodeSkill(
@@ -286,7 +286,7 @@ def create_opencode_skill_for_agent(
         version=skill_data.get("version", "1.0.0"),
         description=skill_data.get("description", ""),
         author=skill_data.get("author", getattr(current_user, "full_name", "unknown")),
-        category=skill_data.get("category", "custom"),
+        category=category or skill_data.get("category", "custom"),
         file_path=skill_data["file_path"],
         agent_package_id=agent_package_id,
         is_public=False,
@@ -301,6 +301,7 @@ def create_agent_package_with_relations(
     package_agents: list[dict],
     package_skills: list[dict],
     current_user,
+    category: Optional[str] = None,
 ) -> Agent:
     """创建 Agent 包及关联记录（OpenCodeAgent、OpenCodeSkill）"""
     new_agent = Agent(
@@ -316,6 +317,7 @@ def create_agent_package_with_relations(
         agents_count=len(package_agents),
         skills_count=len(package_skills),
         is_public=package_data.get("is_public", False),
+        category=category,
         created_by=current_user.id if hasattr(current_user, "id") else None,
     )
     db.add(new_agent)
@@ -325,7 +327,9 @@ def create_agent_package_with_relations(
         db.add(op_agent)
 
     for ps in package_skills:
-        op_skill = create_opencode_skill_for_agent(new_agent.id, ps, current_user)
+        op_skill = create_opencode_skill_for_agent(
+            new_agent.id, ps, current_user, category=category
+        )
         db.add(op_skill)
 
     return new_agent
