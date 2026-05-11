@@ -518,6 +518,19 @@ export default function OpenCodeResourceManager() {
   const agentCount = agentPackages.reduce((sum, pkg) => sum + pkg.agents_count, 0);
   const mcpCount = mcps.length;
 
+  // 过滤Agent包
+  const filteredAgentPackages = useMemo(() => {
+    return agentPackages.filter((pkg) => {
+      const matchesSearch = !agentPackageFilters.search || 
+        pkg.name.toLowerCase().includes(agentPackageFilters.search.toLowerCase()) || 
+        pkg.description?.toLowerCase().includes(agentPackageFilters.search.toLowerCase());
+      const matchesPublic = agentPackageFilters.is_public === undefined || pkg.is_public === agentPackageFilters.is_public;
+      const matchesCategory = !agentPackageFilters.category || 
+        (pkg as any).category === agentPackageFilters.category;
+      return matchesSearch && matchesPublic && matchesCategory;
+    });
+  }, [agentPackages, agentPackageFilters]);
+
   // ============== SKILLS FUNCTIONS ==============
   const loadSkills = async () => {
     try {
@@ -1490,14 +1503,13 @@ export default function OpenCodeResourceManager() {
                           </div>
                         </div>
                       </div>
-                    </div>
-                     ))}
-                   </div>
-                   )
-                 })()}
-               </div>
-             </div>
-           </TabsContent>
+                     </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
 
         {/* ============== AGENTS TAB CONTENT (AGENT PACKAGES) ============== */}
         <TabsContent value="agents" className="mt-6 space-y-6">
@@ -1585,129 +1597,118 @@ export default function OpenCodeResourceManager() {
                    </div>
                  </div>
 
-                 {/* Agent Packages grid */}
-                 {agentPackagesLoading ? (
-                   <div className="text-center py-12">
-                     <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
-                     <p className="text-muted-foreground font-mono">加载中...</p>
-                   </div>
-                 ) : (() => {
-                   const filtered = agentPackages.filter((pkg) => {
-                     const matchesSearch = !agentPackageFilters.search || 
-                       pkg.name.toLowerCase().includes(agentPackageFilters.search.toLowerCase()) || 
-                       pkg.description?.toLowerCase().includes(agentPackageFilters.search.toLowerCase());
-                     const matchesPublic = agentPackageFilters.is_public === undefined || pkg.is_public === agentPackageFilters.is_public;
-                     const matchesCategory = !agentPackageFilters.category || 
-                       (pkg as any).category === agentPackageFilters.category;
-                     return matchesSearch && matchesPublic && matchesCategory;
-                   });
-                   
-                   return filtered.length === 0 ? (
-                     <div className="empty-state">
-                       <Bot className="empty-state-icon" />
-                       <p className="empty-state-title">暂无匹配的 Agent 包</p>
-                       <p className="empty-state-description">调整筛选条件或上传新的 Agent 包</p>
-                     </div>
-                   ) : (
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                       {filtered.map((pkg) => (
-                      <div key={pkg.id} className="cyber-card p-4 hover:border-primary transition-all group">
-                        <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
-                          <div className="flex items-start space-x-3">
-                            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-primary bg-primary/20">
-                              <Package className="w-5 h-5" />
+                  {/* Agent Packages grid */}
+                  {agentPackagesLoading ? (
+                    <div className="text-center py-12">
+                      <div className="loading-spinner w-8 h-8 mx-auto mb-4"></div>
+                      <p className="text-muted-foreground font-mono">加载中...</p>
+                    </div>
+                  ) : filteredAgentPackages.length === 0 ? (
+                    <div className="empty-state">
+                      <Bot className="empty-state-icon" />
+                      <p className="empty-state-title">暂无匹配的 Agent 包</p>
+                      <p className="empty-state-description">调整筛选条件或上传新的 Agent 包</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredAgentPackages.map((pkg) => (
+                        <div key={pkg.id} className="cyber-card p-4 hover:border-primary transition-all group">
+                          <div className="flex justify-between items-start mb-3 pb-3 border-b border-border">
+                            <div className="flex items-start space-x-3">
+                              <div className="w-10 h-10 rounded-lg flex items-center justify-center text-primary bg-primary/20">
+                                <Package className="w-5 h-5" />
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">
+                                  {pkg.name}
+                                </h4>
+                                <div className="flex items-center space-x-1 text-xs text-muted-foreground font-mono">
+                                  <span className="text-primary">{">"}</span>
+                                  <span>v{pkg.version}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex-1">
-                              <h4 className="font-bold text-base text-foreground mb-1 group-hover:text-primary transition-colors uppercase">
-                                {pkg.name}
-                              </h4>
-                              <div className="flex items-center space-x-1 text-xs text-muted-foreground font-mono">
-                                <span className="text-primary">{">"}</span>
-                                <span>v{pkg.version}</span>
+                            <div className="flex items-center gap-2">
+                              {(pkg as any).category && (
+                                <Badge className="cyber-badge-muted">
+                                  {(pkg as any).category}
+                                </Badge>
+                              )}
+                              {pkg.is_public && (
+                                <Badge className="cyber-badge-muted">
+                                  <Globe className="w-3 h-3 mr-1" />
+                                  公开
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <p className="text-muted-foreground text-sm">{pkg.description || "暂无描述"}</p>
+                            
+                            <div className="flex gap-4 text-xs text-muted-foreground font-mono">
+                              <div className="flex items-center gap-1">
+                                <Bot className="w-3 h-3" />
+                                <span>{pkg.agents_count} 个 Agent</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Code2 className="w-3 h-3" />
+                                <span>{pkg.skills_count} 个 Skill</span>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-2">
+                              <div className="text-xs text-muted-foreground font-mono">
+                                {pkg.author && `作者: ${pkg.author}`}
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs cyber-btn-ghost"
+                                  title="查看详情"
+                                  onClick={() => handleViewAgentPackageDetails(pkg)}
+                                >
+                                  <Eye className="w-3 h-3 mr-1" />
+                                  详情
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs cyber-btn-ghost"
+                                  title="下载"
+                                  disabled={downloadingAgentPackageId === pkg.id}
+                                  onClick={() => handleDownloadAgentPackage(pkg)}
+                                >
+                                  {downloadingAgentPackageId === pkg.id ? (
+                                    <div className="loading-spinner w-3 h-3 mr-1" />
+                                  ) : (
+                                    <Download className="w-3 h-3 mr-1" />
+                                  )}
+                                  下载
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs cyber-btn-ghost text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                                  title="删除"
+                                  onClick={() => {
+                                    setAgentPackageToDelete(pkg);
+                                    setShowAgentPackageDeleteDialog(true);
+                                  }}
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" />
+                                </Button>
                               </div>
                             </div>
                           </div>
-                           <div className="flex items-center gap-2">
-                             {(pkg as any).category && (
-                               <Badge className="cyber-badge-muted">
-                                 {(pkg as any).category}
-                               </Badge>
-                             )}
-                             {pkg.is_public && (
-                               <Badge className="cyber-badge-muted">
-                                 <Globe className="w-3 h-3 mr-1" />
-                                 公开
-                               </Badge>
-                             )}
-                           </div>
                         </div>
-
-                        <div className="space-y-3">
-                          <p className="text-muted-foreground text-sm">{pkg.description || "暂无描述"}</p>
-                          
-                          <div className="flex gap-4 text-xs text-muted-foreground font-mono">
-                            <div className="flex items-center gap-1">
-                              <Bot className="w-3 h-3" />
-                              <span>{pkg.agents_count} 个 Agent</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Code2 className="w-3 h-3" />
-                              <span>{pkg.skills_count} 个 Skill</span>
-                            </div>
-                          </div>
-
-                          <div className="flex justify-between items-center pt-2">
-                            <div className="text-xs text-muted-foreground font-mono">
-                              {pkg.author && `作者: ${pkg.author}`}
-                            </div>
-                            <div className="flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs cyber-btn-ghost"
-                                title="查看详情"
-                                onClick={() => handleViewAgentPackageDetails(pkg)}
-                              >
-                                <Eye className="w-3 h-3 mr-1" />
-                                详情
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs cyber-btn-ghost"
-                                title="下载"
-                                disabled={downloadingAgentPackageId === pkg.id}
-                                onClick={() => handleDownloadAgentPackage(pkg)}
-                              >
-                                {downloadingAgentPackageId === pkg.id ? (
-                                  <div className="loading-spinner w-3 h-3 mr-1" />
-                                ) : (
-                                  <Download className="w-3 h-3 mr-1" />
-                                )}
-                                下载
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs cyber-btn-ghost text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
-                                title="删除"
-                                onClick={() => {
-                                  setAgentPackageToDelete(pkg);
-                                  setShowAgentPackageDeleteDialog(true);
-                                }}
-                              >
-                                <Trash2 className="w-3 h-3 mr-1" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </TabsContent>
+            </TabsContent>
 
         {/* ============== MCPS TAB CONTENT ============== */}
         <TabsContent value="mcps" className="mt-6 space-y-6">
