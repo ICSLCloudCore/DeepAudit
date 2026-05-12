@@ -4,12 +4,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
+from sqlalchemy import or_, and_
 
 from app.models.workflow.workflow import Workflow, WorkflowStageStatus
 from app.models.project.project import Project, ProjectType
 from app.models.audit.audit_vulnerabilities import AuditVulnerability
 from app.models.opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskStatus
 from app.models.agent.agent_task import AgentTask, AgentTaskStatus, AgentFinding
+from app.models.opencode.agent import Agent, AgentCategory
+from app.models.opencode.opencode_skill_mcp import OpenCodeSkill, SkillCategory
+from app.models.knowledge.prompt_template import PromptTemplate
 from app.schemas.workflow import (
     WorkflowCreate,
     WorkflowUpdate,
@@ -67,7 +71,8 @@ async def create_workflow_with_projects(
         workflow.analyze_project_id = analyze_project.id
         workflow.analyze_status = WorkflowStageStatus.CONFIGURED
         workflow.analyze_tech_stack = json.dumps(workflow_data.analyze_tech_stack or [])
-        workflow.analyze_agents = json.dumps(workflow_data.analyze_agents or [])
+        workflow.analyze_agent_package_id = workflow_data.analyze_agent_package_id
+        workflow.analyze_prompt_template_id = workflow_data.analyze_prompt_template_id
     elif workflow_data.analyze_skip:
         workflow.analyze_status = WorkflowStageStatus.SKIPPED
 
@@ -86,7 +91,8 @@ async def create_workflow_with_projects(
     workflow.white_project_id = white_project.id
     workflow.white_status = WorkflowStageStatus.CONFIGURED
     workflow.white_tech_stack = json.dumps(workflow_data.white_tech_stack)
-    workflow.white_agents = json.dumps(workflow_data.white_agents)
+    workflow.white_agent_package_id = workflow_data.white_agent_package_id
+    workflow.white_prompt_template_id = workflow_data.white_prompt_template_id
 
     if not workflow_data.black_skip and black_zip_path:
         black_project = Project(
@@ -101,7 +107,8 @@ async def create_workflow_with_projects(
         workflow.black_project_id = black_project.id
         workflow.black_status = WorkflowStageStatus.CONFIGURED
         workflow.black_tech_stack = json.dumps(workflow_data.black_tech_stack or [])
-        workflow.black_agents = json.dumps(workflow_data.black_agents or [])
+        workflow.black_agent_package_id = workflow_data.black_agent_package_id
+        workflow.black_prompt_template_id = workflow_data.black_prompt_template_id
     elif workflow_data.black_skip:
         workflow.black_status = WorkflowStageStatus.SKIPPED
 
@@ -153,22 +160,22 @@ async def update_workflow(
         workflow.analyze_tech_stack = json.dumps(update_data.analyze_tech_stack)
         if workflow.analyze_status == WorkflowStageStatus.COMPLETED:
             workflow.analyze_status = WorkflowStageStatus.CONFIGURED
-    if update_data.analyze_agents is not None:
-        workflow.analyze_agents = json.dumps(update_data.analyze_agents)
+    if update_data.analyze_agent_package_id is not None:
+        workflow.analyze_agent_package_id = update_data.analyze_agent_package_id
 
     if update_data.white_tech_stack is not None:
         workflow.white_tech_stack = json.dumps(update_data.white_tech_stack)
         if workflow.white_status == WorkflowStageStatus.COMPLETED:
             workflow.white_status = WorkflowStageStatus.CONFIGURED
-    if update_data.white_agents is not None:
-        workflow.white_agents = json.dumps(update_data.white_agents)
+    if update_data.white_agent_package_id is not None:
+        workflow.white_agent_package_id = update_data.white_agent_package_id
 
     if update_data.black_tech_stack is not None:
         workflow.black_tech_stack = json.dumps(update_data.black_tech_stack)
         if workflow.black_status == WorkflowStageStatus.COMPLETED:
             workflow.black_status = WorkflowStageStatus.CONFIGURED
-    if update_data.black_agents is not None:
-        workflow.black_agents = json.dumps(update_data.black_agents)
+    if update_data.black_agent_package_id is not None:
+        workflow.black_agent_package_id = update_data.black_agent_package_id
 
     workflow.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -200,13 +207,16 @@ async def configure_stage(
     stage: str,
     config: StageConfigure,
 ) -> Workflow:
-    stage_field_prefix = stage
-    status_field = f"{stage_field_prefix}_status"
-    tech_stack_field = f"{stage_field_prefix}_tech_stack"
-    agents_field = f"{stage_field_prefix}_agents"
+    status_field = f"{stage}_status"
+    tech_stack_field = f"{stage}_tech_stack"
+    agent_package_field = f"{stage}_agent_package_id"
+    prompt_template_field = f"{stage}_prompt_template_id"
 
     setattr(workflow, tech_stack_field, json.dumps(config.tech_stack))
-    setattr(workflow, agents_field, json.dumps(config.agents))
+    if config.agent_package_id:
+        setattr(workflow, agent_package_field, config.agent_package_id)
+    if config.prompt_template_id:
+        setattr(workflow, prompt_template_field, config.prompt_template_id)
 
     current_status = getattr(workflow, status_field)
     if current_status == WorkflowStageStatus.NOT_CONFIGURED:
@@ -467,19 +477,22 @@ def workflow_to_response(workflow: Workflow, vuln_stats: Optional[Dict] = None) 
         analyze_status=workflow.analyze_status,
         analyze_project_id=workflow.analyze_project_id,
         analyze_tech_stack=json.loads(workflow.analyze_tech_stack or "[]"),
-        analyze_agents=json.loads(workflow.analyze_agents or "[]"),
+        analyze_agent_package_id=workflow.analyze_agent_package_id,
+        analyze_prompt_template_id=workflow.analyze_prompt_template_id,
         analyze_started_at=workflow.analyze_started_at,
         analyze_completed_at=workflow.analyze_completed_at,
         white_status=workflow.white_status,
         white_project_id=workflow.white_project_id,
         white_tech_stack=json.loads(workflow.white_tech_stack or "[]"),
-        white_agents=json.loads(workflow.white_agents or "[]"),
+        white_agent_package_id=workflow.white_agent_package_id,
+        white_prompt_template_id=workflow.white_prompt_template_id,
         white_started_at=workflow.white_started_at,
         white_completed_at=workflow.white_completed_at,
         black_status=workflow.black_status,
         black_project_id=workflow.black_project_id,
         black_tech_stack=json.loads(workflow.black_tech_stack or "[]"),
-        black_agents=json.loads(workflow.black_agents or "[]"),
+        black_agent_package_id=workflow.black_agent_package_id,
+        black_prompt_template_id=workflow.black_prompt_template_id,
         black_started_at=workflow.black_started_at,
         black_completed_at=workflow.black_completed_at,
         created_at=workflow.created_at,
@@ -490,3 +503,84 @@ def workflow_to_response(workflow: Workflow, vuln_stats: Optional[Dict] = None) 
         if vuln_stats
         else 0,
     )
+
+
+async def get_available_resources_for_stage(
+    db: AsyncSession,
+    category: str,
+    user_id: str,
+) -> Dict[str, Any]:
+    valid_categories = ["ANALYZE", "WHITE", "BLACK"]
+    if category not in valid_categories:
+        raise ValueError(f"Invalid category: {category}")
+
+    agent_packages_result = await db.execute(
+        select(Agent)
+        .options(selectinload(Agent.package_agents), selectinload(Agent.package_skills))
+        .where(
+            or_(
+                Agent.category == category,
+                Agent.category == AgentCategory.OTHER,
+            )
+        )
+        .where(
+            or_(
+                Agent.is_public == True,
+                Agent.created_by == user_id,
+            )
+        )
+        .order_by(Agent.created_at.desc())
+    )
+    agent_packages = agent_packages_result.scalars().all()
+
+    category_skills_result = await db.execute(
+        select(OpenCodeSkill)
+        .where(OpenCodeSkill.category == category)
+        .where(OpenCodeSkill.is_active == True)
+        .where(
+            or_(
+                OpenCodeSkill.is_public == True,
+                OpenCodeSkill.created_by == user_id,
+            )
+        )
+        .order_by(OpenCodeSkill.created_at.desc())
+    )
+    category_skills = category_skills_result.scalars().all()
+
+    other_skills_result = await db.execute(
+        select(OpenCodeSkill)
+        .where(OpenCodeSkill.category == "OTHER")
+        .where(OpenCodeSkill.is_active == True)
+        .where(
+            or_(
+                OpenCodeSkill.is_public == True,
+                OpenCodeSkill.created_by == user_id,
+            )
+        )
+        .order_by(OpenCodeSkill.created_at.desc())
+    )
+    other_skills = other_skills_result.scalars().all()
+
+    prompts_result = await db.execute(
+        select(PromptTemplate)
+        .where(PromptTemplate.is_active == True)
+        .order_by(PromptTemplate.is_default.desc(), PromptTemplate.sort_order.asc())
+    )
+    prompt_templates = prompts_result.scalars().all()
+
+    return {
+        "agent_packages": [pkg.to_dict() for pkg in agent_packages],
+        "category_skills": [skill.to_dict() for skill in category_skills],
+        "other_skills": [skill.to_dict() for skill in other_skills],
+        "prompt_templates": [
+            {
+                "id": pt.id,
+                "name": pt.name,
+                "description": pt.description,
+                "template_type": pt.template_type,
+                "is_default": pt.is_default,
+                "is_system": pt.is_system,
+            }
+            for pt in prompt_templates
+        ],
+    }

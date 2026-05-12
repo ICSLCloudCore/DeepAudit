@@ -17,6 +17,7 @@ from app.schemas.workflow import (
     WorkflowVulnerabilityStats,
     StageConfigure,
     WorkflowListResponse,
+    AvailableResourcesResponse,
 )
 from app.services.workflow.workflow_service import (
     create_workflow_with_projects,
@@ -31,6 +32,7 @@ from app.services.workflow.workflow_service import (
     get_dashboard_stats,
     get_workflow_vulnerability_stats,
     workflow_to_response,
+    get_available_resources_for_stage,
 )
 from app.utils.log import logger
 
@@ -64,13 +66,16 @@ async def create_workflow(
     description: str = Form(None),
     analyze_skip: bool = Form(False),
     analyze_tech_stack: str = Form(None),
-    analyze_agents: str = Form(None),
+    analyze_agent_package_id: str = Form(None),
+    analyze_prompt_template_id: str = Form(None),
     white_zip: UploadFile = File(...),
     white_tech_stack: str = Form(...),
-    white_agents: str = Form(...),
+    white_agent_package_id: str = Form(None),
+    white_prompt_template_id: str = Form(None),
     black_skip: bool = Form(False),
     black_tech_stack: str = Form(None),
-    black_agents: str = Form(None),
+    black_agent_package_id: str = Form(None),
+    black_prompt_template_id: str = Form(None),
     black_zip: UploadFile = File(None),
     analyze_zip: UploadFile = File(None),
     current_user: User = Depends(deps.get_current_user),
@@ -80,12 +85,15 @@ async def create_workflow(
         description=description,
         analyze_skip=analyze_skip,
         analyze_tech_stack=json.loads(analyze_tech_stack or "[]"),
-        analyze_agents=json.loads(analyze_agents or "[]"),
+        analyze_agent_package_id=analyze_agent_package_id,
+        analyze_prompt_template_id=analyze_prompt_template_id,
         white_tech_stack=json.loads(white_tech_stack),
-        white_agents=json.loads(white_agents),
+        white_agent_package_id=white_agent_package_id,
+        white_prompt_template_id=white_prompt_template_id,
         black_skip=black_skip,
         black_tech_stack=json.loads(black_tech_stack or "[]"),
-        black_agents=json.loads(black_agents or "[]"),
+        black_agent_package_id=black_agent_package_id,
+        black_prompt_template_id=black_prompt_template_id,
     )
 
     white_temp_path = None
@@ -134,6 +142,18 @@ async def get_stats(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     return await get_dashboard_stats(db, current_user.id)
+
+
+@router.get("/available-resources", response_model=AvailableResourcesResponse)
+async def get_available_resources(
+    category: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    if category not in ["ANALYZE", "WHITE", "BLACK"]:
+        raise HTTPException(status_code=400, detail="无效的阶段类型，必须是 ANALYZE/WHITE/BLACK")
+
+    return await get_available_resources_for_stage(db, category, current_user.id)
 
 
 @router.get("/{id}", response_model=WorkflowResponse)

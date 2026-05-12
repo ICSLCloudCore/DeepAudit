@@ -19,21 +19,24 @@ export interface Workflow {
   analyze_status: WorkflowStageStatus;
   analyze_project_id?: string;
   analyze_tech_stack?: string[];
-  analyze_agents?: string[];
+  analyze_agent_package_id?: string;
+  analyze_prompt_template_id?: string;
   analyze_started_at?: string;
   analyze_completed_at?: string;
   
   white_status: WorkflowStageStatus;
   white_project_id?: string;
   white_tech_stack?: string[];
-  white_agents?: string[];
+  white_agent_package_id?: string;
+  white_prompt_template_id?: string;
   white_started_at?: string;
   white_completed_at?: string;
   
   black_status: WorkflowStageStatus;
   black_project_id?: string;
   black_tech_stack?: string[];
-  black_agents?: string[];
+  black_agent_package_id?: string;
+  black_prompt_template_id?: string;
   black_started_at?: string;
   black_completed_at?: string;
   
@@ -70,20 +73,63 @@ export interface WorkflowVulnerabilityStats {
   }>;
 }
 
+export interface AgentPackage {
+  id: string;
+  name: string;
+  author?: string;
+  version: string;
+  description?: string;
+  category: string;
+  agents_count: number;
+  skills_count: number;
+  is_public: boolean;
+  package_agents?: Array<{ id: string; name: string }>;
+  package_skills?: Array<{ id: string; name: string; version: string; description?: string }>;
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  author?: string;
+  category: string;
+  is_public: boolean;
+}
+
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  template_type: string;
+  is_default: boolean;
+  is_system: boolean;
+}
+
+export interface AvailableResourcesResponse {
+  agent_packages: AgentPackage[];
+  category_skills: Skill[];
+  other_skills: Skill[];
+  prompt_templates: PromptTemplate[];
+}
+
 export interface CreateWorkflowForm {
   name: string;
   description?: string;
   
   analyze_skip?: boolean;
   analyze_tech_stack?: string[];
-  analyze_agents?: string[];
+  analyze_agent_package_id?: string;
+  analyze_prompt_template_id?: string;
   
   white_tech_stack: string[];
-  white_agents: string[];
+  white_agent_package_id?: string;
+  white_prompt_template_id?: string;
   
   black_skip?: boolean;
   black_tech_stack?: string[];
-  black_agents?: string[];
+  black_agent_package_id?: string;
+  black_prompt_template_id?: string;
 }
 
 export interface WorkflowListResponse {

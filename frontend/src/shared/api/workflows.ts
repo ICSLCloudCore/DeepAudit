@@ -4,7 +4,7 @@ import type {
   WorkflowDashboardStats,
   WorkflowVulnerabilityStats,
   WorkflowListResponse,
-  CreateWorkflowForm,
+  AvailableResourcesResponse,
 } from "@/shared/types/workflow";
 
 export async function getWorkflows(): Promise<WorkflowListResponse> {
@@ -33,7 +33,16 @@ export async function getWorkflow(workflowId: string): Promise<Workflow> {
 
 export async function updateWorkflow(
   workflowId: string,
-  data: Partial<CreateWorkflowForm>
+  data: Partial<{
+    name: string;
+    description: string;
+    analyze_tech_stack: string[];
+    analyze_agent_package_id: string;
+    white_tech_stack: string[];
+    white_agent_package_id: string;
+    black_tech_stack: string[];
+    black_agent_package_id: string;
+  }>
 ): Promise<Workflow> {
   const response = await apiClient.put(`/workflows/${workflowId}`, data);
   return response.data;
@@ -62,7 +71,7 @@ export async function startWorkflowStage(
 export async function configureWorkflowStage(
   workflowId: string,
   stage: "analyze" | "white" | "black",
-  config: { tech_stack: string[]; agents: string[] }
+  config: { tech_stack: string[]; agent_package_id?: string; prompt_template_id?: string }
 ): Promise<Workflow> {
   const response = await apiClient.post(`/workflows/${workflowId}/configure/${stage}`, config);
   return response.data;
@@ -81,5 +90,12 @@ export async function unskipWorkflowStage(
   stage: "analyze" | "black"
 ): Promise<Workflow> {
   const response = await apiClient.post(`/workflows/${workflowId}/unskip/${stage}`);
+  return response.data;
+}
+
+export async function getAvailableResources(
+  category: "ANALYZE" | "WHITE" | "BLACK"
+): Promise<AvailableResourcesResponse> {
+  const response = await apiClient.get(`/workflows/available-resources?category=${category}`);
   return response.data;
 }

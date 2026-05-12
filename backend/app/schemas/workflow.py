@@ -20,14 +20,17 @@ class WorkflowBase(BaseModel):
 class WorkflowCreate(WorkflowBase):
     analyze_skip: Optional[bool] = False
     analyze_tech_stack: Optional[List[str]] = None
-    analyze_agents: Optional[List[str]] = None
+    analyze_agent_package_id: Optional[str] = None
+    analyze_prompt_template_id: Optional[str] = None
 
     white_tech_stack: List[str]
-    white_agents: List[str]
+    white_agent_package_id: Optional[str] = None
+    white_prompt_template_id: Optional[str] = None
 
     black_skip: Optional[bool] = False
     black_tech_stack: Optional[List[str]] = None
-    black_agents: Optional[List[str]] = None
+    black_agent_package_id: Optional[str] = None
+    black_prompt_template_id: Optional[str] = None
 
 
 class WorkflowUpdate(BaseModel):
@@ -35,18 +38,26 @@ class WorkflowUpdate(BaseModel):
     description: Optional[str] = None
 
     analyze_tech_stack: Optional[List[str]] = None
-    analyze_agents: Optional[List[str]] = None
+    analyze_agent_package_id: Optional[str] = None
 
     white_tech_stack: Optional[List[str]] = None
-    white_agents: Optional[List[str]] = None
+    white_agent_package_id: Optional[str] = None
 
     black_tech_stack: Optional[List[str]] = None
-    black_agents: Optional[List[str]] = None
+    black_agent_package_id: Optional[str] = None
 
 
 class StageConfigure(BaseModel):
     tech_stack: List[str]
-    agents: List[str]
+    agent_package_id: Optional[str] = None
+    prompt_template_id: Optional[str] = None
+
+
+class AvailableResourcesResponse(BaseModel):
+    agent_packages: List[Dict[str, Any]]
+    category_skills: List[Dict[str, Any]]
+    other_skills: List[Dict[str, Any]]
+    prompt_templates: List[Dict[str, Any]]
 
 
 class WorkflowResponse(BaseModel):
@@ -61,21 +72,24 @@ class WorkflowResponse(BaseModel):
     analyze_status: str
     analyze_project_id: Optional[str] = None
     analyze_tech_stack: Optional[List[str]] = None
-    analyze_agents: Optional[List[str]] = None
+    analyze_agent_package_id: Optional[str] = None
+    analyze_prompt_template_id: Optional[str] = None
     analyze_started_at: Optional[datetime] = None
     analyze_completed_at: Optional[datetime] = None
 
     white_status: str
     white_project_id: Optional[str] = None
     white_tech_stack: Optional[List[str]] = None
-    white_agents: Optional[List[str]] = None
+    white_agent_package_id: Optional[str] = None
+    white_prompt_template_id: Optional[str] = None
     white_started_at: Optional[datetime] = None
     white_completed_at: Optional[datetime] = None
 
     black_status: str
     black_project_id: Optional[str] = None
     black_tech_stack: Optional[List[str]] = None
-    black_agents: Optional[List[str]] = None
+    black_agent_package_id: Optional[str] = None
+    black_prompt_template_id: Optional[str] = None
     black_started_at: Optional[datetime] = None
     black_completed_at: Optional[datetime] = None
 

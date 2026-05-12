@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, Package2, BookOpen, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { createWorkflow } from "@/shared/api/workflows";
+import { createWorkflow, getAvailableResources } from "@/shared/api/workflows";
+import type { AvailableResourcesResponse, Skill, PromptTemplate } from "@/shared/types/workflow";
 import {
   ANALYZE_TECH_STACK_OPTIONS,
   WHITE_TECH_STACK_OPTIONS,
@@ -24,26 +33,91 @@ interface CreateWorkflowDialogProps {
   onSuccess: () => void;
 }
 
+interface StageResources {
+  agent_packages: AvailableResourcesResponse["agent_packages"];
+  category_skills: Skill[];
+  other_skills: Skill[];
+  prompt_templates: PromptTemplate[];
+}
+
+function SkillCard({ skill, highlight }: { skill: Skill; highlight?: boolean }) {
+  return (
+    <div
+      className={`p-2 border rounded ${
+        highlight ? "bg-primary/10 border-primary/50" : "bg-muted/30 border-border"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-sm font-bold">{skill.name}</span>
+        <span className="text-xs text-muted-foreground">
+          v{skill.version} {highlight && `[${skill.category}]`}
+        </span>
+      </div>
+      {skill.description && (
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{skill.description}</p>
+      )}
+    </div>
+  );
+}
+
 export default function CreateWorkflowDialog({ open, onClose, onSuccess }: CreateWorkflowDialogProps) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
   
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   
   const [analyzeSkip, setAnalyzeSkip] = useState(false);
   const [analyzeTechStack, setAnalyzeTechStack] = useState<string[]>([]);
-  const [analyzeAgents, setAnalyzeAgents] = useState<string[]>([]);
   const [analyzeZip, setAnalyzeZip] = useState<File | null>(null);
+  const [analyzeAgentPackageId, setAnalyzeAgentPackageId] = useState<string | null>(null);
+  const [analyzePromptId, setAnalyzePromptId] = useState<string | null>(null);
+  const [analyzeResources, setAnalyzeResources] = useState<StageResources | null>(null);
   
   const [whiteTechStack, setWhiteTechStack] = useState<string[]>([]);
   const [whiteAgents, setWhiteAgents] = useState<string[]>([]);
   const [whiteZip, setWhiteZip] = useState<File | null>(null);
+  const [whiteAgentPackageId, setWhiteAgentPackageId] = useState<string | null>(null);
+  const [whitePromptId, setWhitePromptId] = useState<string | null>(null);
+  const [whiteResources, setWhiteResources] = useState<StageResources | null>(null);
   
   const [blackSkip, setBlackSkip] = useState(false);
   const [blackTechStack, setBlackTechStack] = useState<string[]>([]);
-  const [blackAgents, setBlackAgents] = useState<string[]>([]);
   const [blackZip, setBlackZip] = useState<File | null>(null);
+  const [blackAgentPackageId, setBlackAgentPackageId] = useState<string | null>(null);
+  const [blackPromptId, setBlackPromptId] = useState<string | null>(null);
+  const [blackResources, setBlackResources] = useState<StageResources | null>(null);
+
+  const loadResources = async (category: "ANALYZE" | "WHITE" | "BLACK", setter: (r: StageResources) => void) => {
+    setResourcesLoading(true);
+    try {
+      const res = await getAvailableResources(category);
+      setter(res);
+    } catch (error) {
+      toast.error("加载资源失败");
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (step === 2 && !analyzeSkip && !analyzeResources) {
+      loadResources("ANALYZE", setAnalyzeResources);
+    }
+  }, [step, analyzeSkip]);
+
+  useEffect(() => {
+    if (step === 3 && !whiteResources) {
+      loadResources("WHITE", setWhiteResources);
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (step === 4 && !blackSkip && !blackResources) {
+      loadResources("BLACK", setBlackResources);
+    }
+  }, [step, blackSkip]);
 
   const resetForm = () => {
     setStep(1);
@@ -51,15 +125,22 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
     setDescription("");
     setAnalyzeSkip(false);
     setAnalyzeTechStack([]);
-    setAnalyzeAgents([]);
     setAnalyzeZip(null);
+    setAnalyzeAgentPackageId(null);
+    setAnalyzePromptId(null);
+    setAnalyzeResources(null);
     setWhiteTechStack([]);
     setWhiteAgents([]);
     setWhiteZip(null);
+    setWhiteAgentPackageId(null);
+    setWhitePromptId(null);
+    setWhiteResources(null);
     setBlackSkip(false);
     setBlackTechStack([]);
-    setBlackAgents([]);
     setBlackZip(null);
+    setBlackAgentPackageId(null);
+    setBlackPromptId(null);
+    setBlackResources(null);
   };
 
   const handleSubmit = async () => {
@@ -75,10 +156,6 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
       toast.error("请选择白盒分析技术栈");
       return;
     }
-    if (whiteAgents.length === 0) {
-      toast.error("请选择白盒分析Agent");
-      return;
-    }
 
     setLoading(true);
     try {
@@ -88,16 +165,19 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
       
       formData.append("analyze_skip", String(analyzeSkip));
       formData.append("analyze_tech_stack", JSON.stringify(analyzeTechStack));
-      formData.append("analyze_agents", JSON.stringify(analyzeAgents));
+      if (analyzeAgentPackageId) formData.append("analyze_agent_package_id", analyzeAgentPackageId);
+      if (analyzePromptId) formData.append("analyze_prompt_template_id", analyzePromptId);
       if (analyzeZip) formData.append("analyze_zip", analyzeZip);
       
       formData.append("white_zip", whiteZip);
       formData.append("white_tech_stack", JSON.stringify(whiteTechStack));
-      formData.append("white_agents", JSON.stringify(whiteAgents));
+      if (whiteAgentPackageId) formData.append("white_agent_package_id", whiteAgentPackageId);
+      if (whitePromptId) formData.append("white_prompt_template_id", whitePromptId);
       
       formData.append("black_skip", String(blackSkip));
       formData.append("black_tech_stack", JSON.stringify(blackTechStack));
-      formData.append("black_agents", JSON.stringify(blackAgents));
+      if (blackAgentPackageId) formData.append("black_agent_package_id", blackAgentPackageId);
+      if (blackPromptId) formData.append("black_prompt_template_id", blackPromptId);
       if (blackZip) formData.append("black_zip", blackZip);
 
       await createWorkflow(formData);
@@ -117,9 +197,171 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
     onClose();
   };
 
+  const renderStageUI = (
+    stage: "analyze" | "white" | "black",
+    techStackOptions: string[],
+    techStack: string[],
+    setTechStack: (v: string[]) => void,
+    zipFile: File | null,
+    setZipFile: (f: File | null) => void,
+    agentPackageId: string | null,
+    setAgentPackageId: (v: string | null) => void,
+    promptId: string | null,
+    setPromptId: (v: string | null) => void,
+    resources: StageResources | null,
+    skip?: boolean,
+    setSkip?: (v: boolean) => void,
+    required?: boolean
+  ) => (
+    <div className="space-y-4">
+      {skip !== undefined && setSkip && (
+        <div className="flex items-center gap-2">
+          <Checkbox id={`${stage}Skip`} checked={skip} onCheckedChange={(v) => setSkip(v as boolean)} />
+          <Label htmlFor={`${stage}Skip`}>跳过此阶段</Label>
+        </div>
+      )}
+      
+      {(skip === undefined || !skip) && (
+        <>
+          <div>
+            <Label htmlFor={`${stage}Zip`}>上传ZIP包{required && " *"}</Label>
+            <Input
+              id={`${stage}Zip`}
+              type="file"
+              accept=".zip"
+              onChange={(e) => setZipFile(e.target.files?.[0] || null)}
+            />
+            {zipFile && <p className="text-sm text-muted-foreground mt-1">{zipFile.name}</p>}
+          </div>
+
+          <div>
+            <Label>技术栈{required && " *"}</Label>
+            <div className="flex gap-2 mt-1 flex-wrap">
+              {techStackOptions.map((opt) => (
+                <Button
+                  key={opt}
+                  size="sm"
+                  variant={techStack.includes(opt) ? "default" : "outline"}
+                  onClick={() => {
+                    setTechStack(
+                      techStack.includes(opt)
+                        ? techStack.filter((t) => t !== opt)
+                        : [...techStack, opt]
+                    );
+                  }}
+                >
+                  {opt}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {resourcesLoading ? (
+            <div className="flex items-center gap-2 p-3 border border-border rounded bg-muted/50">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span className="text-sm font-mono text-muted-foreground">加载资源...</span>
+            </div>
+          ) : resources && (
+            <>
+              <div>
+                <Label className="text-xs font-mono font-bold uppercase text-muted-foreground flex items-center gap-1">
+                  <Package2 className="w-4 h-4 text-primary" />
+                  Agent 包{!required && "（可选）"}
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  选择与阶段类型匹配的 Agent 包
+                </p>
+                <Select
+                  value={agentPackageId || "__none__"}
+                  onValueChange={(v) => setAgentPackageId(v === "__none__" ? null : v)}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="不使用 Agent 包" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">不使用 Agent 包</SelectItem>
+                    {resources.agent_packages.map((pkg) => (
+                      <SelectItem key={pkg.id} value={pkg.id}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{pkg.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            v{pkg.version} · {pkg.agents_count} Agents · {pkg.skills_count} Skills
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs font-mono font-bold uppercase text-muted-foreground flex items-center gap-1">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  阶段专属 Skill
+                </Label>
+                <div className="mt-2 grid grid-cols-1 gap-2 max-h-32 overflow-y-auto">
+                  {resources.category_skills.length > 0 ? (
+                    resources.category_skills.map((skill) => (
+                      <SkillCard key={skill.id} skill={skill} highlight />
+                    ))
+                  ) : (
+                    <div className="p-2 border border-border rounded bg-muted/30 text-center">
+                      <p className="text-xs text-muted-foreground font-mono">暂无阶段专属 Skill</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-mono font-bold uppercase text-muted-foreground flex items-center gap-1">
+                  <BookOpen className="w-4 h-4 text-muted-foreground" />
+                  通用 Skill (OTHER)
+                </Label>
+                <div className="mt-2 grid grid-cols-1 gap-2 max-h-32 overflow-y-auto">
+                  {resources.other_skills.length > 0 ? (
+                    resources.other_skills.map((skill) => (
+                      <SkillCard key={skill.id} skill={skill} />
+                    ))
+                  ) : (
+                    <div className="p-2 border border-border rounded bg-muted/30 text-center">
+                      <p className="text-xs text-muted-foreground font-mono">暂无通用 Skill</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-mono font-bold uppercase text-muted-foreground flex items-center gap-1">
+                  <FileText className="w-4 h-4 text-primary" />
+                  提示词模板{!required && "（可选）"}
+                </Label>
+                <Select
+                  value={promptId || "__default__"}
+                  onValueChange={(v) => setPromptId(v === "__default__" ? null : v)}
+                >
+                  <SelectTrigger className="h-10 mt-2">
+                    <SelectValue placeholder="使用默认模板" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default__">使用默认模板</SelectItem>
+                    {resources.prompt_templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name} {t.is_default && "(默认)"} {t.is_system && "(系统)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
         <DialogHeader>
           <DialogTitle style={{ color: "var(--cyber-text)" }}>
             创建工作流 - 步骤 {step}/4
@@ -139,155 +381,55 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
           </div>
         )}
 
-        {step === 2 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Checkbox id="analyzeSkip" checked={analyzeSkip} onCheckedChange={(v) => setAnalyzeSkip(v as boolean)} />
-              <Label htmlFor="analyzeSkip">跳过此阶段</Label>
-            </div>
-            {!analyzeSkip && (
-              <>
-                <div>
-                  <Label htmlFor="analyzeZip">上传ZIP包</Label>
-                  <Input
-                    id="analyzeZip"
-                    type="file"
-                    accept=".zip"
-                    onChange={(e) => setAnalyzeZip(e.target.files?.[0] || null)}
-                  />
-                  {analyzeZip && <p className="text-sm text-muted-foreground mt-1">{analyzeZip.name}</p>}
-                </div>
-                <div>
-                  <Label>技术栈</Label>
-                  <div className="flex gap-2 mt-1">
-                    {ANALYZE_TECH_STACK_OPTIONS.map((opt) => (
-                      <Button
-                        key={opt}
-                        size="sm"
-                        variant={analyzeTechStack.includes(opt) ? "default" : "outline"}
-                        onClick={() => {
-                          setAnalyzeTechStack(
-                            analyzeTechStack.includes(opt)
-                              ? analyzeTechStack.filter((t) => t !== opt)
-                              : [...analyzeTechStack, opt]
-                          );
-                        }}
-                      >
-                        {opt}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="analyzeAgents">Agent包</Label>
-                  <Input
-                    id="analyzeAgents"
-                    value={analyzeAgents.join(",")}
-                    onChange={(e) => setAnalyzeAgents(e.target.value.split(",").filter(Boolean))}
-                    placeholder="输入Agent ID，逗号分隔"
-                  />
-                </div>
-              </>
-            )}
-          </div>
+        {step === 2 && renderStageUI(
+          "analyze",
+          ANALYZE_TECH_STACK_OPTIONS,
+          analyzeTechStack,
+          setAnalyzeTechStack,
+          analyzeZip,
+          setAnalyzeZip,
+          analyzeAgentPackageId,
+          setAnalyzeAgentPackageId,
+          analyzePromptId,
+          setAnalyzePromptId,
+          analyzeResources,
+          analyzeSkip,
+          setAnalyzeSkip,
+          false
         )}
 
-        {step === 3 && (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="whiteZip">上传ZIP包 *</Label>
-              <Input
-                id="whiteZip"
-                type="file"
-                accept=".zip"
-                onChange={(e) => setWhiteZip(e.target.files?.[0] || null)}
-              />
-              {whiteZip && <p className="text-sm text-muted-foreground mt-1">{whiteZip.name}</p>}
-            </div>
-            <div>
-              <Label>技术栈 *</Label>
-              <div className="flex gap-2 mt-1">
-                {WHITE_TECH_STACK_OPTIONS.map((opt) => (
-                  <Button
-                    key={opt}
-                    size="sm"
-                    variant={whiteTechStack.includes(opt) ? "default" : "outline"}
-                    onClick={() => {
-                      setWhiteTechStack(
-                        whiteTechStack.includes(opt)
-                          ? whiteTechStack.filter((t) => t !== opt)
-                          : [...whiteTechStack, opt]
-                      );
-                    }}
-                  >
-                    {opt}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="whiteAgents">Agent包 *</Label>
-              <Input
-                id="whiteAgents"
-                value={whiteAgents.join(",")}
-                onChange={(e) => setWhiteAgents(e.target.value.split(",").filter(Boolean))}
-                placeholder="输入Agent ID，逗号分隔"
-              />
-            </div>
-          </div>
+        {step === 3 && renderStageUI(
+          "white",
+          WHITE_TECH_STACK_OPTIONS,
+          whiteTechStack,
+          setWhiteTechStack,
+          whiteZip,
+          setWhiteZip,
+          whiteAgentPackageId,
+          setWhiteAgentPackageId,
+          whitePromptId,
+          setWhitePromptId,
+          whiteResources,
+          undefined,
+          undefined,
+          true
         )}
 
-        {step === 4 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Checkbox id="blackSkip" checked={blackSkip} onCheckedChange={(v) => setBlackSkip(v as boolean)} />
-              <Label htmlFor="blackSkip">跳过此阶段</Label>
-            </div>
-            {!blackSkip && (
-              <>
-                <div>
-                  <Label htmlFor="blackZip">上传ZIP包</Label>
-                  <Input
-                    id="blackZip"
-                    type="file"
-                    accept=".zip"
-                    onChange={(e) => setBlackZip(e.target.files?.[0] || null)}
-                  />
-                  {blackZip && <p className="text-sm text-muted-foreground mt-1">{blackZip.name}</p>}
-                </div>
-                <div>
-                  <Label>技术栈</Label>
-                  <div className="flex gap-2 mt-1 flex-wrap">
-                    {BLACK_TECH_STACK_OPTIONS.map((opt) => (
-                      <Button
-                        key={opt}
-                        size="sm"
-                        variant={blackTechStack.includes(opt) ? "default" : "outline"}
-                        onClick={() => {
-                          setBlackTechStack(
-                            blackTechStack.includes(opt)
-                              ? blackTechStack.filter((t) => t !== opt)
-                              : [...blackTechStack, opt]
-                          );
-                        }}
-                      >
-                        {opt}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="blackAgents">Agent包</Label>
-                  <Input
-                    id="blackAgents"
-                    value={blackAgents.join(",")}
-                    onChange={(e) => setBlackAgents(e.target.value.split(",").filter(Boolean))}
-                    placeholder="输入Agent ID，逗号分隔"
-                  />
-                </div>
-              </>
-            )}
-          </div>
+        {step === 4 && renderStageUI(
+          "black",
+          BLACK_TECH_STACK_OPTIONS,
+          blackTechStack,
+          setBlackTechStack,
+          blackZip,
+          setBlackZip,
+          blackAgentPackageId,
+          setBlackAgentPackageId,
+          blackPromptId,
+          setBlackPromptId,
+          blackResources,
+          blackSkip,
+          setBlackSkip,
+          false
         )}
 
         <DialogFooter>
@@ -297,7 +439,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
             </Button>
           )}
           {step < 4 ? (
-            <Button onClick={() => setStep(step + 1)} disabled={loading}>
+            <Button onClick={() => setStep(step + 1)} disabled={loading || resourcesLoading}>
               下一步
             </Button>
           ) : (
