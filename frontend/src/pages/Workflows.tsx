@@ -97,10 +97,10 @@ export default function Workflows() {
           </h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="cyber-btn-outline">
+          <Button variant="outline" onClick={loadData} disabled={loading} className="cyber-btn-outline h-10">
             <RefreshCw className="w-4 h-4 mr-1" /> 刷新
           </Button>
-          <Button size="sm" onClick={() => setCreateDialogOpen(true)} className="cyber-btn-primary">
+          <Button onClick={() => setCreateDialogOpen(true)} className="cyber-btn-primary h-10">
             <Plus className="w-4 h-4 mr-1" /> 新建工作流
           </Button>
         </div>

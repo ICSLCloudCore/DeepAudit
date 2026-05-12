@@ -24,8 +24,6 @@ export default function WorkflowStats({ stats }: WorkflowStatsProps) {
     ([name, value]) => ({ name, value })
   );
 
-  const hasPieData = analyzeData.length > 0 || whiteData.length > 0 || blackData.length > 0;
-
   return (
     <>
       {/* Stats Cards */}
@@ -95,124 +93,152 @@ export default function WorkflowStats({ stats }: WorkflowStatsProps) {
         </div>
       </div>
 
-      {/* Charts Section */}
-      {hasPieData && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative z-10">
-          {analyzeData.length > 0 && (
-            <div className="cyber-card p-4">
-              <div className="section-header">
-                <Zap className="w-5 h-5 text-violet-400" />
-                <h3 className="section-title">威胁分析技术栈</h3>
-              </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={analyzeData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={70}
-                    dataKey="value"
-                    stroke="var(--cyber-bg)"
-                    strokeWidth={2}
-                  >
-                    {analyzeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--cyber-bg-elevated)',
-                      border: '1px solid var(--cyber-border)',
-                      borderRadius: '4px',
-                      fontFamily: 'monospace',
-                      fontSize: '12px',
-                      color: 'var(--cyber-text)'
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {whiteData.length > 0 && (
-            <div className="cyber-card p-4">
-              <div className="section-header">
-                <Code className="w-5 h-5 text-primary" />
-                <h3 className="section-title">白盒分析技术栈</h3>
-              </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={whiteData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={70}
-                    dataKey="value"
-                    stroke="var(--cyber-bg)"
-                    strokeWidth={2}
-                  >
-                    {whiteData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--cyber-bg-elevated)',
-                      border: '1px solid var(--cyber-border)',
-                      borderRadius: '4px',
-                      fontFamily: 'monospace',
-                      fontSize: '12px',
-                      color: 'var(--cyber-text)'
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {blackData.length > 0 && (
-            <div className="cyber-card p-4">
-              <div className="section-header">
-                <Lock className="w-5 h-5 text-amber-400" />
-                <h3 className="section-title">黑盒分析技术栈</h3>
-              </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={blackData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={70}
-                    dataKey="value"
-                    stroke="var(--cyber-bg)"
-                    strokeWidth={2}
-                  >
-                    {blackData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--cyber-bg-elevated)',
-                      border: '1px solid var(--cyber-border)',
-                      borderRadius: '4px',
-                      fontFamily: 'monospace',
-                      fontSize: '12px',
-                      color: 'var(--cyber-text)'
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+      {/* Charts Section - Always show 3 cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative z-10">
+        {/* Analyze Tech Stack */}
+        <div className="cyber-card p-4">
+          <div className="section-header">
+            <Zap className="w-5 h-5 text-violet-400" />
+            <h3 className="section-title">威胁分析技术栈</h3>
+          </div>
+          {analyzeData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie
+                  data={analyzeData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={70}
+                  dataKey="value"
+                  stroke="var(--cyber-bg)"
+                  strokeWidth={2}
+                >
+                  {analyzeData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--cyber-bg-elevated)',
+                    border: '1px solid var(--cyber-border)',
+                    borderRadius: '4px',
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    color: 'var(--cyber-text)'
+                  }}
+                  wrapperStyle={{
+                    backgroundColor: 'transparent',
+                    border: 'none'
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="empty-state h-[200px]">
+              <Zap className="empty-state-icon" />
+              <p className="empty-state-description">暂无数据</p>
             </div>
           )}
         </div>
-      )}
+
+        {/* White Tech Stack */}
+        <div className="cyber-card p-4">
+          <div className="section-header">
+            <Code className="w-5 h-5 text-primary" />
+            <h3 className="section-title">白盒分析技术栈</h3>
+          </div>
+          {whiteData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie
+                  data={whiteData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={70}
+                  dataKey="value"
+                  stroke="var(--cyber-bg)"
+                  strokeWidth={2}
+                >
+                  {whiteData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--cyber-bg-elevated)',
+                    border: '1px solid var(--cyber-border)',
+                    borderRadius: '4px',
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    color: 'var(--cyber-text)'
+                  }}
+                  wrapperStyle={{
+                    backgroundColor: 'transparent',
+                    border: 'none'
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="empty-state h-[200px]">
+              <Code className="empty-state-icon" />
+              <p className="empty-state-description">暂无数据</p>
+            </div>
+          )}
+        </div>
+
+        {/* Black Tech Stack */}
+        <div className="cyber-card p-4">
+          <div className="section-header">
+            <Lock className="w-5 h-5 text-amber-400" />
+            <h3 className="section-title">黑盒分析技术栈</h3>
+          </div>
+          {blackData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie
+                  data={blackData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={70}
+                  dataKey="value"
+                  stroke="var(--cyber-bg)"
+                  strokeWidth={2}
+                >
+                  {blackData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--cyber-bg-elevated)',
+                    border: '1px solid var(--cyber-border)',
+                    borderRadius: '4px',
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    color: 'var(--cyber-text)'
+                  }}
+                  wrapperStyle={{
+                    backgroundColor: 'transparent',
+                    border: 'none'
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="empty-state h-[200px]">
+              <Lock className="empty-state-icon" />
+              <p className="empty-state-description">暂无数据</p>
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 }

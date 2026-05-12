@@ -22,13 +22,13 @@ interface WorkflowCardProps {
   onConfigure: (stage: "analyze" | "white" | "black") => void;
 }
 
-const STATUS_CONFIG: Record<string, { color: string; label: string; filled: boolean; icon?: React.ReactNode }> = {
-  completed: { color: "bg-emerald-500", label: "已完成", filled: true, icon: <CheckCircle className="w-3 h-3" /> },
-  running: { color: "bg-sky-500 animate-pulse", label: "运行中", filled: true, icon: <Clock className="w-3 h-3" /> },
-  configured: { color: "bg-gray-400", label: "已配置", filled: true },
-  not_configured: { color: "border-gray-400", label: "未配置", filled: false },
-  skipped: { color: "border-gray-400", label: "已跳过", filled: false },
-  failed: { color: "bg-red-500", label: "失败", filled: true, icon: <AlertCircle className="w-3 h-3" /> },
+const STATUS_CONFIG: Record<string, { color: string; glowColor: string; label: string; filled: boolean; icon?: React.ReactNode }> = {
+  completed: { color: "bg-emerald-500", glowColor: "#22c55e", label: "已完成", filled: true, icon: <CheckCircle className="w-3 h-3" /> },
+  running: { color: "bg-sky-500 animate-pulse", glowColor: "#0ea5e9", label: "运行中", filled: true, icon: <Clock className="w-3 h-3" /> },
+  configured: { color: "bg-gray-400", glowColor: "#9ca3af", label: "已配置", filled: true },
+  not_configured: { color: "border-gray-400", glowColor: "#9ca3af", label: "未配置", filled: false },
+  skipped: { color: "border-gray-400", glowColor: "#9ca3af", label: "已跳过", filled: false },
+  failed: { color: "bg-red-500", glowColor: "#ef4444", label: "失败", filled: true, icon: <AlertCircle className="w-3 h-3" /> },
 };
 
 function formatDate(dateStr: string | undefined) {
@@ -169,8 +169,12 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
       {/* Card Body - Pipeline */}
       <div className="p-4 flex-1 space-y-4">
         {/* Pipeline Progress */}
-        <div className="flex items-center justify-between relative">
-          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-muted -translate-y-1/2" />
+        <div className="flex items-center justify-between relative px-2">
+          {/* Gradient line with glow effect */}
+          <div className="absolute top-1/2 left-4 right-4 h-1 -translate-y-1/2 overflow-hidden rounded-full">
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/40 via-primary/60 to-amber-500/40" />
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/20 via-primary/30 to-amber-500/20 blur-sm" />
+          </div>
           
           {stages.map((stage) => {
             const config = STATUS_CONFIG[stage.status] || STATUS_CONFIG.not_configured;
@@ -181,9 +185,10 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
             return (
               <div key={stage.key} className="flex flex-col items-center z-10 group/stage">
                 <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
                     config.filled ? config.color : `border-2 ${config.color} bg-muted`
-                  } cursor-pointer hover:scale-125 transition-all`}
+                  } cursor-pointer hover:scale-125 transition-all duration-200`}
+                  style={config.filled ? { boxShadow: `0 0 10px ${config.glowColor}, 0 0 20px ${config.glowColor}40` } : {}}
                   title={`${stage.label}: ${config.label}`}
                   onClick={() => {
                     if (stage.key === "analyze" || stage.key === "white" || stage.key === "black") {
