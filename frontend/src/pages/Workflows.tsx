@@ -1,8 +1,14 @@
+/**
+ * Workflows Page
+ * Cyberpunk Terminal Aesthetic
+ */
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, RefreshCw } from "lucide-react";
+import { Plus, Search, RefreshCw, GitBranch, Terminal } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { getWorkflows, getWorkflowStats, getWorkflowVulnerabilityStats } from "@/shared/api/workflows";
 import type { Workflow, WorkflowDashboardStats, WorkflowVulnerabilityStats } from "@/shared/types/workflow";
 import WorkflowStats from "@/components/workflow/WorkflowStats";
@@ -55,7 +61,8 @@ export default function Workflows() {
     wf.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleConfigure = (stage: "analyze" | "white" | "black") => {
+  const handleConfigure = (workflow: Workflow, stage: "analyze" | "white" | "black") => {
+    setSelectedWorkflow(workflow);
     setSelectedStage(stage);
     setConfigureDialogOpen(true);
   };
@@ -65,44 +72,75 @@ export default function Workflows() {
     setEditDialogOpen(true);
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <div className="loading-spinner mx-auto" />
+          <p className="text-muted-foreground font-mono text-sm uppercase tracking-wider">加载工作流数据...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold" style={{ color: "var(--cyber-text)" }}>
-          工作流管理
-        </h1>
+    <div className="space-y-6 p-6 bg-background min-h-screen font-mono relative">
+      {/* Grid background */}
+      <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
+
+      {/* Header */}
+      <div className="flex items-center justify-between relative z-10">
+        <div className="flex items-center gap-3">
+          <GitBranch className="w-6 h-6 text-primary" />
+          <h1 className="text-2xl font-bold font-mono uppercase tracking-wider text-foreground">
+            工作流管理
+          </h1>
+        </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="cyber-btn-outline">
             <RefreshCw className="w-4 h-4 mr-1" /> 刷新
           </Button>
-          <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+          <Button size="sm" onClick={() => setCreateDialogOpen(true)} className="cyber-btn-primary">
             <Plus className="w-4 h-4 mr-1" /> 新建工作流
           </Button>
         </div>
       </div>
 
+      {/* Stats Section */}
       {stats && <WorkflowStats stats={stats} />}
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      {/* Search and Filter */}
+      <div className="cyber-card p-4 flex items-center gap-4 relative z-10">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 z-10" />
           <Input
             placeholder="搜索工作流..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="cyber-input !pl-10"
           />
         </div>
       </div>
 
-      {loading ? (
-        <div className="text-center py-8 text-muted-foreground">加载中...</div>
-      ) : filteredWorkflows.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          {searchQuery ? "未找到匹配的工作流" : "暂无工作流，点击新建创建第一个工作流"}
+      {/* Workflow List */}
+      {filteredWorkflows.length === 0 ? (
+        <div className="cyber-card p-16 text-center border-dashed relative z-10">
+          <GitBranch className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-foreground mb-2">
+            {searchQuery ? '未找到匹配项' : '暂无工作流'}
+          </h3>
+          <p className="text-muted-foreground font-mono mb-6">
+            {searchQuery ? '调整搜索参数' : '创建第一个工作流开始审计流程'}
+          </p>
+          {!searchQuery && (
+            <Button onClick={() => setCreateDialogOpen(true)} className="cyber-btn-primary">
+              <Plus className="w-4 h-4 mr-2" />
+              新建工作流
+            </Button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 relative z-10">
           {filteredWorkflows.map((workflow) => (
             <WorkflowCard
               key={workflow.id}
@@ -110,12 +148,13 @@ export default function Workflows() {
               stats={workflowStats.get(workflow.id)?.vulnerabilities}
               onRefresh={loadData}
               onEdit={() => handleEdit(workflow)}
-              onConfigure={handleConfigure}
+              onConfigure={(stage) => handleConfigure(workflow, stage)}
             />
           ))}
         </div>
       )}
 
+      {/* Dialogs */}
       <CreateWorkflowDialog
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}

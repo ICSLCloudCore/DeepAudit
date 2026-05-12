@@ -1,7 +1,11 @@
-import { Card } from "@/components/ui/card";
+/**
+ * WorkflowCard Component
+ * Cyberpunk Terminal Aesthetic
+ */
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, Edit, Trash2, Bug, Eye, MoreHorizontal, SkipForward } from "lucide-react";
+import { Play, Edit, Trash2, Bug, Eye, MoreHorizontal, SkipForward, Calendar, GitBranch, Zap, Code, Lock, CheckCircle, Clock, AlertCircle, Terminal } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Workflow, WorkflowStageStatus } from "@/shared/types/workflow";
 import { useState } from "react";
@@ -18,13 +22,13 @@ interface WorkflowCardProps {
   onConfigure: (stage: "analyze" | "white" | "black") => void;
 }
 
-const STATUS_CONFIG: Record<string, { color: string; label: string; filled: boolean }> = {
-  completed: { color: "bg-green-500", label: "已完成", filled: true },
-  running: { color: "bg-blue-500 animate-pulse", label: "运行中", filled: true },
+const STATUS_CONFIG: Record<string, { color: string; label: string; filled: boolean; icon?: React.ReactNode }> = {
+  completed: { color: "bg-emerald-500", label: "已完成", filled: true, icon: <CheckCircle className="w-3 h-3" /> },
+  running: { color: "bg-sky-500 animate-pulse", label: "运行中", filled: true, icon: <Clock className="w-3 h-3" /> },
   configured: { color: "bg-gray-400", label: "已配置", filled: true },
   not_configured: { color: "border-gray-400", label: "未配置", filled: false },
   skipped: { color: "border-gray-400", label: "已跳过", filled: false },
-  failed: { color: "bg-red-500", label: "失败", filled: true },
+  failed: { color: "bg-red-500", label: "失败", filled: true, icon: <AlertCircle className="w-3 h-3" /> },
 };
 
 function formatDate(dateStr: string | undefined) {
@@ -39,6 +43,34 @@ function getStageTechDisplay(workflow: Workflow, stage: "analyze" | "white" | "b
     return techStack.slice(0, 2).join("+");
   }
   return "";
+}
+
+function getOverallStatusLabel(status: string): string {
+  switch (status) {
+    case "completed": return "已完成";
+    case "in_progress": return "进行中";
+    case "ready": return "就绪";
+    case "draft": return "草稿";
+    default: return "未知";
+  }
+}
+
+function getOverallStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "completed": return "cyber-badge-success";
+    case "in_progress": return "cyber-badge-info";
+    case "ready": return "cyber-badge-warning";
+    default: return "cyber-badge-muted";
+  }
+}
+
+function getStageIcon(stage: string) {
+  switch (stage) {
+    case "analyze": return <Zap className="w-3 h-3" />;
+    case "white": return <Code className="w-3 h-3" />;
+    case "black": return <Lock className="w-3 h-3" />;
+    default: return null;
+  }
 }
 
 export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onConfigure }: WorkflowCardProps) {
@@ -111,139 +143,170 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
   const vulnByStage = stats?.by_stage || { analyze: 0, white: 0, black: 0 };
 
   return (
-    <Card className="p-4" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="font-semibold text-lg" style={{ color: "var(--cyber-text)" }}>{workflow.name}</h3>
-          {workflow.description && <p className="text-sm text-muted-foreground">{workflow.description}</p>}
-        </div>
-        <Badge variant={workflow.overall_status === "completed" ? "default" : "secondary"}>
-          {workflow.overall_status === "completed" ? "已完成" : workflow.overall_status === "in_progress" ? "进行中" : "就绪"}
-        </Badge>
-      </div>
-
-      <div className="flex items-center justify-between mb-4 relative">
-        <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-300 -translate-y-1/2" />
-        
-        {stages.map((stage) => {
-          const config = STATUS_CONFIG[stage.status] || STATUS_CONFIG.not_configured;
-          const techDisplay = stage.key !== "submitted" && stage.key !== "completed" 
-            ? getStageTechDisplay(workflow, stage.key as "analyze" | "white" | "black")
-            : "";
-          
-          return (
-            <div key={stage.key} className="flex flex-col items-center z-10">
-              <div
-                className={`w-4 h-4 rounded-full ${config.filled ? config.color : `border-2 ${config.color}`} cursor-pointer hover:scale-125 transition-transform`}
-                title={`${stage.label}: ${config.label}`}
-                onClick={() => {
-                  if (stage.key === "analyze" || stage.key === "white" || stage.key === "black") {
-                    const stageKey = stage.key as "analyze" | "white" | "black";
-                    if (workflow[`${stageKey}_status`] === "not_configured") {
-                      onConfigure(stageKey);
-                    }
-                  }
-                }}
-              />
-              <span className="text-xs text-muted-foreground mt-1">{stage.label}</span>
-              <span className="text-xs text-muted-foreground">
-                {config.label === "未配置" ? "点击补充" : config.label}
-              </span>
-              {techDisplay && (
-                <span className="text-xs text-primary">{techDisplay}</span>
-              )}
-              <span className="text-xs text-muted-foreground">{formatDate(stage.date)}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bug className="w-4 h-4 text-red-400" />
-          <span className="text-sm">
-            漏洞总数: <span className="font-bold text-red-400">{workflow.total_vulnerabilities || 0}</span>
-            <span className="text-xs text-muted-foreground ml-1">
-              (威胁:{vulnByStage.analyze} | 白盒:{vulnByStage.white} | 黑盒:{vulnByStage.black})
-            </span>
-          </span>
-        </div>
-
-        <div className="flex gap-1">
-          <Link to={`/workflows/${workflow.id}`}>
-            <Button size="sm" variant="ghost" title="详情">
-              <Eye className="w-4 h-4" />
-            </Button>
-          </Link>
-          <Button size="sm" variant="outline" onClick={onEdit} disabled={loading} title="编辑">
-            <Edit className="w-4 h-4" />
-          </Button>
-          
-          <div className="relative">
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => setShowMenu(!showMenu)}
-              disabled={loading}
-              title="更多操作"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-            
-            {showMenu && (
-              <div 
-                className="absolute right-0 top-full mt-1 bg-card border rounded-md shadow-lg z-20 py-1 min-w-[120px]"
-                style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}
-              >
-                <button
-                  className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2"
-                  onClick={() => { setShowMenu(false); handleStart("analyze"); }}
-                  disabled={workflow.analyze_status === "running"}
-                >
-                  <Play className="w-3 h-3" /> 启动威胁
-                </button>
-                <button
-                  className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2"
-                  onClick={() => { setShowMenu(false); handleStart("white"); }}
-                  disabled={workflow.white_status === "running"}
-                >
-                  <Play className="w-3 h-3" /> 启动白盒
-                </button>
-                <button
-                  className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2"
-                  onClick={() => { setShowMenu(false); handleStart("black"); }}
-                  disabled={workflow.black_status === "running"}
-                >
-                  <Play className="w-3 h-3" /> 启动黑盒
-                </button>
-                {workflow.analyze_status !== "skipped" && workflow.analyze_status !== "running" && (
-                  <button
-                    className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2"
-                    onClick={() => { setShowMenu(false); handleSkip("analyze"); }}
-                  >
-                    <SkipForward className="w-3 h-3" /> 跳过威胁
-                  </button>
-                )}
-                {workflow.black_status !== "skipped" && workflow.black_status !== "running" && (
-                  <button
-                    className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted flex items-center gap-2"
-                    onClick={() => { setShowMenu(false); handleSkip("black"); }}
-                  >
-                    <SkipForward className="w-3 h-3" /> 跳过黑盒
-                  </button>
-                )}
-                <div className="border-t my-1" style={{ borderColor: "var(--cyber-border)" }} />
-                <button
-                  className="w-full px-3 py-1.5 text-sm text-left hover:bg-muted text-red-500 flex items-center gap-2"
-                  onClick={() => { setShowMenu(false); handleDelete(); }}
-                >
-                  <Trash2 className="w-3 h-3" /> 删除
-                </button>
-              </div>
+    <div className="cyber-card flex flex-col h-full group">
+      {/* Card Header */}
+      <div className="p-4 border-b border-border bg-muted/50 flex justify-between items-start">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 border border-border bg-muted rounded flex items-center justify-center">
+            <GitBranch className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
+              <Link to={`/workflows/${workflow.id}`}>{workflow.name}</Link>
+            </h3>
+            {workflow.description && (
+              <p className="text-xs text-muted-foreground font-mono line-clamp-1 border-l-2 border-border pl-2 mt-1">
+                {workflow.description}
+              </p>
             )}
           </div>
         </div>
+        <Badge className={getOverallStatusBadgeClass(workflow.overall_status || "draft")}>
+          {getOverallStatusLabel(workflow.overall_status || "draft")}
+        </Badge>
       </div>
-    </Card>
+
+      {/* Card Body - Pipeline */}
+      <div className="p-4 flex-1 space-y-4">
+        {/* Pipeline Progress */}
+        <div className="flex items-center justify-between relative">
+          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-muted -translate-y-1/2" />
+          
+          {stages.map((stage) => {
+            const config = STATUS_CONFIG[stage.status] || STATUS_CONFIG.not_configured;
+            const techDisplay = stage.key !== "submitted" && stage.key !== "completed" 
+              ? getStageTechDisplay(workflow, stage.key as "analyze" | "white" | "black")
+              : "";
+            
+            return (
+              <div key={stage.key} className="flex flex-col items-center z-10 group/stage">
+                <div
+                  className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                    config.filled ? config.color : `border-2 ${config.color} bg-muted`
+                  } cursor-pointer hover:scale-125 transition-all`}
+                  title={`${stage.label}: ${config.label}`}
+                  onClick={() => {
+                    if (stage.key === "analyze" || stage.key === "white" || stage.key === "black") {
+                      const stageKey = stage.key as "analyze" | "white" | "black";
+                      if (workflow[`${stageKey}_status`] === "not_configured") {
+                        onConfigure(stageKey);
+                      }
+                    }
+                  }}
+                >
+                  {config.icon && <span className="text-white">{config.icon}</span>}
+                </div>
+                <span className="text-xs font-mono font-bold text-muted-foreground mt-1 uppercase">{stage.label}</span>
+                <span className="text-xs text-muted-foreground">
+                  {config.label === "未配置" ? (
+                    <span className="text-primary cursor-pointer hover:underline">点击补充</span>
+                  ) : config.label}
+                </span>
+                {techDisplay && (
+                  <span className="text-xs font-mono text-primary font-bold">{techDisplay}</span>
+                )}
+                <span className="text-xs text-muted-foreground">{formatDate(stage.date)}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Vulnerability Stats */}
+        <div className="flex items-center gap-2 bg-muted/30 p-2 border border-border rounded">
+          <Bug className="w-4 h-4 text-red-400" />
+          <span className="text-sm font-mono">
+            漏洞总数: <span className="font-bold text-red-400">{workflow.total_vulnerabilities || 0}</span>
+          </span>
+          <span className="text-xs text-muted-foreground font-mono ml-auto">
+            威胁:{vulnByStage.analyze} | 白盒:{vulnByStage.white} | 黑盒:{vulnByStage.black}
+          </span>
+        </div>
+
+        {/* Tech Stack Tags */}
+        <div className="flex flex-wrap gap-1">
+          {workflow.analyze_tech_stack && workflow.analyze_tech_stack.length > 0 && (
+            workflow.analyze_tech_stack.slice(0, 2).map((tech) => (
+              <span key={`analyze-${tech}`} className="text-xs font-mono font-bold border border-violet-500/30 px-1.5 py-0.5 bg-violet-500/10 text-violet-400 rounded">
+                <Zap className="w-3 h-3 inline mr-0.5" />{tech}
+              </span>
+            ))
+          )}
+          {workflow.white_tech_stack && workflow.white_tech_stack.length > 0 && (
+            workflow.white_tech_stack.slice(0, 2).map((tech) => (
+              <span key={`white-${tech}`} className="text-xs font-mono font-bold border border-primary/30 px-1.5 py-0.5 bg-primary/10 text-primary rounded">
+                <Code className="w-3 h-3 inline mr-0.5" />{tech}
+              </span>
+            ))
+          )}
+          {workflow.black_tech_stack && workflow.black_tech_stack.length > 0 && (
+            workflow.black_tech_stack.slice(0, 2).map((tech) => (
+              <span key={`black-${tech}`} className="text-xs font-mono font-bold border border-amber-500/30 px-1.5 py-0.5 bg-amber-500/10 text-amber-400 rounded">
+                <Lock className="w-3 h-3 inline mr-0.5" />{tech}
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Card Footer */}
+      <div className="p-4 border-t border-border bg-muted/50 grid grid-cols-4 gap-2">
+        <Link to={`/workflows/${workflow.id}`}>
+          <Button variant="outline" className="w-full cyber-btn-outline h-8 text-xs">
+            <Eye className="w-3 h-3 mr-1" />详情
+          </Button>
+        </Link>
+        
+        <div className="relative">
+          <Button 
+            size="sm" 
+            className="w-full cyber-btn-primary h-8 text-xs"
+            onClick={() => setShowMenu(!showMenu)}
+            disabled={loading}
+          >
+            <Play className="w-3 h-3 mr-1" />启动
+          </Button>
+          
+          {showMenu && (
+            <div 
+              className="absolute left-0 top-full mt-1 bg-card border rounded-md shadow-lg z-20 py-1 min-w-[100px]"
+              style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}
+            >
+              {workflow.analyze_status !== "skipped" && (
+                <button
+                  className="w-full px-3 py-1.5 text-xs text-left hover:bg-muted flex items-center gap-2 font-mono"
+                  onClick={() => { setShowMenu(false); handleStart("analyze"); }}
+                  disabled={workflow.analyze_status === "running"}
+                >
+                  <Zap className="w-3 h-3 text-violet-400" /> 威胁
+                </button>
+              )}
+              <button
+                className="w-full px-3 py-1.5 text-xs text-left hover:bg-muted flex items-center gap-2 font-mono"
+                onClick={() => { setShowMenu(false); handleStart("white"); }}
+                disabled={workflow.white_status === "running"}
+              >
+                <Code className="w-3 h-3 text-primary" /> 白盒
+              </button>
+              {workflow.black_status !== "skipped" && (
+                <button
+                  className="w-full px-3 py-1.5 text-xs text-left hover:bg-muted flex items-center gap-2 font-mono"
+                  onClick={() => { setShowMenu(false); handleStart("black"); }}
+                  disabled={workflow.black_status === "running"}
+                >
+                  <Lock className="w-3 h-3 text-amber-400" /> 黑盒
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        
+        <Button size="sm" variant="outline" className="cyber-btn-outline h-8" onClick={onEdit} disabled={loading}>
+          <Edit className="w-3 h-3" />
+        </Button>
+        <Button size="sm" variant="outline" className="cyber-btn-outline h-8 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30" onClick={handleDelete} disabled={loading}>
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </div>
+    </div>
   );
 }
