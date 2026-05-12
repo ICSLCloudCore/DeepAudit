@@ -15,6 +15,8 @@ import AuditRules from "@/pages/AuditRules";
 import PromptManager from "@/pages/PromptManager";
 import OpenCodeResourceManager from "@/pages/OpenCodeResourceManager";
 import SecurityKnowledgeBase from "@/pages/SecurityKnowledgeBase";
+import Workflows from "@/pages/Workflows";
+import WorkflowDetail from "@/pages/WorkflowDetail";
 import type { ReactNode } from 'react';
 
 export interface RouteConfig {
@@ -30,6 +32,18 @@ const routes: RouteConfig[] = [
     path: "/",
     element: <Dashboard />,
     visible: true,
+  },
+  {
+    name: "工作流管理",
+    path: "/workflows",
+    element: <Workflows />,
+    visible: true,
+  },
+  {
+    name: "工作流详情",
+    path: "/workflows/:id",
+    element: <WorkflowDetail />,
+    visible: false,
   },
   {
     name: "Agent审计任务",

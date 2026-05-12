@@ -21,6 +21,7 @@ from app.api.v1.endpoints import (
     security_kb,
     opencode_config,
     opencode_agents,
+    workflow,
 )
 
 api_router = APIRouter()
@@ -49,3 +50,4 @@ api_router.include_router(
     opencode_config.router, prefix="/opencode-config", tags=["opencode-config"]
 )
 api_router.include_router(opencode_agents.router, prefix="/opencode", tags=["opencode"])
+api_router.include_router(workflow.router, prefix="/workflows", tags=["workflows"])

@@ -22,6 +22,7 @@ import {
     MessageSquare,
     BookOpen,
     Terminal,
+    GitBranch,
 } from "lucide-react";
 import routes from "@/app/routes";
 
@@ -29,6 +30,7 @@ import routes from "@/app/routes";
 const routeIcons: Record<string, React.ReactNode> = {
     "/": <LayoutDashboard className="w-[18px] h-[18px]" />,
     "/dashboard": <LayoutDashboard className="w-[18px] h-[18px]" />,
+    "/workflows": <GitBranch className="w-[18px] h-[18px]" />,
     "/projects": <FolderGit2 className="w-[18px] h-[18px]" />,
     "/instant-analysis": <Zap className="w-[18px] h-[18px]" />,
     "/audit-tasks": <ListTodo className="w-[18px] h-[18px]" />,

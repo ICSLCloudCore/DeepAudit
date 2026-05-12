@@ -334,3 +334,5 @@ export interface SystemConfig {
     webhook_url?: string;
   };
 }
+
+export * from "./workflow";
