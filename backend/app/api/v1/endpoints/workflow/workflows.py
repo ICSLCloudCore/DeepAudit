@@ -1,5 +1,5 @@
 from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
 import os
@@ -146,7 +146,7 @@ async def get_stats(
 
 @router.get("/available-resources", response_model=AvailableResourcesResponse)
 async def get_available_resources(
-    category: str = Form(...),
+    category: str = Query(..., description="阶段类型: ANALYZE/WHITE/BLACK"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
