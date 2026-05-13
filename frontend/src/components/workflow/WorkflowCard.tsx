@@ -170,10 +170,13 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
       <div className="p-4 flex-1 space-y-5">
         {/* Pipeline Progress - Vertical layout with dots above line */}
         <div className="relative py-3">
-          {/* Gradient connector line */}
-          <div className="absolute top-10 left-[10%] right-[10%] h-0.5 rounded-full">
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/40 via-primary/50 to-amber-500/40" />
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/20 via-primary/25 to-amber-500/20 blur-sm" />
+          {/* Gradient connector line - covers all 5 stages */}
+          <div 
+            className="absolute top-10 h-1.5 rounded-full overflow-hidden" 
+            style={{ left: '14px', right: '14px' }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/60 via-primary/70 to-amber-500/60" />
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/30 via-primary/40 to-amber-500/30 blur-sm" />
           </div>
           
           {/* Stage nodes */}
@@ -265,31 +268,6 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
             <span className="text-base font-bold font-mono text-amber-400">{vulnByStage.black}</span>
             <span className="text-xs font-mono text-muted-foreground">黑盒</span>
           </div>
-        </div>
-
-        {/* Tech Stack Tags */}
-        <div className="flex flex-wrap gap-1.5">
-          {workflow.analyze_tech_stack && workflow.analyze_tech_stack.length > 0 && (
-            workflow.analyze_tech_stack.slice(0, 2).map((tech) => (
-              <span key={`analyze-${tech}`} className="text-xs font-mono font-bold border border-violet-500/30 px-1.5 py-0.5 bg-violet-500/10 text-violet-400 rounded">
-                <Zap className="w-3 h-3 inline mr-0.5" />{tech}
-              </span>
-            ))
-          )}
-          {workflow.white_tech_stack && workflow.white_tech_stack.length > 0 && (
-            workflow.white_tech_stack.slice(0, 2).map((tech) => (
-              <span key={`white-${tech}`} className="text-xs font-mono font-bold border border-primary/30 px-1.5 py-0.5 bg-primary/10 text-primary rounded">
-                <Code className="w-3 h-3 inline mr-0.5" />{tech}
-              </span>
-            ))
-          )}
-          {workflow.black_tech_stack && workflow.black_tech_stack.length > 0 && (
-            workflow.black_tech_stack.slice(0, 2).map((tech) => (
-              <span key={`black-${tech}`} className="text-xs font-mono font-bold border border-amber-500/30 px-1.5 py-0.5 bg-amber-500/10 text-amber-400 rounded">
-                <Lock className="w-3 h-3 inline mr-0.5" />{tech}
-              </span>
-            ))
-          )}
         </div>
       </div>
 
