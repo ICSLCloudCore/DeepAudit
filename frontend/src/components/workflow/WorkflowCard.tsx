@@ -167,68 +167,108 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
       </div>
 
       {/* Card Body - Pipeline */}
-      <div className="p-4 flex-1 space-y-4">
-        {/* Pipeline Progress */}
-        <div className="flex items-center justify-between relative px-2">
-          {/* Gradient line with glow effect */}
-          <div className="absolute top-1/2 left-4 right-4 h-1 -translate-y-1/2 overflow-hidden rounded-full">
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/40 via-primary/60 to-amber-500/40" />
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/20 via-primary/30 to-amber-500/20 blur-sm" />
+      <div className="p-4 flex-1 space-y-5">
+        {/* Pipeline Progress - Vertical layout with dots above line */}
+        <div className="relative py-3">
+          {/* Gradient connector line */}
+          <div className="absolute top-10 left-[10%] right-[10%] h-0.5 rounded-full">
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/40 via-primary/50 to-amber-500/40" />
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/20 via-primary/25 to-amber-500/20 blur-sm" />
           </div>
           
-          {stages.map((stage) => {
-            const config = STATUS_CONFIG[stage.status] || STATUS_CONFIG.not_configured;
-            const techDisplay = stage.key !== "submitted" && stage.key !== "completed" 
-              ? getStageTechDisplay(workflow, stage.key as "analyze" | "white" | "black")
-              : "";
-            
-            return (
-              <div key={stage.key} className="flex flex-col items-center z-10 group/stage">
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    config.filled ? config.color : `border-2 ${config.color} bg-muted`
-                  } cursor-pointer hover:scale-125 transition-all duration-200`}
-                  style={config.filled ? { boxShadow: `0 0 10px ${config.glowColor}, 0 0 20px ${config.glowColor}40` } : {}}
-                  title={`${stage.label}: ${config.label}`}
-                  onClick={() => {
-                    if (stage.key === "analyze" || stage.key === "white" || stage.key === "black") {
-                      const stageKey = stage.key as "analyze" | "white" | "black";
-                      if (workflow[`${stageKey}_status`] === "not_configured") {
-                        onConfigure(stageKey);
-                      }
-                    }
-                  }}
+          {/* Stage nodes */}
+          <div className="flex justify-between items-start relative">
+            {stages.map((stage, idx) => {
+              const config = STATUS_CONFIG[stage.status] || STATUS_CONFIG.not_configured;
+              const techDisplay = stage.key !== "submitted" && stage.key !== "completed" 
+                ? getStageTechDisplay(workflow, stage.key as "analyze" | "white" | "black")
+                : "";
+              
+              return (
+                <div 
+                  key={stage.key} 
+                  className="flex flex-col items-center min-w-[52px] max-w-[60px] group/stage"
+                  style={{ marginLeft: idx === 0 ? 0 : undefined, marginRight: idx === stages.length - 1 ? 0 : undefined }}
                 >
-                  {config.icon && <span className="text-white">{config.icon}</span>}
+                  {/* Status dot */}
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center mb-3 ${
+                      config.filled ? config.color : `border-2 ${config.color} bg-muted`
+                    } cursor-pointer hover:scale-110 transition-all duration-200`}
+                    style={config.filled ? { boxShadow: `0 0 12px ${config.glowColor}, 0 0 24px ${config.glowColor}40` } : {}}
+                    title={`${stage.label}: ${config.label}`}
+                    onClick={() => {
+                      if (stage.key === "analyze" || stage.key === "white" || stage.key === "black") {
+                        const stageKey = stage.key as "analyze" | "white" | "black";
+                        if (workflow[`${stageKey}_status`] === "not_configured") {
+                          onConfigure(stageKey);
+                        }
+                      }
+                    }}
+                  >
+                    {config.icon && <span className="text-white">{config.icon}</span>}
+                  </div>
+                  
+                  {/* Stage label - prominent */}
+                  <span className="text-sm font-mono font-bold text-foreground uppercase tracking-wide mb-1">
+                    {stage.label}
+                  </span>
+                  
+                  {/* Status label */}
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {config.label === "未配置" ? (
+                      <span className="text-primary cursor-pointer hover:underline font-bold">点击配置</span>
+                    ) : config.label}
+                  </span>
+                  
+                  {/* Tech stack display */}
+                  {techDisplay && (
+                    <span className="text-xs font-mono font-bold text-primary mt-0.5">{techDisplay}</span>
+                  )}
+                  
+                  {/* Timestamp */}
+                  <span className="text-xs text-muted-foreground font-mono opacity-70 mt-0.5">
+                    {formatDate(stage.date)}
+                  </span>
                 </div>
-                <span className="text-xs font-mono font-bold text-muted-foreground mt-1 uppercase">{stage.label}</span>
-                <span className="text-xs text-muted-foreground">
-                  {config.label === "未配置" ? (
-                    <span className="text-primary cursor-pointer hover:underline">点击补充</span>
-                  ) : config.label}
-                </span>
-                {techDisplay && (
-                  <span className="text-xs font-mono text-primary font-bold">{techDisplay}</span>
-                )}
-                <span className="text-xs text-muted-foreground">{formatDate(stage.date)}</span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
-        {/* Vulnerability Stats */}
-        <div className="flex items-center gap-2 bg-muted/30 p-2 border border-border rounded">
-          <Bug className="w-4 h-4 text-red-400" />
-          <span className="text-sm font-mono">
-            漏洞总数: <span className="font-bold text-red-400">{workflow.total_vulnerabilities || 0}</span>
-          </span>
-          <span className="text-xs text-muted-foreground font-mono ml-auto">
-            威胁:{vulnByStage.analyze} | 白盒:{vulnByStage.white} | 黑盒:{vulnByStage.black}
-          </span>
+        {/* Vulnerability Stats - 4-column grid */}
+        <div className="grid grid-cols-4 gap-2 p-3 border border-border rounded-lg bg-muted/20">
+          {/* Total - prominent */}
+          <div className="flex flex-col items-center justify-center p-2 rounded bg-red-500/10 border border-red-500/20">
+            <Bug className="w-4 h-4 text-red-400 mb-1" />
+            <span className="text-lg font-bold font-mono text-red-400">{workflow.total_vulnerabilities || 0}</span>
+            <span className="text-xs font-mono text-muted-foreground">漏洞总数</span>
+          </div>
+          
+          {/* Analyze stage */}
+          <div className="flex flex-col items-center justify-center p-2 rounded bg-violet-500/10 border border-violet-500/20">
+            <Zap className="w-4 h-4 text-violet-400 mb-1" />
+            <span className="text-base font-bold font-mono text-violet-400">{vulnByStage.analyze}</span>
+            <span className="text-xs font-mono text-muted-foreground">威胁</span>
+          </div>
+          
+          {/* White stage */}
+          <div className="flex flex-col items-center justify-center p-2 rounded bg-primary/10 border border-primary/20">
+            <Code className="w-4 h-4 text-primary mb-1" />
+            <span className="text-base font-bold font-mono text-primary">{vulnByStage.white}</span>
+            <span className="text-xs font-mono text-muted-foreground">白盒</span>
+          </div>
+          
+          {/* Black stage */}
+          <div className="flex flex-col items-center justify-center p-2 rounded bg-amber-500/10 border border-amber-500/20">
+            <Lock className="w-4 h-4 text-amber-400 mb-1" />
+            <span className="text-base font-bold font-mono text-amber-400">{vulnByStage.black}</span>
+            <span className="text-xs font-mono text-muted-foreground">黑盒</span>
+          </div>
         </div>
 
         {/* Tech Stack Tags */}
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5">
           {workflow.analyze_tech_stack && workflow.analyze_tech_stack.length > 0 && (
             workflow.analyze_tech_stack.slice(0, 2).map((tech) => (
               <span key={`analyze-${tech}`} className="text-xs font-mono font-bold border border-violet-500/30 px-1.5 py-0.5 bg-violet-500/10 text-violet-400 rounded">

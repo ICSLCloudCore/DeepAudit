@@ -1050,4 +1050,30 @@
   .animated-underline:hover::after {
     width: 100%;
   }
+
+  /* ============ Recharts Tooltip Override ============ */
+  .recharts-tooltip-wrapper {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+  }
+
+  .recharts-tooltip-wrapper:focus {
+    outline: none !important;
+  }
+
+  .recharts-default-tooltip {
+    background: var(--cyber-bg-elevated) !important;
+    border: 1px solid var(--cyber-border) !important;
+    border-radius: 4px !important;
+    font-family: monospace !important;
+    font-size: 12px !important;
+    color: var(--cyber-text) !important;
+    box-shadow: var(--shadow-md) !important;
+  }
+
+  .recharts-tooltip-cursor {
+    stroke: var(--cyber-border-accent) !important;
+    stroke-width: 1 !important;
+  }
 }
