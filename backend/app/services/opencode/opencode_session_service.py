@@ -1386,10 +1386,6 @@ class OpenCodeSessionService:
         """
         后台轮询结果任务 - 使用独立的数据库会话
         """
-        logger.info(f"[OpenCode] Starting background poll for session {db_session_id}")
-        logger.info(f"[OpenCode] Background poll - audit_task_id: {audit_task_id}")
-        logger.info(f"[OpenCode] Background poll - server_session_id: {server_session_id}")
-        logger.info(f"[OpenCode] Background poll - message_id: {message_id}")
 
         try:
             async with AsyncSessionLocal() as db_session_local:
