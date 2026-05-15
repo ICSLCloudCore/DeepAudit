@@ -140,3 +140,10 @@ export interface WorkflowListResponse {
 export const ANALYZE_TECH_STACK_OPTIONS = ['PS', 'CS&IMS', 'HV', 'PLT'];
 export const WHITE_TECH_STACK_OPTIONS = ['c', 'go', 'normal'];
 export const BLACK_TECH_STACK_OPTIONS = ['linux', 'docker', 'kubeletes', 'CSP', 'CGP'];
+
+export interface StartAuditResponse {
+  message: string;
+  session_id: string;
+  task_id: string;
+  project_id: string;
+}

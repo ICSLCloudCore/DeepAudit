@@ -24,6 +24,10 @@ from app.schemas.workflow import (
 )
 from app.services.project.zip_storage import save_project_zip
 from app.utils.log import logger
+from app.services.opencode.opencode_session_service import OpenCodeSessionService
+from app.models.opencode.opencode_session import OpenCodeSession
+from app.models.user.user import User
+from fastapi import BackgroundTasks
 
 
 def get_workflow_overall_status(workflow: Workflow) -> str:
@@ -584,3 +588,60 @@ async def get_available_resources_for_stage(
             for pt in prompt_templates
         ],
     }
+
+
+async def start_stage_audit(
+    db: AsyncSession,
+    project_id: str,
+    agent_package_id: Optional[str],
+    prompt_template_id: Optional[str],
+    current_user: User,
+    background_tasks: BackgroundTasks,
+) -> tuple[OpenCodeSession, Any]:
+    """复用 OpenCodeSessionService 启动审计"""
+    service = OpenCodeSessionService(db)
+
+    agent_package = None
+    if agent_package_id:
+        result = await db.execute(select(Agent).where(Agent.id == agent_package_id))
+        agent_package = result.scalar_one_or_none()
+
+    session, server_status, audit_task = await service.start_audit_with_prompt(
+        project_id=project_id,
+        prompt_template_id=prompt_template_id,
+        prompt_content=None,
+        variables=None,
+        current_user=current_user,
+        agent_package=agent_package,
+    )
+
+    return session, audit_task
+
+
+async def complete_workflow_stage(
+    db: AsyncSession,
+    workflow: Workflow,
+    stage: str,
+) -> None:
+    """更新阶段状态为完成"""
+    setattr(workflow, f"{stage}_status", WorkflowStageStatus.COMPLETED)
+    setattr(workflow, f"{stage}_completed_at", datetime.now(timezone.utc))
+    workflow.updated_at = datetime.now(timezone.utc)
+
+    check_all_stages_completed(workflow)
+
+    await db.commit()
+
+
+def check_all_stages_completed(workflow: Workflow) -> None:
+    """检查所有阶段是否完成，更新整体状态"""
+    stages_to_check = []
+    for s in ["analyze", "white", "black"]:
+        status = getattr(workflow, f"{s}_status")
+        if status != WorkflowStageStatus.SKIPPED:
+            stages_to_check.append(s)
+
+    if all(
+        getattr(workflow, f"{s}_status") == WorkflowStageStatus.COMPLETED for s in stages_to_check
+    ):
+        workflow.completed_at = datetime.now(timezone.utc)

@@ -1,5 +1,14 @@
 from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form,
+    Query,
+    BackgroundTasks,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
 import os
@@ -9,6 +18,7 @@ import shutil
 from app.api import deps
 from app.db.session import get_db
 from app.models.user.user import User
+from app.models.workflow.workflow import WorkflowStageStatus
 from app.schemas.workflow import (
     WorkflowCreate,
     WorkflowUpdate,
@@ -33,6 +43,8 @@ from app.services.workflow.workflow_service import (
     get_workflow_vulnerability_stats,
     workflow_to_response,
     get_available_resources_for_stage,
+    start_stage_audit,
+    complete_workflow_stage,
 )
 from app.utils.log import logger
 
@@ -322,3 +334,83 @@ async def unskip_workflow_stage(
     vuln_stats = await get_workflow_vulnerability_stats(db, updated_workflow)
 
     return workflow_to_response(updated_workflow, vuln_stats)
+
+
+@router.post("/{id}/start-audit/{stage}")
+async def start_workflow_stage_audit(
+    id: str,
+    stage: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """一键启动工作流阶段审计（使用已配置的参数）"""
+    from datetime import datetime, timezone
+
+    if stage not in ["analyze", "white", "black"]:
+        raise HTTPException(status_code=400, detail="无效的阶段名称")
+
+    workflow = await get_workflow_by_id(db, id, current_user.id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+
+    stage_status = getattr(workflow, f"{stage}_status")
+
+    if stage_status == WorkflowStageStatus.SKIPPED:
+        raise HTTPException(status_code=400, detail="已跳过的阶段不可启动")
+    if stage_status == WorkflowStageStatus.RUNNING:
+        raise HTTPException(status_code=400, detail="阶段正在运行中")
+    if stage_status not in [WorkflowStageStatus.CONFIGURED, WorkflowStageStatus.COMPLETED]:
+        raise HTTPException(status_code=400, detail="阶段未配置，请先补充参数")
+
+    project_id = getattr(workflow, f"{stage}_project_id")
+    agent_package_id = getattr(workflow, f"{stage}_agent_package_id")
+    prompt_template_id = getattr(workflow, f"{stage}_prompt_template_id")
+
+    if not project_id:
+        raise HTTPException(status_code=400, detail="阶段未配置项目")
+
+    try:
+        session, audit_task = await start_stage_audit(
+            db, project_id, agent_package_id, prompt_template_id, current_user, background_tasks
+        )
+
+        setattr(workflow, f"{stage}_status", WorkflowStageStatus.RUNNING)
+        setattr(workflow, f"{stage}_started_at", datetime.now(timezone.utc))
+        workflow.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+
+        return {
+            "message": f"{stage}阶段审计已启动",
+            "session_id": session.id,
+            "task_id": audit_task.id,
+            "project_id": project_id,
+        }
+    except Exception as e:
+        logger.error(f"Failed to start audit for workflow {id} stage {stage}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{id}/complete-stage/{stage}")
+async def complete_workflow_stage_endpoint(
+    id: str,
+    stage: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """前端检测到任务完成后，更新阶段状态"""
+    if stage not in ["analyze", "white", "black"]:
+        raise HTTPException(status_code=400, detail="无效的阶段名称")
+
+    workflow = await get_workflow_by_id(db, id, current_user.id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+
+    stage_status = getattr(workflow, f"{stage}_status")
+
+    if stage_status != WorkflowStageStatus.RUNNING:
+        return {"message": "阶段状态无需更新"}
+
+    await complete_workflow_stage(db, workflow, stage)
+
+    return {"message": f"{stage}阶段已完成"}

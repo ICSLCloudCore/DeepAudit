@@ -5,6 +5,7 @@ import type {
   WorkflowVulnerabilityStats,
   WorkflowListResponse,
   AvailableResourcesResponse,
+  StartAuditResponse,
 } from "@/shared/types/workflow";
 
 export async function getWorkflows(): Promise<WorkflowListResponse> {
@@ -97,5 +98,21 @@ export async function getAvailableResources(
   category: "ANALYZE" | "WHITE" | "BLACK"
 ): Promise<AvailableResourcesResponse> {
   const response = await apiClient.get(`/workflows/available-resources?category=${category}`);
+  return response.data;
+}
+
+export async function startWorkflowStageAudit(
+  workflowId: string,
+  stage: "analyze" | "white" | "black"
+): Promise<StartAuditResponse> {
+  const response = await apiClient.post(`/workflows/${workflowId}/start-audit/${stage}`);
+  return response.data;
+}
+
+export async function completeWorkflowStage(
+  workflowId: string,
+  stage: "analyze" | "white" | "black"
+): Promise<{ message: string }> {
+  const response = await apiClient.post(`/workflows/${workflowId}/complete-stage/${stage}`);
   return response.data;
 }

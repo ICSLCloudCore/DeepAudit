@@ -5,12 +5,12 @@
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, Edit, Trash2, Bug, Eye, MoreHorizontal, SkipForward, Calendar, GitBranch, Zap, Code, Lock, CheckCircle, Clock, AlertCircle, Terminal } from "lucide-react";
+import { Edit, Trash2, Bug, Eye, GitBranch, Zap, Code, Lock, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { Workflow, WorkflowStageStatus } from "@/shared/types/workflow";
+import type { Workflow } from "@/shared/types/workflow";
 import { useState } from "react";
 import { toast } from "sonner";
-import { startWorkflowStage, deleteWorkflow, skipWorkflowStage } from "@/shared/api/workflows";
+import { deleteWorkflow } from "@/shared/api/workflows";
 
 interface WorkflowCardProps {
   workflow: Workflow;
@@ -37,14 +37,6 @@ function formatDate(dateStr: string | undefined) {
   return date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-function getStageTechDisplay(workflow: Workflow, stage: "analyze" | "white" | "black"): string {
-  const techStack = workflow[`${stage}_tech_stack`];
-  if (techStack && techStack.length > 0) {
-    return techStack.slice(0, 2).join("+");
-  }
-  return "";
-}
-
 function getOverallStatusLabel(status: string): string {
   switch (status) {
     case "completed": return "已完成";
@@ -64,18 +56,8 @@ function getOverallStatusBadgeClass(status: string): string {
   }
 }
 
-function getStageIcon(stage: string) {
-  switch (stage) {
-    case "analyze": return <Zap className="w-3 h-3" />;
-    case "white": return <Code className="w-3 h-3" />;
-    case "black": return <Lock className="w-3 h-3" />;
-    default: return null;
-  }
-}
-
 export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onConfigure }: WorkflowCardProps) {
   const [loading, setLoading] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
 
   const stages = [
     { key: "submitted", status: "completed", label: "送检", date: workflow.submitted_at },
@@ -84,46 +66,6 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
     { key: "black", status: workflow.black_status, label: "黑盒", date: workflow.black_started_at },
     { key: "completed", status: workflow.overall_status === "completed" ? "completed" : "not_configured", label: "完成", date: workflow.completed_at },
   ];
-
-  const handleStart = async (stage: "analyze" | "white" | "black") => {
-    const stageStatus = workflow[`${stage}_status`] as WorkflowStageStatus;
-    if (stageStatus === "not_configured") {
-      onConfigure(stage);
-      return;
-    }
-    if (stageStatus === "skipped") {
-      toast.error("已跳过的阶段不可启动，请先取消跳过状态");
-      return;
-    }
-    if (stageStatus === "running") {
-      toast.error("阶段正在运行中");
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      await startWorkflowStage(workflow.id, stage);
-      toast.success(`${stage === "analyze" ? "威胁分析" : stage === "white" ? "白盒分析" : "黑盒分析"}阶段已启动`);
-      onRefresh();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || "启动失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSkip = async (stage: "analyze" | "black") => {
-    setLoading(true);
-    try {
-      await skipWorkflowStage(workflow.id, stage);
-      toast.success(`${stage === "analyze" ? "威胁分析" : "黑盒分析"}阶段已跳过`);
-      onRefresh();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || "跳过失败");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!confirm("确定要删除此工作流吗？删除后将同时删除关联的三个项目及任务数据。")) return;
@@ -183,9 +125,6 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
           <div className="flex justify-between items-start relative">
             {stages.map((stage, idx) => {
               const config = STATUS_CONFIG[stage.status] || STATUS_CONFIG.not_configured;
-              const techDisplay = stage.key !== "submitted" && stage.key !== "completed" 
-                ? getStageTechDisplay(workflow, stage.key as "analyze" | "white" | "black")
-                : "";
               
               return (
                 <div 
@@ -223,11 +162,6 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
                       <span className="text-primary cursor-pointer hover:underline font-bold">点击配置</span>
                     ) : config.label}
                   </span>
-                  
-                  {/* Tech stack display */}
-                  {techDisplay && (
-                    <span className="text-xs font-mono font-bold text-primary mt-0.5">{techDisplay}</span>
-                  )}
                   
                   {/* Timestamp */}
                   <span className="text-xs text-muted-foreground font-mono opacity-70 mt-0.5">
@@ -271,57 +205,13 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
         </div>
       </div>
 
-      {/* Card Footer */}
-      <div className="p-4 border-t border-border bg-muted/50 grid grid-cols-4 gap-2">
+      {/* Card Footer - 3 columns */}
+      <div className="p-4 border-t border-border bg-muted/50 grid grid-cols-3 gap-2">
         <Link to={`/workflows/${workflow.id}`}>
           <Button variant="outline" className="w-full cyber-btn-outline h-8 text-xs">
             <Eye className="w-3 h-3 mr-1" />详情
           </Button>
         </Link>
-        
-        <div className="relative">
-          <Button 
-            size="sm" 
-            className="w-full cyber-btn-primary h-8 text-xs"
-            onClick={() => setShowMenu(!showMenu)}
-            disabled={loading}
-          >
-            <Play className="w-3 h-3 mr-1" />启动
-          </Button>
-          
-          {showMenu && (
-            <div 
-              className="absolute left-0 top-full mt-1 bg-card border rounded-md shadow-lg z-20 py-1 min-w-[100px]"
-              style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}
-            >
-              {workflow.analyze_status !== "skipped" && (
-                <button
-                  className="w-full px-3 py-1.5 text-xs text-left hover:bg-muted flex items-center gap-2 font-mono"
-                  onClick={() => { setShowMenu(false); handleStart("analyze"); }}
-                  disabled={workflow.analyze_status === "running"}
-                >
-                  <Zap className="w-3 h-3 text-violet-400" /> 威胁
-                </button>
-              )}
-              <button
-                className="w-full px-3 py-1.5 text-xs text-left hover:bg-muted flex items-center gap-2 font-mono"
-                onClick={() => { setShowMenu(false); handleStart("white"); }}
-                disabled={workflow.white_status === "running"}
-              >
-                <Code className="w-3 h-3 text-primary" /> 白盒
-              </button>
-              {workflow.black_status !== "skipped" && (
-                <button
-                  className="w-full px-3 py-1.5 text-xs text-left hover:bg-muted flex items-center gap-2 font-mono"
-                  onClick={() => { setShowMenu(false); handleStart("black"); }}
-                  disabled={workflow.black_status === "running"}
-                >
-                  <Lock className="w-3 h-3 text-amber-400" /> 黑盒
-                </button>
-              )}
-            </div>
-          )}
-        </div>
         
         <Button size="sm" variant="outline" className="cyber-btn-outline h-8" onClick={onEdit} disabled={loading}>
           <Edit className="w-3 h-3" />
