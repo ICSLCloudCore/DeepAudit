@@ -116,3 +116,12 @@ export async function completeWorkflowStage(
   const response = await apiClient.post(`/workflows/${workflowId}/complete-stage/${stage}`);
   return response.data;
 }
+
+export async function updateWorkflowStageStatus(
+  workflowId: string,
+  stage: "analyze" | "white" | "black",
+  taskStatus: "pending" | "running" | "completed" | "failed" | "cancelled"
+): Promise<{ message: string; stage: string; status: string }> {
+  const response = await apiClient.post(`/workflows/${workflowId}/update-stage-status/${stage}?task_status=${taskStatus}`);
+  return response.data;
+}

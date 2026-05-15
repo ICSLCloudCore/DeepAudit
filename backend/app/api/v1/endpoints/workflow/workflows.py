@@ -360,7 +360,12 @@ async def start_workflow_stage_audit(
         raise HTTPException(status_code=400, detail="已跳过的阶段不可启动")
     if stage_status == WorkflowStageStatus.RUNNING:
         raise HTTPException(status_code=400, detail="阶段正在运行中")
-    if stage_status not in [WorkflowStageStatus.CONFIGURED, WorkflowStageStatus.COMPLETED]:
+    if stage_status not in [
+        WorkflowStageStatus.CONFIGURED,
+        WorkflowStageStatus.COMPLETED,
+        WorkflowStageStatus.CANCELLED,
+        WorkflowStageStatus.FAILED,
+    ]:
         raise HTTPException(status_code=400, detail="阶段未配置，请先补充参数")
 
     project_id = getattr(workflow, f"{stage}_project_id")
@@ -414,3 +419,48 @@ async def complete_workflow_stage_endpoint(
     await complete_workflow_stage(db, workflow, stage)
 
     return {"message": f"{stage}阶段已完成"}
+
+
+@router.post("/{id}/update-stage-status/{stage}")
+async def update_workflow_stage_status(
+    id: str,
+    stage: str,
+    task_status: str = Query(
+        ..., description="任务状态: pending/running/completed/failed/cancelled"
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """前端同步任务状态到工作流阶段"""
+    from datetime import datetime, timezone
+    from app.services.workflow.workflow_service import check_all_stages_completed
+
+    if stage not in ["analyze", "white", "black"]:
+        raise HTTPException(status_code=400, detail="无效的阶段名称")
+
+    workflow = await get_workflow_by_id(db, id, current_user.id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+
+    status_map = {
+        "pending": WorkflowStageStatus.RUNNING,
+        "running": WorkflowStageStatus.RUNNING,
+        "completed": WorkflowStageStatus.COMPLETED,
+        "failed": WorkflowStageStatus.FAILED,
+        "cancelled": WorkflowStageStatus.CANCELLED,
+    }
+
+    new_status = status_map.get(task_status)
+    if not new_status:
+        raise HTTPException(status_code=400, detail="无效的任务状态")
+
+    setattr(workflow, f"{stage}_status", new_status)
+
+    if new_status == WorkflowStageStatus.COMPLETED:
+        setattr(workflow, f"{stage}_completed_at", datetime.now(timezone.utc))
+        check_all_stages_completed(workflow)
+
+    workflow.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return {"message": "状态已更新", "stage": stage, "status": new_status}

@@ -4,7 +4,8 @@ export enum WorkflowStageStatus {
   RUNNING = 'running',
   COMPLETED = 'completed',
   FAILED = 'failed',
-  SKIPPED = 'skipped'
+  SKIPPED = 'skipped',
+  CANCELLED = 'cancelled'
 }
 
 export interface Workflow {

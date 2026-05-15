@@ -12,7 +12,7 @@ import {
   skipWorkflowStage, 
   unskipWorkflowStage,
   startWorkflowStageAudit,
-  completeWorkflowStage
+  updateWorkflowStageStatus
 } from "@/shared/api/workflows";
 import { getOpenCodeAuditTasks } from "@/shared/api/opencodeAuditTasks";
 import type { Workflow, WorkflowVulnerabilityStats, WorkflowStageStatus } from "@/shared/types/workflow";
@@ -26,6 +26,7 @@ const STATUS_CONFIG: Record<string, { color: string; label: string; filled: bool
   not_configured: { color: "border-gray-400", label: "未配置", filled: false },
   skipped: { color: "border-gray-400", label: "已跳过", filled: false },
   failed: { color: "bg-red-500", label: "失败", filled: true },
+  cancelled: { color: "bg-orange-500", label: "已取消", filled: true },
 };
 
 function formatDate(dateStr: string | undefined) {
@@ -63,10 +64,15 @@ export default function WorkflowDetail() {
       
       try {
         const tasks = await getOpenCodeAuditTasks({ project_id: projectId });
-        const completedTask = tasks.find(t => t.status === "completed");
         
-        if (completedTask) {
-          await completeWorkflowStage(id, stage);
+        const latestTask = tasks.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )[0];
+        
+        if (latestTask) {
+          await updateWorkflowStageStatus(id, stage, latestTask.status as any);
+        } else {
+          await updateWorkflowStageStatus(id, stage, "cancelled");
         }
       } catch (error) {
         console.error(`Failed to sync stage ${stage}:`, error);
@@ -172,11 +178,6 @@ export default function WorkflowDetail() {
       return;
     }
     
-    if (stageStatus === "completed") {
-      toast.info("阶段已完成");
-      return;
-    }
-    
     try {
       await startWorkflowStageAudit(workflow.id, stage);
       toast.success("审计已启动");
@@ -237,6 +238,67 @@ export default function WorkflowDetail() {
     { key: "black", status: workflow.black_status, label: "黑盒", date: workflow.black_started_at, project_id: workflow.black_project_id },
     { key: "completed", status: workflow.overall_status === "completed" ? "completed" : "not_configured", label: "完成", date: workflow.completed_at },
   ];
+
+  const renderStageButtons = (stage: "analyze" | "white" | "black", projectId: string | undefined, status: string) => {
+    const canRestart = status === "completed" || status === "cancelled" || status === "failed";
+    
+    return (
+      <div className="flex flex-wrap gap-2 mt-4">
+        {/* 配置并启动 */}
+        {status === "not_configured" && (
+          <Button size="sm" onClick={() => handleStart(stage)}>
+            <Play className="w-4 h-4 mr-1" /> 配置并启动
+          </Button>
+        )}
+        
+        {/* 启动审计 */}
+        {status === "configured" && (
+          <Button size="sm" onClick={() => handleStart(stage)}>
+            <Play className="w-4 h-4 mr-1" /> 启动审计
+          </Button>
+        )}
+        
+        {/* 重新启动 */}
+        {canRestart && (
+          <>
+            <Button size="sm" onClick={() => handleStart(stage)}>
+              <Play className="w-4 h-4 mr-1" /> 重新启动
+            </Button>
+            {projectId && (
+              <Link to={`/projects/${projectId}`}>
+                <Button size="sm" variant="outline">
+                  <ExternalLink className="w-4 h-4 mr-1" /> 项目详情
+                </Button>
+              </Link>
+            )}
+          </>
+        )}
+        
+        {/* 运行中 */}
+        {status === "running" && projectId && (
+          <Link to={`/projects/${projectId}`}>
+            <Button size="sm" className="cyber-btn-primary">
+              <ExternalLink className="w-4 h-4 mr-1" /> 项目详情
+            </Button>
+          </Link>
+        )}
+        
+        {/* 跳过按钮（仅威胁和黑盒） */}
+        {stage !== "white" && status !== "skipped" && status !== "running" && !canRestart && (
+          <Button size="sm" variant="outline" onClick={() => handleSkip(stage as "analyze" | "black")}>
+            <SkipForward className="w-4 h-4 mr-1" /> 跳过
+          </Button>
+        )}
+        
+        {/* 取消跳过 */}
+        {stage !== "white" && status === "skipped" && (
+          <Button size="sm" variant="outline" onClick={() => handleUnskip(stage as "analyze" | "black")}>
+            <Undo className="w-4 h-4 mr-1" /> 取消跳过
+          </Button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -348,125 +410,31 @@ export default function WorkflowDetail() {
         {/* 威胁分析阶段 */}
         <Card className="p-4" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
           <h4 className="font-semibold mb-2" style={{ color: "var(--cyber-text)" }}>威胁分析阶段</h4>
-          <p className="text-sm text-muted-foreground mb-2">状态: {STATUS_CONFIG[workflow.analyze_status]?.label}</p>
+          <p className="text-sm text-muted-foreground mb-2">状态: {STATUS_CONFIG[workflow.analyze_status]?.label || workflow.analyze_status}</p>
           {workflow.analyze_tech_stack && workflow.analyze_tech_stack.length > 0 && (
             <p className="text-sm text-muted-foreground mb-2">技术栈: {workflow.analyze_tech_stack.join(", ")}</p>
           )}
-          <div className="flex flex-wrap gap-2 mt-4">
-            {workflow.analyze_status === "configured" && (
-              <Button size="sm" onClick={() => handleStart("analyze")}>
-                <Play className="w-4 h-4 mr-1" /> 启动审计
-              </Button>
-            )}
-            {workflow.analyze_status === "running" && workflow.analyze_project_id && (
-              <Link to={`/projects/${workflow.analyze_project_id}`}>
-                <Button size="sm" className="cyber-btn-primary">
-                  <ExternalLink className="w-4 h-4 mr-1" /> 项目详情
-                </Button>
-              </Link>
-            )}
-            {workflow.analyze_status === "completed" && workflow.analyze_project_id && (
-              <Link to={`/projects/${workflow.analyze_project_id}`}>
-                <Button size="sm" variant="outline">
-                  <ExternalLink className="w-4 h-4 mr-1" /> 项目详情
-                </Button>
-              </Link>
-            )}
-            {workflow.analyze_status === "not_configured" && (
-              <Button size="sm" onClick={() => handleStart("analyze")}>
-                <Play className="w-4 h-4 mr-1" /> 配置并启动
-              </Button>
-            )}
-            {workflow.analyze_status !== "skipped" && 
-             workflow.analyze_status !== "running" && 
-             workflow.analyze_status !== "completed" && (
-              <Button size="sm" variant="outline" onClick={() => handleSkip("analyze")}>
-                <SkipForward className="w-4 h-4 mr-1" /> 跳过
-              </Button>
-            )}
-            {workflow.analyze_status === "skipped" && (
-              <Button size="sm" variant="outline" onClick={() => handleUnskip("analyze")}>
-                <Undo className="w-4 h-4 mr-1" /> 取消跳过
-              </Button>
-            )}
-          </div>
+          {renderStageButtons("analyze", workflow.analyze_project_id, workflow.analyze_status)}
         </Card>
 
         {/* 白盒分析阶段 */}
         <Card className="p-4" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
           <h4 className="font-semibold mb-2" style={{ color: "var(--cyber-text)" }}>白盒分析阶段</h4>
-          <p className="text-sm text-muted-foreground mb-2">状态: {STATUS_CONFIG[workflow.white_status]?.label}</p>
+          <p className="text-sm text-muted-foreground mb-2">状态: {STATUS_CONFIG[workflow.white_status]?.label || workflow.white_status}</p>
           {workflow.white_tech_stack && workflow.white_tech_stack.length > 0 && (
             <p className="text-sm text-muted-foreground mb-2">技术栈: {workflow.white_tech_stack.join(", ")}</p>
           )}
-          <div className="flex flex-wrap gap-2 mt-4">
-            {workflow.white_status === "configured" && (
-              <Button size="sm" onClick={() => handleStart("white")}>
-                <Play className="w-4 h-4 mr-1" /> 启动审计
-              </Button>
-            )}
-            {workflow.white_status === "running" && workflow.white_project_id && (
-              <Link to={`/projects/${workflow.white_project_id}`}>
-                <Button size="sm" className="cyber-btn-primary">
-                  <ExternalLink className="w-4 h-4 mr-1" /> 项目详情
-                </Button>
-              </Link>
-            )}
-            {workflow.white_status === "completed" && workflow.white_project_id && (
-              <Link to={`/projects/${workflow.white_project_id}`}>
-                <Button size="sm" variant="outline">
-                  <ExternalLink className="w-4 h-4 mr-1" /> 项目详情
-                </Button>
-              </Link>
-            )}
-          </div>
+          {renderStageButtons("white", workflow.white_project_id, workflow.white_status)}
         </Card>
 
         {/* 黑盒分析阶段 */}
         <Card className="p-4" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
           <h4 className="font-semibold mb-2" style={{ color: "var(--cyber-text)" }}>黑盒分析阶段</h4>
-          <p className="text-sm text-muted-foreground mb-2">状态: {STATUS_CONFIG[workflow.black_status]?.label}</p>
+          <p className="text-sm text-muted-foreground mb-2">状态: {STATUS_CONFIG[workflow.black_status]?.label || workflow.black_status}</p>
           {workflow.black_tech_stack && workflow.black_tech_stack.length > 0 && (
             <p className="text-sm text-muted-foreground mb-2">技术栈: {workflow.black_tech_stack.join(", ")}</p>
           )}
-          <div className="flex flex-wrap gap-2 mt-4">
-            {workflow.black_status === "configured" && (
-              <Button size="sm" onClick={() => handleStart("black")}>
-                <Play className="w-4 h-4 mr-1" /> 启动审计
-              </Button>
-            )}
-            {workflow.black_status === "running" && workflow.black_project_id && (
-              <Link to={`/projects/${workflow.black_project_id}`}>
-                <Button size="sm" className="cyber-btn-primary">
-                  <ExternalLink className="w-4 h-4 mr-1" /> 项目详情
-                </Button>
-              </Link>
-            )}
-            {workflow.black_status === "completed" && workflow.black_project_id && (
-              <Link to={`/projects/${workflow.black_project_id}`}>
-                <Button size="sm" variant="outline">
-                  <ExternalLink className="w-4 h-4 mr-1" /> 项目详情
-                </Button>
-              </Link>
-            )}
-            {workflow.black_status === "not_configured" && (
-              <Button size="sm" onClick={() => handleStart("black")}>
-                <Play className="w-4 h-4 mr-1" /> 配置并启动
-              </Button>
-            )}
-            {workflow.black_status !== "skipped" && 
-             workflow.black_status !== "running" && 
-             workflow.black_status !== "completed" && (
-              <Button size="sm" variant="outline" onClick={() => handleSkip("black")}>
-                <SkipForward className="w-4 h-4 mr-1" /> 跳过
-              </Button>
-            )}
-            {workflow.black_status === "skipped" && (
-              <Button size="sm" variant="outline" onClick={() => handleUnskip("black")}>
-                <Undo className="w-4 h-4 mr-1" /> 取消跳过
-              </Button>
-            )}
-          </div>
+          {renderStageButtons("black", workflow.black_project_id, workflow.black_status)}
         </Card>
       </div>
 

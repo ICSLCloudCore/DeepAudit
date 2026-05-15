@@ -13,6 +13,7 @@ class WorkflowStageStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+    CANCELLED = "cancelled"
 
 
 class Workflow(Base):
