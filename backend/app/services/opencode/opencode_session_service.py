@@ -1360,10 +1360,10 @@ class OpenCodeSessionService:
                                 record_index += 1
 
                                 # 检查是否有完成的响应
-                                has_text = any(isinstance(p, TextPart) for p in msg.parts)
-                                has_reasoning = any(isinstance(p, ReasoningPart) for p in msg.parts)
-                                if has_text and has_reasoning:
-                                    return True
+                                # has_text = any(isinstance(p, TextPart) for p in msg.parts)
+                                # has_reasoning = any(isinstance(p, ReasoningPart) for p in msg.parts)
+                                # if has_text and has_reasoning:
+                                    # return True
 
                 await asyncio.sleep(poll_interval)
 
