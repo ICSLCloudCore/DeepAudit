@@ -9,11 +9,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { updateWorkflow } from "@/shared/api/workflows";
 import type { Workflow } from "@/shared/types/workflow";
 import {
-  ANALYZE_TECH_STACK_OPTIONS,
+  PRODUCT_DOMAIN_OPTIONS,
+  AUDIT_TYPE_OPTIONS,
+  VALIDATION_MODE_OPTIONS,
   WHITE_TECH_STACK_OPTIONS,
   BLACK_TECH_STACK_OPTIONS,
 } from "@/shared/types/workflow";
@@ -31,58 +40,66 @@ export default function EditWorkflowDialog({
   onClose,
   onSuccess,
 }: EditWorkflowDialogProps) {
-  const [name, setName] = useState("");
+  const [productName, setProductName] = useState("");
+  const [productDomain, setProductDomain] = useState("");
+  const [version, setVersion] = useState("");
+  const [auditType, setAuditType] = useState<"baseline" | "differential">("baseline");
+  const [validationMode, setValidationMode] = useState<"wide" | "self">("self");
   const [description, setDescription] = useState("");
-  const [analyzeTechStack, setAnalyzeTechStack] = useState<string[]>([]);
-  const [analyzeAgents, setAnalyzeAgents] = useState<string[]>([]);
   const [whiteTechStack, setWhiteTechStack] = useState<string[]>([]);
-  const [whiteAgents, setWhiteAgents] = useState<string[]>([]);
   const [blackTechStack, setBlackTechStack] = useState<string[]>([]);
-  const [blackAgents, setBlackAgents] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (workflow) {
-      setName(workflow.name);
+      setProductName(workflow.product_name);
+      setProductDomain(workflow.product_domain);
+      setVersion(workflow.version);
+      setAuditType(workflow.audit_type);
+      setValidationMode(workflow.validation_mode);
       setDescription(workflow.description || "");
-      setAnalyzeTechStack(workflow.analyze_tech_stack || []);
-      setAnalyzeAgents(workflow.analyze_agents || []);
       setWhiteTechStack(workflow.white_tech_stack || []);
-      setWhiteAgents(workflow.white_agents || []);
       setBlackTechStack(workflow.black_tech_stack || []);
-      setBlackAgents(workflow.black_agents || []);
     }
   }, [workflow]);
 
   const resetForm = () => {
-    setName("");
+    setProductName("");
+    setProductDomain("");
+    setVersion("");
+    setAuditType("baseline");
+    setValidationMode("self");
     setDescription("");
-    setAnalyzeTechStack([]);
-    setAnalyzeAgents([]);
     setWhiteTechStack([]);
-    setWhiteAgents([]);
     setBlackTechStack([]);
-    setBlackAgents([]);
   };
 
   const handleSubmit = async () => {
     if (!workflow) return;
-    if (!name.trim()) {
-      toast.error("请输入工作流名称");
+    if (!productName.trim()) {
+      toast.error("请输入产品名称");
+      return;
+    }
+    if (!productDomain) {
+      toast.error("请选择产品领域");
+      return;
+    }
+    if (!version.trim()) {
+      toast.error("请输入版本号");
       return;
     }
 
     setLoading(true);
     try {
       await updateWorkflow(workflow.id, {
-        name,
+        product_name: productName,
+        product_domain: productDomain,
+        version: version,
+        audit_type: auditType,
+        validation_mode: validationMode,
         description,
-        analyze_tech_stack: analyzeTechStack,
-        analyze_agents: analyzeAgents,
         white_tech_stack: whiteTechStack,
-        white_agents: whiteAgents,
         black_tech_stack: blackTechStack,
-        black_agents: blackAgents,
       });
       toast.success("工作流已更新");
       resetForm();
@@ -109,52 +126,63 @@ export default function EditWorkflowDialog({
 
         <div className="space-y-6">
           <div className="space-y-4 border-b pb-4" style={{ borderColor: "var(--cyber-border)" }}>
-            <h4 className="font-medium text-sm text-muted-foreground">基本信息</h4>
+            <h4 className="font-medium text-sm text-muted-foreground">产品信息</h4>
             <div>
-              <Label htmlFor="name">工作流名称</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="输入工作流名称" />
+              <Label htmlFor="productName">产品名称</Label>
+              <Input id="productName" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="例如：UDM" />
+            </div>
+            <div>
+              <Label htmlFor="productDomain">产品领域</Label>
+              <Select value={productDomain} onValueChange={setProductDomain}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择产品领域" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRODUCT_DOMAIN_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-4 border-b pb-4" style={{ borderColor: "var(--cyber-border)" }}>
+            <h4 className="font-medium text-sm text-muted-foreground">工作流基本信息</h4>
+            <div>
+              <Label htmlFor="version">版本号</Label>
+              <Input id="version" value={version} onChange={(e) => setVersion(e.target.value)} placeholder="例如：26.1.0" />
+            </div>
+            <div>
+              <Label htmlFor="auditType">审计类型</Label>
+              <Select value={auditType} onValueChange={(v) => setAuditType(v as "baseline" | "differential")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AUDIT_TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="validationMode">验证模式</Label>
+              <Select value={validationMode} onValueChange={(v) => setValidationMode(v as "wide" | "self")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {VALIDATION_MODE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="description">简介</Label>
               <Input id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="输入简介" />
             </div>
           </div>
-
-          {workflow && workflow.analyze_status !== "skipped" && (
-            <div className="space-y-4 border-b pb-4" style={{ borderColor: "var(--cyber-border)" }}>
-              <h4 className="font-medium text-sm text-muted-foreground">威胁分析阶段</h4>
-              <div>
-                <Label>技术栈</Label>
-                <div className="flex gap-2 mt-1">
-                  {ANALYZE_TECH_STACK_OPTIONS.map((opt) => (
-                    <Button
-                      key={opt}
-                      size="sm"
-                      variant={analyzeTechStack.includes(opt) ? "default" : "outline"}
-                      onClick={() => {
-                        setAnalyzeTechStack(
-                          analyzeTechStack.includes(opt)
-                            ? analyzeTechStack.filter((t) => t !== opt)
-                            : [...analyzeTechStack, opt]
-                        );
-                      }}
-                    >
-                      {opt}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="analyzeAgents">Agent包</Label>
-                <Input
-                  id="analyzeAgents"
-                  value={analyzeAgents.join(",")}
-                  onChange={(e) => setAnalyzeAgents(e.target.value.split(",").filter(Boolean))}
-                  placeholder="输入Agent ID，逗号分隔"
-                />
-              </div>
-            </div>
-          )}
 
           <div className="space-y-4 border-b pb-4" style={{ borderColor: "var(--cyber-border)" }}>
             <h4 className="font-medium text-sm text-muted-foreground">白盒分析阶段</h4>
@@ -178,15 +206,6 @@ export default function EditWorkflowDialog({
                   </Button>
                 ))}
               </div>
-            </div>
-            <div>
-              <Label htmlFor="whiteAgents">Agent包</Label>
-              <Input
-                id="whiteAgents"
-                value={whiteAgents.join(",")}
-                onChange={(e) => setWhiteAgents(e.target.value.split(",").filter(Boolean))}
-                placeholder="输入Agent ID，逗号分隔"
-              />
             </div>
           </div>
 
@@ -213,15 +232,6 @@ export default function EditWorkflowDialog({
                     </Button>
                   ))}
                 </div>
-              </div>
-              <div>
-                <Label htmlFor="blackAgents">Agent包</Label>
-                <Input
-                  id="blackAgents"
-                  value={blackAgents.join(",")}
-                  onChange={(e) => setBlackAgents(e.target.value.split(",").filter(Boolean))}
-                  placeholder="输入Agent ID，逗号分隔"
-                />
               </div>
             </div>
           )}

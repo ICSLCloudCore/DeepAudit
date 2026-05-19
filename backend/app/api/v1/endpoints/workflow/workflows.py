@@ -74,10 +74,13 @@ async def list_workflows(
 @router.post("/", response_model=WorkflowResponse)
 async def create_workflow(
     db: AsyncSession = Depends(get_db),
-    name: str = Form(...),
+    product_name: str = Form(...),
+    product_domain: str = Form(...),
+    version: str = Form(...),
+    audit_type: str = Form(...),
+    validation_mode: str = Form(...),
     description: str = Form(None),
     analyze_skip: bool = Form(False),
-    analyze_tech_stack: str = Form(None),
     analyze_agent_package_id: str = Form(None),
     analyze_prompt_template_id: str = Form(None),
     white_zip: UploadFile = File(...),
@@ -93,10 +96,13 @@ async def create_workflow(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     workflow_data = WorkflowCreate(
-        name=name,
+        product_name=product_name,
+        product_domain=product_domain,
+        version=version,
+        audit_type=audit_type,
+        validation_mode=validation_mode,
         description=description,
         analyze_skip=analyze_skip,
-        analyze_tech_stack=json.loads(analyze_tech_stack or "[]"),
         analyze_agent_package_id=analyze_agent_package_id,
         analyze_prompt_template_id=analyze_prompt_template_id,
         white_tech_stack=json.loads(white_tech_stack),

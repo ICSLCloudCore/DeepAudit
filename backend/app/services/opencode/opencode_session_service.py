@@ -1298,9 +1298,6 @@ class OpenCodeSessionService:
                     existing_message = existing_result.scalar_one_or_none()
 
                     if existing_message:
-                        logger.info(
-                            f"[OpenCode] Message already exists (same session_id, index, content_type), skipping save"
-                        )
                         return
 
                     # 保存新消息
@@ -1341,9 +1338,6 @@ class OpenCodeSessionService:
                             for part in msg.parts:
                                 # 只在完成时写入
                                 if not is_part_completed(part):
-                                    logger.debug(
-                                        f"[OpenCode] Part not completed yet, skipping: type={part.type}, id={part.id}"
-                                    )
                                     continue
 
                                 await save_part_to_database(

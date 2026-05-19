@@ -1,5 +1,5 @@
 /**
- * CreateWorkflowDialog Component
+ * CreateWorkflowDialog Component - 5 Step Workflow
  * Cyberpunk Terminal Aesthetic
  */
 
@@ -22,12 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Package2, BookOpen, FileText, Terminal, Zap, Code, Lock, Upload } from "lucide-react";
+import { Loader2, Package2, BookOpen, FileText, Terminal, Zap, Code, Lock, Upload, Layers, GitBranch } from "lucide-react";
 import { toast } from "sonner";
 import { createWorkflow, getAvailableResources } from "@/shared/api/workflows";
 import type { AvailableResourcesResponse, Skill, PromptTemplate } from "@/shared/types/workflow";
 import {
-  ANALYZE_TECH_STACK_OPTIONS,
+  PRODUCT_DOMAIN_OPTIONS,
+  AUDIT_TYPE_OPTIONS,
+  VALIDATION_MODE_OPTIONS,
   WHITE_TECH_STACK_OPTIONS,
   BLACK_TECH_STACK_OPTIONS,
 } from "@/shared/types/workflow";
@@ -70,11 +72,14 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
   const [loading, setLoading] = useState(false);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   
-  const [name, setName] = useState("");
+  const [productName, setProductName] = useState("");
+  const [productDomain, setProductDomain] = useState("");
+  const [version, setVersion] = useState("");
+  const [auditType, setAuditType] = useState<"baseline" | "differential">("baseline");
+  const [validationMode, setValidationMode] = useState<"wide" | "self">("self");
   const [description, setDescription] = useState("");
   
   const [analyzeSkip, setAnalyzeSkip] = useState(false);
-  const [analyzeTechStack, setAnalyzeTechStack] = useState<string[]>([]);
   const [analyzeZip, setAnalyzeZip] = useState<File | null>(null);
   const [analyzeAgentPackageId, setAnalyzeAgentPackageId] = useState<string | null>(null);
   const [analyzePromptId, setAnalyzePromptId] = useState<string | null>(null);
@@ -106,29 +111,32 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
   };
 
   useEffect(() => {
-    if (step === 2 && !analyzeSkip && !analyzeResources) {
+    if (step === 3 && !analyzeSkip && !analyzeResources) {
       loadResources("ANALYZE", setAnalyzeResources);
     }
   }, [step, analyzeSkip]);
 
   useEffect(() => {
-    if (step === 3 && !whiteResources) {
+    if (step === 4 && !whiteResources) {
       loadResources("WHITE", setWhiteResources);
     }
   }, [step]);
 
   useEffect(() => {
-    if (step === 4 && !blackSkip && !blackResources) {
+    if (step === 5 && !blackSkip && !blackResources) {
       loadResources("BLACK", setBlackResources);
     }
   }, [step, blackSkip]);
 
   const resetForm = () => {
     setStep(1);
-    setName("");
+    setProductName("");
+    setProductDomain("");
+    setVersion("");
+    setAuditType("baseline");
+    setValidationMode("self");
     setDescription("");
     setAnalyzeSkip(false);
-    setAnalyzeTechStack([]);
     setAnalyzeZip(null);
     setAnalyzeAgentPackageId(null);
     setAnalyzePromptId(null);
@@ -147,8 +155,16 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
   };
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      toast.error("请输入工作流名称");
+    if (!productName.trim()) {
+      toast.error("请输入产品名称");
+      return;
+    }
+    if (!productDomain) {
+      toast.error("请选择产品领域");
+      return;
+    }
+    if (!version.trim()) {
+      toast.error("请输入版本号");
       return;
     }
     if (!whiteZip) {
@@ -163,11 +179,14 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append("name", name);
+      formData.append("product_name", productName);
+      formData.append("product_domain", productDomain);
+      formData.append("version", version);
+      formData.append("audit_type", auditType);
+      formData.append("validation_mode", validationMode);
       if (description) formData.append("description", description);
       
       formData.append("analyze_skip", String(analyzeSkip));
-      formData.append("analyze_tech_stack", JSON.stringify(analyzeTechStack));
       if (analyzeAgentPackageId) formData.append("analyze_agent_package_id", analyzeAgentPackageId);
       if (analyzePromptId) formData.append("analyze_prompt_template_id", analyzePromptId);
       if (analyzeZip) formData.append("analyze_zip", analyzeZip);
@@ -232,7 +251,8 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
     resources: StageResources | null,
     skip?: boolean,
     setSkip?: (v: boolean) => void,
-    required?: boolean
+    required?: boolean,
+    showTechStack?: boolean
   ) => (
     <div className="space-y-4">
       {skip !== undefined && setSkip && (
@@ -265,31 +285,33 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-              {getStageIcon(stage)}
-              技术栈{required && " *"}
-            </Label>
-            <div className="flex gap-2 mt-1 flex-wrap">
-              {techStackOptions.map((opt) => (
-                <Button
-                  key={opt}
-                  size="sm"
-                  variant={techStack.includes(opt) ? "default" : "outline"}
-                  className={techStack.includes(opt) ? "cyber-btn-primary" : "cyber-btn-outline"}
-                  onClick={() => {
-                    setTechStack(
-                      techStack.includes(opt)
-                        ? techStack.filter((t) => t !== opt)
-                        : [...techStack, opt]
-                    );
-                  }}
-                >
-                  {opt}
-                </Button>
-              ))}
+          {showTechStack && (
+            <div className="space-y-2">
+              <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                {getStageIcon(stage)}
+                技术栈{required && " *"}
+              </Label>
+              <div className="flex gap-2 mt-1 flex-wrap">
+                {techStackOptions.map((opt) => (
+                  <Button
+                    key={opt}
+                    size="sm"
+                    variant={techStack.includes(opt) ? "default" : "outline"}
+                    className={techStack.includes(opt) ? "cyber-btn-primary" : "cyber-btn-outline"}
+                    onClick={() => {
+                      setTechStack(
+                        techStack.includes(opt)
+                          ? techStack.filter((t) => t !== opt)
+                          : [...techStack, opt]
+                      );
+                    }}
+                  >
+                    {opt}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {resourcesLoading ? (
             <div className="flex items-center gap-2 p-3 border border-border rounded bg-muted/50">
@@ -391,10 +413,11 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
     </div>
   );
 
+  const fullNamePreview = productName && version ? `${productName} ${version}` : "";
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="!w-[min(90vw,700px)] !max-w-none max-h-[85vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
-        {/* Terminal Header */}
         <div className="flex items-center gap-2 px-4 py-3 cyber-bg-elevated border-b border-border flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-full bg-red-500/80" />
@@ -409,28 +432,119 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
         <DialogHeader className="px-6 pt-4 flex-shrink-0">
           <DialogTitle className="font-mono text-lg uppercase tracking-wider flex items-center gap-2 text-foreground">
             <Terminal className="w-5 h-5 text-primary" />
-            创建工作流 - 步骤 {step}/4
+            创建工作流 - 步骤 {step}/5
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
           {step === 1 && (
             <div className="space-y-4">
+              <div className="p-4 border border-border rounded bg-muted/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Layers className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-mono font-bold text-primary uppercase">产品信息</span>
+                </div>
+                <p className="text-xs text-muted-foreground font-mono">
+                  产品是最大维度的单元，用于组织多个工作流
+                </p>
+              </div>
+              
               <div className="space-y-2">
-                <Label htmlFor="name" className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  工作流名称 *
+                <Label htmlFor="productName" className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                  产品名称 *
                 </Label>
                 <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="输入工作流名称"
+                  id="productName"
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="例如：UDM"
                   className="cyber-input"
                 />
               </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="productDomain" className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                  产品领域 *
+                </Label>
+                <Select value={productDomain} onValueChange={setProductDomain}>
+                  <SelectTrigger className="cyber-input">
+                    <SelectValue placeholder="选择产品领域" />
+                  </SelectTrigger>
+                  <SelectContent className="cyber-select-content">
+                    {PRODUCT_DOMAIN_OPTIONS.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <div className="p-4 border border-border rounded bg-muted/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <GitBranch className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-mono font-bold text-primary uppercase">工作流基本信息</span>
+                </div>
+                <p className="text-xs text-muted-foreground font-mono">
+                  工作流全称将自动生成为：{fullNamePreview || "（填写产品名称和版本号后生成）"}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="version" className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                  版本号 *
+                </Label>
+                <Input
+                  id="version"
+                  value={version}
+                  onChange={(e) => setVersion(e.target.value)}
+                  placeholder="例如：26.1.0"
+                  className="cyber-input"
+                />
+                {fullNamePreview && (
+                  <p className="text-xs text-primary font-mono mt-1">
+                    工作流全称：{fullNamePreview}
+                  </p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="auditType" className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                  审计类型 *
+                </Label>
+                <Select value={auditType} onValueChange={(v) => setAuditType(v as "baseline" | "differential")}>
+                  <SelectTrigger className="cyber-input">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="cyber-select-content">
+                    {AUDIT_TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="validationMode" className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                  验证模式 *
+                </Label>
+                <Select value={validationMode} onValueChange={(v) => setValidationMode(v as "wide" | "self")}>
+                  <SelectTrigger className="cyber-input">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="cyber-select-content">
+                    {VALIDATION_MODE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="description" className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  简介
+                  简介（可选）
                 </Label>
                 <Input
                   id="description"
@@ -440,36 +554,14 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
                   className="cyber-input"
                 />
               </div>
-              
-              <div className="bg-muted/30 border border-border p-4 rounded mt-4">
-                <p className="text-sm font-mono text-muted-foreground">
-                  <span className="text-primary font-bold">工作流流程说明:</span>
-                </p>
-                <div className="flex items-center gap-4 mt-3">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-violet-400" />
-                    <span className="text-xs font-mono">威胁分析</span>
-                  </div>
-                  <div className="w-8 h-0.5 bg-muted" />
-                  <div className="flex items-center gap-2">
-                    <Code className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-mono">白盒分析</span>
-                  </div>
-                  <div className="w-8 h-0.5 bg-muted" />
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-mono">黑盒分析</span>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
-          {step === 2 && renderStageUI(
+          {step === 3 && renderStageUI(
             "analyze",
-            ANALYZE_TECH_STACK_OPTIONS,
-            analyzeTechStack,
-            setAnalyzeTechStack,
+            [],
+            [],
+            () => {},
             analyzeZip,
             setAnalyzeZip,
             analyzeAgentPackageId,
@@ -479,10 +571,11 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
             analyzeResources,
             analyzeSkip,
             setAnalyzeSkip,
+            false,
             false
           )}
 
-          {step === 3 && renderStageUI(
+          {step === 4 && renderStageUI(
             "white",
             WHITE_TECH_STACK_OPTIONS,
             whiteTechStack,
@@ -496,10 +589,11 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
             whiteResources,
             undefined,
             undefined,
+            true,
             true
           )}
 
-          {step === 4 && renderStageUI(
+          {step === 5 && renderStageUI(
             "black",
             BLACK_TECH_STACK_OPTIONS,
             blackTechStack,
@@ -513,7 +607,8 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
             blackResources,
             blackSkip,
             setBlackSkip,
-            false
+            false,
+            true
           )}
         </div>
 
@@ -523,7 +618,7 @@ export default function CreateWorkflowDialog({ open, onClose, onSuccess }: Creat
               上一步
             </Button>
           )}
-          {step < 4 ? (
+          {step < 5 ? (
             <Button onClick={() => setStep(step + 1)} disabled={loading || resourcesLoading} className="cyber-btn-primary">
               下一步
             </Button>

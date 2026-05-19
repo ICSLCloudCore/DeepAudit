@@ -18,8 +18,13 @@ class WorkflowBase(BaseModel):
 
 
 class WorkflowCreate(WorkflowBase):
+    product_name: str
+    product_domain: str
+    version: str
+    audit_type: str
+    validation_mode: str
+
     analyze_skip: Optional[bool] = False
-    analyze_tech_stack: Optional[List[str]] = None
     analyze_agent_package_id: Optional[str] = None
     analyze_prompt_template_id: Optional[str] = None
 
@@ -37,7 +42,12 @@ class WorkflowUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
 
-    analyze_tech_stack: Optional[List[str]] = None
+    product_name: Optional[str] = None
+    product_domain: Optional[str] = None
+    version: Optional[str] = None
+    audit_type: Optional[str] = None
+    validation_mode: Optional[str] = None
+
     analyze_agent_package_id: Optional[str] = None
 
     white_tech_stack: Optional[List[str]] = None
@@ -48,7 +58,7 @@ class WorkflowUpdate(BaseModel):
 
 
 class StageConfigure(BaseModel):
-    tech_stack: List[str]
+    tech_stack: Optional[List[str]] = None
     agent_package_id: Optional[str] = None
     prompt_template_id: Optional[str] = None
 
@@ -69,9 +79,15 @@ class WorkflowResponse(BaseModel):
     submitted_at: datetime
     completed_at: Optional[datetime] = None
 
+    product_name: str
+    product_domain: str
+    version: str
+    audit_type: str
+    validation_mode: str
+    full_name: str
+
     analyze_status: str
     analyze_project_id: Optional[str] = None
-    analyze_tech_stack: Optional[List[str]] = None
     analyze_agent_package_id: Optional[str] = None
     analyze_prompt_template_id: Optional[str] = None
     analyze_started_at: Optional[datetime] = None
@@ -107,7 +123,7 @@ class WorkflowResponse(BaseModel):
 class WorkflowDashboardStats(BaseModel):
     total_workflows: int
     total_vulnerabilities: int
-    analyze_tech_stack_distribution: Dict[str, int]
+    product_domain_distribution: Dict[str, int]
     white_tech_stack_distribution: Dict[str, int]
     black_tech_stack_distribution: Dict[str, int]
     status_distribution: Dict[str, int]

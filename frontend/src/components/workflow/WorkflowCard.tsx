@@ -83,10 +83,12 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
   };
 
   const vulnByStage = stats?.by_stage || { analyze: 0, white: 0, black: 0 };
+  
+  const auditTypeLabel = workflow.audit_type === 'baseline' ? '基线验证' : '差异验证';
+  const validationModeLabel = workflow.validation_mode === 'wide' ? '广院模式' : '自验证模式';
 
   return (
     <div className="cyber-card flex flex-col h-full group">
-      {/* Card Header */}
       <div className="p-4 border-b border-border bg-muted/50 flex justify-between items-start">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 border border-border bg-muted rounded flex items-center justify-center">
@@ -94,8 +96,12 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
           </div>
           <div>
             <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
-              <Link to={`/workflows/${workflow.id}`}>{workflow.name}</Link>
+              <Link to={`/workflows/${workflow.id}`}>{workflow.full_name}</Link>
             </h3>
+            <div className="flex gap-2 mt-1">
+              <Badge variant="outline" className="text-xs font-mono">{workflow.product_domain}</Badge>
+              <Badge variant="outline" className="text-xs font-mono">{auditTypeLabel}</Badge>
+            </div>
             {workflow.description && (
               <p className="text-xs text-muted-foreground font-mono line-clamp-1 border-l-2 border-border pl-2 mt-1">
                 {workflow.description}

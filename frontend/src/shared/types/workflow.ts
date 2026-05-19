@@ -17,9 +17,15 @@ export interface Workflow {
   submitted_at: string;
   completed_at?: string;
   
+  product_name: string;
+  product_domain: string;
+  version: string;
+  audit_type: 'baseline' | 'differential';
+  validation_mode: 'wide' | 'self';
+  full_name: string;
+  
   analyze_status: WorkflowStageStatus;
   analyze_project_id?: string;
-  analyze_tech_stack?: string[];
   analyze_agent_package_id?: string;
   analyze_prompt_template_id?: string;
   analyze_started_at?: string;
@@ -52,7 +58,7 @@ export interface Workflow {
 export interface WorkflowDashboardStats {
   total_workflows: number;
   total_vulnerabilities: number;
-  analyze_tech_stack_distribution: Record<string, number>;
+  product_domain_distribution: Record<string, number>;
   white_tech_stack_distribution: Record<string, number>;
   black_tech_stack_distribution: Record<string, number>;
   status_distribution: Record<string, number>;
@@ -115,11 +121,14 @@ export interface AvailableResourcesResponse {
 }
 
 export interface CreateWorkflowForm {
-  name: string;
+  product_name: string;
+  product_domain: string;
+  version: string;
+  audit_type: 'baseline' | 'differential';
+  validation_mode: 'wide' | 'self';
   description?: string;
   
   analyze_skip?: boolean;
-  analyze_tech_stack?: string[];
   analyze_agent_package_id?: string;
   analyze_prompt_template_id?: string;
   
@@ -138,7 +147,18 @@ export interface WorkflowListResponse {
   total: number;
 }
 
-export const ANALYZE_TECH_STACK_OPTIONS = ['PS', 'CS&IMS', 'HV', 'PLT'];
+export const PRODUCT_DOMAIN_OPTIONS = ['PS', 'CS&IMS', 'HV', 'PLT'];
+
+export const AUDIT_TYPE_OPTIONS = [
+  { value: 'baseline', label: '基线验证' },
+  { value: 'differential', label: '差异验证' }
+];
+
+export const VALIDATION_MODE_OPTIONS = [
+  { value: 'wide', label: '广院模式' },
+  { value: 'self', label: '自验证模式' }
+];
+
 export const WHITE_TECH_STACK_OPTIONS = ['c', 'go', 'normal'];
 export const BLACK_TECH_STACK_OPTIONS = ['linux', 'docker', 'kubeletes', 'CSP', 'CGP'];
 

@@ -54,8 +54,15 @@ async def create_workflow_with_projects(
     analyze_zip_path: Optional[str] = None,
     black_zip_path: Optional[str] = None,
 ) -> Workflow:
+    full_name = f"{workflow_data.product_name} {workflow_data.version}"
+
     workflow = Workflow(
-        name=workflow_data.name,
+        product_name=workflow_data.product_name,
+        product_domain=workflow_data.product_domain,
+        version=workflow_data.version,
+        audit_type=workflow_data.audit_type,
+        validation_mode=workflow_data.validation_mode,
+        name=full_name,
         description=workflow_data.description,
         owner_id=owner_id,
     )
@@ -64,7 +71,7 @@ async def create_workflow_with_projects(
 
     if not workflow_data.analyze_skip and analyze_zip_path:
         analyze_project = Project(
-            name=f"{workflow_data.name}-威胁分析",
+            name=f"{full_name}-威胁分析",
             project_type=ProjectType.ANALYZE,
             source_type="zip",
             owner_id=owner_id,
@@ -74,7 +81,6 @@ async def create_workflow_with_projects(
 
         workflow.analyze_project_id = analyze_project.id
         workflow.analyze_status = WorkflowStageStatus.CONFIGURED
-        workflow.analyze_tech_stack = json.dumps(workflow_data.analyze_tech_stack or [])
         workflow.analyze_agent_package_id = workflow_data.analyze_agent_package_id
         workflow.analyze_prompt_template_id = workflow_data.analyze_prompt_template_id
     elif workflow_data.analyze_skip:
@@ -160,10 +166,17 @@ async def update_workflow(
     if update_data.description is not None:
         workflow.description = update_data.description
 
-    if update_data.analyze_tech_stack is not None:
-        workflow.analyze_tech_stack = json.dumps(update_data.analyze_tech_stack)
-        if workflow.analyze_status == WorkflowStageStatus.COMPLETED:
-            workflow.analyze_status = WorkflowStageStatus.CONFIGURED
+    if update_data.product_name is not None:
+        workflow.product_name = update_data.product_name
+    if update_data.product_domain is not None:
+        workflow.product_domain = update_data.product_domain
+    if update_data.version is not None:
+        workflow.version = update_data.version
+    if update_data.audit_type is not None:
+        workflow.audit_type = update_data.audit_type
+    if update_data.validation_mode is not None:
+        workflow.validation_mode = update_data.validation_mode
+
     if update_data.analyze_agent_package_id is not None:
         workflow.analyze_agent_package_id = update_data.analyze_agent_package_id
 
@@ -212,11 +225,13 @@ async def configure_stage(
     config: StageConfigure,
 ) -> Workflow:
     status_field = f"{stage}_status"
-    tech_stack_field = f"{stage}_tech_stack"
     agent_package_field = f"{stage}_agent_package_id"
     prompt_template_field = f"{stage}_prompt_template_id"
 
-    setattr(workflow, tech_stack_field, json.dumps(config.tech_stack))
+    if stage in ["white", "black"] and config.tech_stack:
+        tech_stack_field = f"{stage}_tech_stack"
+        setattr(workflow, tech_stack_field, json.dumps(config.tech_stack))
+
     if config.agent_package_id:
         setattr(workflow, agent_package_field, config.agent_package_id)
     if config.prompt_template_id:
@@ -305,6 +320,47 @@ async def get_dashboard_stats(
 
     total_workflows = len(workflows)
 
+    product_domain_distribution: Dict[str, int] = {}
+    white_distribution: Dict[str, int] = {}
+    black_distribution: Dict[str, int] = {}
+    status_distribution: Dict[str, int] = {}
+
+    total_vulnerabilities = 0
+
+    for wf in workflows:
+        overall_status = get_workflow_overall_status(wf)
+        status_distribution[overall_status] = status_distribution.get(overall_status, 0) + 1
+
+        if wf.product_domain:
+            product_domain_distribution[wf.product_domain] = (
+                product_domain_distribution.get(wf.product_domain, 0) + 1
+            )
+
+        if wf.white_tech_stack:
+            techs = json.loads(wf.white_tech_stack)
+            for tech in techs:
+                white_distribution[tech] = white_distribution.get(tech, 0) + 1
+
+        if wf.black_tech_stack:
+            techs = json.loads(wf.black_tech_stack)
+            for tech in techs:
+                black_distribution[tech] = black_distribution.get(tech, 0) + 1
+
+        vuln_stats = await get_workflow_vulnerability_stats(db, wf)
+        total_vulnerabilities += vuln_stats["vulnerabilities"]["total"]
+
+    return WorkflowDashboardStats(
+        total_workflows=total_workflows,
+        total_vulnerabilities=total_vulnerabilities,
+        product_domain_distribution=product_domain_distribution,
+        white_tech_stack_distribution=white_distribution,
+        black_tech_stack_distribution=black_distribution,
+        status_distribution=status_distribution,
+    )
+    workflows = result.scalars().all()
+
+    total_workflows = len(workflows)
+
     analyze_distribution: Dict[str, int] = {}
     white_distribution: Dict[str, int] = {}
     black_distribution: Dict[str, int] = {}
@@ -316,10 +372,10 @@ async def get_dashboard_stats(
         overall_status = get_workflow_overall_status(wf)
         status_distribution[overall_status] = status_distribution.get(overall_status, 0) + 1
 
-        if wf.analyze_tech_stack:
-            techs = json.loads(wf.analyze_tech_stack)
-            for tech in techs:
-                analyze_distribution[tech] = analyze_distribution.get(tech, 0) + 1
+        if wf.product_domain:
+            analyze_distribution[wf.product_domain] = (
+                analyze_distribution.get(wf.product_domain, 0) + 1
+            )
 
         if wf.white_tech_stack:
             techs = json.loads(wf.white_tech_stack)
@@ -471,6 +527,8 @@ async def get_workflow_vulnerability_stats(
 
 
 def workflow_to_response(workflow: Workflow, vuln_stats: Optional[Dict] = None) -> WorkflowResponse:
+    full_name = f"{workflow.product_name} {workflow.version}"
+
     return WorkflowResponse(
         id=workflow.id,
         name=workflow.name,
@@ -478,9 +536,14 @@ def workflow_to_response(workflow: Workflow, vuln_stats: Optional[Dict] = None) 
         owner_id=workflow.owner_id,
         submitted_at=workflow.submitted_at,
         completed_at=workflow.completed_at,
+        product_name=workflow.product_name,
+        product_domain=workflow.product_domain,
+        version=workflow.version,
+        audit_type=workflow.audit_type,
+        validation_mode=workflow.validation_mode,
+        full_name=full_name,
         analyze_status=workflow.analyze_status,
         analyze_project_id=workflow.analyze_project_id,
-        analyze_tech_stack=json.loads(workflow.analyze_tech_stack or "[]"),
         analyze_agent_package_id=workflow.analyze_agent_package_id,
         analyze_prompt_template_id=workflow.analyze_prompt_template_id,
         analyze_started_at=workflow.analyze_started_at,

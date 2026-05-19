@@ -300,6 +300,9 @@ export default function WorkflowDetail() {
     );
   };
 
+  const auditTypeLabel = workflow.audit_type === 'baseline' ? '基线验证' : '差异验证';
+  const validationModeLabel = workflow.validation_mode === 'wide' ? '广院模式' : '自验证模式';
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -309,7 +312,9 @@ export default function WorkflowDetail() {
               <ArrowLeft className="w-4 h-4 mr-1" /> 返回
             </Button>
           </Link>
-          <h1 className="text-2xl font-bold" style={{ color: "var(--cyber-text)" }}>{workflow.name}</h1>
+          <h1 className="text-2xl font-bold" style={{ color: "var(--cyber-text)" }}>{workflow.full_name}</h1>
+          <Badge variant="outline" className="font-mono">{workflow.product_domain}</Badge>
+          <Badge variant="outline" className="font-mono">{auditTypeLabel}</Badge>
           <Badge variant={workflow.overall_status === "completed" ? "default" : "secondary"}>
             {workflow.overall_status === "completed" ? "已完成" : workflow.overall_status === "in_progress" ? "进行中" : "就绪"}
           </Badge>
@@ -327,9 +332,33 @@ export default function WorkflowDetail() {
         </div>
       </div>
 
-      {workflow.description && (
-        <p className="text-muted-foreground">{workflow.description}</p>
-      )}
+      <Card className="p-4" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
+        <div className="grid grid-cols-5 gap-4">
+          <div>
+            <span className="text-xs text-muted-foreground font-mono">产品名称</span>
+            <p className="font-bold font-mono" style={{ color: "var(--cyber-text)" }}>{workflow.product_name}</p>
+          </div>
+          <div>
+            <span className="text-xs text-muted-foreground font-mono">版本号</span>
+            <p className="font-bold font-mono" style={{ color: "var(--cyber-text)" }}>{workflow.version}</p>
+          </div>
+          <div>
+            <span className="text-xs text-muted-foreground font-mono">审计类型</span>
+            <p className="font-bold font-mono" style={{ color: "var(--cyber-text)" }}>{auditTypeLabel}</p>
+          </div>
+          <div>
+            <span className="text-xs text-muted-foreground font-mono">验证模式</span>
+            <p className="font-bold font-mono" style={{ color: "var(--cyber-text)" }}>{validationModeLabel}</p>
+          </div>
+          <div>
+            <span className="text-xs text-muted-foreground font-mono">工作流全称</span>
+            <p className="font-bold font-mono text-primary">{workflow.full_name}</p>
+          </div>
+        </div>
+        {workflow.description && (
+          <p className="text-muted-foreground mt-4 border-t border-border pt-4">{workflow.description}</p>
+        )}
+      </Card>
 
       <Card className="p-6" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
         <h3 className="font-semibold mb-4" style={{ color: "var(--cyber-text)" }}>流程进度</h3>
@@ -411,9 +440,6 @@ export default function WorkflowDetail() {
         <Card className="p-4" style={{ background: "var(--cyber-bg)", border: "1px solid var(--cyber-border)" }}>
           <h4 className="font-semibold mb-2" style={{ color: "var(--cyber-text)" }}>威胁分析阶段</h4>
           <p className="text-sm text-muted-foreground mb-2">状态: {STATUS_CONFIG[workflow.analyze_status]?.label || workflow.analyze_status}</p>
-          {workflow.analyze_tech_stack && workflow.analyze_tech_stack.length > 0 && (
-            <p className="text-sm text-muted-foreground mb-2">技术栈: {workflow.analyze_tech_stack.join(", ")}</p>
-          )}
           {renderStageButtons("analyze", workflow.analyze_project_id, workflow.analyze_status)}
         </Card>
 

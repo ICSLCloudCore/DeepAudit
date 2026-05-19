@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import { configureWorkflowStage, startWorkflowStage } from "@/shared/api/workflows";
 import type { Workflow } from "@/shared/types/workflow";
 import {
-  ANALYZE_TECH_STACK_OPTIONS,
   WHITE_TECH_STACK_OPTIONS,
   BLACK_TECH_STACK_OPTIONS,
 } from "@/shared/types/workflow";
@@ -33,7 +32,6 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const TECH_STACK_OPTIONS: Record<string, string[]> = {
-  analyze: ANALYZE_TECH_STACK_OPTIONS,
   white: WHITE_TECH_STACK_OPTIONS,
   black: BLACK_TECH_STACK_OPTIONS,
 };
@@ -46,30 +44,38 @@ export default function ConfigureStageDialog({
   onSuccess,
 }: ConfigureStageDialogProps) {
   const [techStack, setTechStack] = useState<string[]>([]);
-  const [agents, setAgents] = useState<string[]>([]);
+  const [agentPackageId, setAgentPackageId] = useState<string>("");
+  const [promptTemplateId, setPromptTemplateId] = useState<string>("");
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const needsTechStack = stage === "white" || stage === "black";
 
   const handleSaveAndStart = async () => {
     if (!workflow) return;
     
-    if (techStack.length === 0) {
+    if (needsTechStack && techStack.length === 0) {
       toast.error("请选择技术栈");
-      return;
-    }
-    if (agents.length === 0) {
-      toast.error("请选择Agent包");
       return;
     }
 
     setLoading(true);
     try {
-      await configureWorkflowStage(workflow.id, stage, { tech_stack: techStack, agents });
+      const config: any = {};
+      if (needsTechStack && techStack.length > 0) {
+        config.tech_stack = techStack;
+      }
+      if (agentPackageId) {
+        config.agent_package_id = agentPackageId;
+      }
+      if (promptTemplateId) {
+        config.prompt_template_id = promptTemplateId;
+      }
+      
+      await configureWorkflowStage(workflow.id, stage, config);
       await startWorkflowStage(workflow.id, stage);
       toast.success(`${STAGE_LABELS[stage]}阶段已配置并启动`);
-      setTechStack([]);
-      setAgents([]);
-      setZipFile(null);
+      resetForm();
       onClose();
       onSuccess();
     } catch (error: any) {
@@ -79,10 +85,15 @@ export default function ConfigureStageDialog({
     }
   };
 
-  const handleClose = () => {
+  const resetForm = () => {
     setTechStack([]);
-    setAgents([]);
+    setAgentPackageId("");
+    setPromptTemplateId("");
     setZipFile(null);
+  };
+
+  const handleClose = () => {
+    resetForm();
     onClose();
   };
 
@@ -97,7 +108,7 @@ export default function ConfigureStageDialog({
 
         <div className="space-y-4">
           <div>
-            <Label htmlFor="zip">上传ZIP包</Label>
+            <Label htmlFor="zip">上传ZIP包（可选）</Label>
             <Input
               id="zip"
               type="file"
@@ -109,35 +120,47 @@ export default function ConfigureStageDialog({
             )}
           </div>
 
-          <div>
-            <Label>技术栈 *</Label>
-            <div className="flex gap-2 mt-1 flex-wrap">
-              {TECH_STACK_OPTIONS[stage].map((opt) => (
-                <Button
-                  key={opt}
-                  size="sm"
-                  variant={techStack.includes(opt) ? "default" : "outline"}
-                  onClick={() => {
-                    setTechStack(
-                      techStack.includes(opt)
-                        ? techStack.filter((t) => t !== opt)
-                        : [...techStack, opt]
-                    );
-                  }}
-                >
-                  {opt}
-                </Button>
-              ))}
+          {needsTechStack && (
+            <div>
+              <Label>技术栈 *</Label>
+              <div className="flex gap-2 mt-1 flex-wrap">
+                {TECH_STACK_OPTIONS[stage].map((opt) => (
+                  <Button
+                    key={opt}
+                    size="sm"
+                    variant={techStack.includes(opt) ? "default" : "outline"}
+                    onClick={() => {
+                      setTechStack(
+                        techStack.includes(opt)
+                          ? techStack.filter((t) => t !== opt)
+                          : [...techStack, opt]
+                      );
+                    }}
+                  >
+                    {opt}
+                  </Button>
+                ))}
+              </div>
             </div>
+          )}
+
+          <div>
+            <Label htmlFor="agentPackageId">Agent包 ID（可选）</Label>
+            <Input
+              id="agentPackageId"
+              value={agentPackageId}
+              onChange={(e) => setAgentPackageId(e.target.value)}
+              placeholder="输入Agent Package ID"
+            />
           </div>
 
           <div>
-            <Label htmlFor="agents">Agent包 *</Label>
+            <Label htmlFor="promptTemplateId">Prompt模板 ID（可选）</Label>
             <Input
-              id="agents"
-              value={agents.join(",")}
-              onChange={(e) => setAgents(e.target.value.split(",").filter(Boolean))}
-              placeholder="输入Agent ID，逗号分隔"
+              id="promptTemplateId"
+              value={promptTemplateId}
+              onChange={(e) => setPromptTemplateId(e.target.value)}
+              placeholder="输入Prompt Template ID"
             />
           </div>
         </div>

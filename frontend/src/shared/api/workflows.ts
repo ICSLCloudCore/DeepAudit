@@ -37,8 +37,11 @@ export async function updateWorkflow(
   data: Partial<{
     name: string;
     description: string;
-    analyze_tech_stack: string[];
-    analyze_agent_package_id: string;
+    product_name: string;
+    product_domain: string;
+    version: string;
+    audit_type: string;
+    validation_mode: string;
     white_tech_stack: string[];
     white_agent_package_id: string;
     black_tech_stack: string[];

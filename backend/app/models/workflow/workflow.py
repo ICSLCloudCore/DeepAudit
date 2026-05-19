@@ -27,9 +27,14 @@ class Workflow(Base):
     submitted_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
+    product_name = Column(String, nullable=False)
+    product_domain = Column(String, nullable=False)
+    version = Column(String, nullable=False)
+    audit_type = Column(String(20), nullable=False)
+    validation_mode = Column(String(20), nullable=False)
+
     analyze_status = Column(String(20), default=WorkflowStageStatus.NOT_CONFIGURED)
     analyze_project_id = Column(String, nullable=True)
-    analyze_tech_stack = Column(Text, nullable=True)
     analyze_agent_package_id = Column(String, nullable=True)
     analyze_prompt_template_id = Column(String, nullable=True)
     analyze_started_at = Column(DateTime(timezone=True), nullable=True)

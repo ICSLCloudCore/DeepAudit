@@ -14,7 +14,7 @@ interface WorkflowStatsProps {
 const COLORS = ["#38bdf8", "#22c55e", "#eab308", "#ef4444", "#a855f7", "#6366f1"];
 
 export default function WorkflowStats({ stats }: WorkflowStatsProps) {
-  const analyzeData = Object.entries(stats.analyze_tech_stack_distribution).map(
+  const domainData = Object.entries(stats.product_domain_distribution).map(
     ([name, value]) => ({ name, value })
   );
   const whiteData = Object.entries(stats.white_tech_stack_distribution).map(
@@ -95,17 +95,17 @@ export default function WorkflowStats({ stats }: WorkflowStatsProps) {
 
       {/* Charts Section - Always show 3 cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative z-10">
-        {/* Analyze Tech Stack */}
+        {/* Product Domain */}
         <div className="cyber-card p-4">
           <div className="section-header">
             <Zap className="w-5 h-5 text-violet-400" />
-            <h3 className="section-title">威胁分析技术栈</h3>
+            <h3 className="section-title">产品领域分布</h3>
           </div>
-          {analyzeData.length > 0 ? (
+          {domainData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
-                  data={analyzeData}
+                  data={domainData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -115,7 +115,7 @@ export default function WorkflowStats({ stats }: WorkflowStatsProps) {
                   stroke="var(--cyber-bg)"
                   strokeWidth={2}
                 >
-                  {analyzeData.map((entry, index) => (
+                  {domainData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
