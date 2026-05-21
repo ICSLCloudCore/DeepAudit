@@ -16,6 +16,8 @@ from .agent.agent_task import (
     AgentTask,
     AgentEvent,
     AgentFinding,
+    AgentCheckpoint,
+    AgentTreeNode,
     AgentTaskStatus,
     AgentTaskPhase,
     AgentEventType,
@@ -36,7 +38,10 @@ from .opencode.opencode_audit_task import OpenCodeAuditTask, OpenCodeAuditTaskSt
 
 # 知识库相关模型
 from .knowledge.prompt_template import PromptTemplate
-from .knowledge.security_kb import GoVulnerabilityEntry, GoAttackPatternEntry
+from .knowledge.security_kb import GoVulnerabilityEntry, GoAttackPatternEntry, BusinessKbEntry
+
+# 工作流相关模型
+from .workflow.workflow import Workflow, WorkflowStageStatus
 
 __all__ = [
     "User",
@@ -52,6 +57,8 @@ __all__ = [
     "AgentTask",
     "AgentEvent",
     "AgentFinding",
+    "AgentCheckpoint",
+    "AgentTreeNode",
     "AgentTaskStatus",
     "AgentTaskPhase",
     "AgentEventType",
@@ -78,4 +85,7 @@ __all__ = [
     "PromptTemplate",
     "GoVulnerabilityEntry",
     "GoAttackPatternEntry",
+    "BusinessKbEntry",
+    "Workflow",
+    "WorkflowStageStatus",
 ]

@@ -65,6 +65,7 @@ services:
       - http_proxy=
       - https_proxy=
       - NO_PROXY=*
+      - INIT_DB_DIRECT=${INIT_DB_DIRECT:-false}  # 全新环境直接初始化模式
     depends_on:
       db:
         condition: service_healthy

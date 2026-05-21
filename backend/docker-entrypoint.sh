@@ -42,10 +42,20 @@ if [ $retry_count -eq $max_retries ]; then
     exit 1
 fi
 
-# 运行数据库迁移
-echo "🔄 运行数据库迁移 (alembic upgrade head)..."
-.venv/bin/alembic upgrade head
-echo "✅ 数据库迁移完成"
+# 判断初始化模式
+if [ "$INIT_DB_DIRECT" = "true" ]; then
+    echo "🔧 全新环境初始化模式..."
+    echo "   将直接创建数据库表结构（不使用 alembic 迁移）"
+    
+    # 执行初始化脚本
+    .venv/bin/python scripts/init_db_direct.py
+    
+    echo "✅ 数据库初始化完成"
+else
+    echo "🔄 标准模式：运行数据库迁移 (alembic upgrade head)..."
+    .venv/bin/alembic upgrade head
+    echo "✅ 数据库迁移完成"
+fi
 
 # 启动 uvicorn
 echo "🌐 启动 API 服务..."
