@@ -111,6 +111,7 @@ RUN apt-get update && \
         curl \
         git \
         openssh-client \
+        unzip \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
         libpangocairo-1.0-0 \
@@ -130,8 +131,21 @@ COPY docker/backend/bin/comment-checker /usr/local/bin
 # 安装 ripgrep
 COPY --chown=0:0 docker/backend/bin/rg /usr/local/bin
 
-# 安装cppcheck（如果文件存在）
-# ADD --chown=0:0 docker/backend/bin/cppcheck.tar.gz /usr/local
+# 安装 cppcheck（如果 zip 文件存在）
+RUN touch /tmp/cppcheck.zip
+COPY docker/backend/bin/cppcheck.zip /tmp/cppcheck.zip
+RUN if [ -s /tmp/cppcheck.zip ]; then \
+      echo "Installing cppcheck from zip..."; \
+      unzip /tmp/cppcheck.zip -d /tmp/cppcheck_extracted && \
+      cp /tmp/cppcheck_extracted/cppcheck /usr/local/bin/ && \
+      chmod +x /usr/local/bin/cppcheck && \
+      mkdir -p /usr/local/share/Cppcheck && \
+      cp -r /tmp/cppcheck_extracted/cppcheck_shared/* /usr/local/share/Cppcheck/ && \
+      rm -rf /tmp/cppcheck.zip /tmp/cppcheck_extracted; \
+    else \
+      echo "cppcheck.zip not found or empty, skipping..."; \
+      rm -f /tmp/cppcheck.zip; \
+    fi
 
 # 安装 gh
 ARG GH_VERSION="gh_2.89.0_linux_amd64"
