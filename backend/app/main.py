@@ -60,6 +60,9 @@ async def lifespan(app: FastAPI):
     """
     logger.info("DeepAudit 后端服务启动中...")
 
+    # 导入所有模型（确保注册到 Base.metadata，必须在 create_all 之前）
+    import app.models  # noqa: F401
+
     # 自动创建所有数据库表（使用 SQLAlchemy 元数据）
     try:
         async with engine.begin() as conn:

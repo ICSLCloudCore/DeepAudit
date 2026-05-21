@@ -12,6 +12,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import create_engine, inspect, text
 from app.core.config import settings
 
+# 导入所有模型（确保注册到 Base.metadata）
+import app.models  # noqa: F401
+
 
 def verify_schema():
     """验证数据库表结构完整性"""

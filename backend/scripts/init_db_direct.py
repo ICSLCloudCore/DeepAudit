@@ -15,6 +15,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.db.base import Base
 from app.core.config import settings
 
+# 导入所有模型（确保注册到 Base.metadata）
+import app.models  # noqa: F401
+
 
 async def init_database_direct_async():
     """
