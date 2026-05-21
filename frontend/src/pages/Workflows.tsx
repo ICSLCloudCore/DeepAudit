@@ -6,9 +6,8 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, RefreshCw, GitBranch, Terminal, Table2, LayoutGrid } from "lucide-react";
+import { Plus, Search, RefreshCw, GitBranch } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
 import { getWorkflows, getWorkflowStats, getWorkflowVulnerabilityStats } from "@/shared/api/workflows";
 import type { Workflow, WorkflowDashboardStats, WorkflowVulnerabilityStats } from "@/shared/types/workflow";
 import WorkflowStats from "@/components/workflow/WorkflowStats";
@@ -24,7 +23,6 @@ export default function Workflows() {
   const [stats, setStats] = useState<WorkflowDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [configureDialogOpen, setConfigureDialogOpen] = useState(false);
@@ -99,28 +97,6 @@ export default function Workflows() {
           </h1>
         </div>
         <div className="flex gap-2">
-          {/* 视图切换按钮组 */}
-          <div className="flex gap-1 border border-border rounded p-1 bg-muted/30">
-            <Button
-              size="sm"
-              variant={viewMode === 'table' ? 'default' : 'ghost'}
-              className={`h-8 px-2 ${viewMode === 'table' ? 'cyber-btn-primary' : 'hover:bg-primary/10'}`}
-              onClick={() => setViewMode('table')}
-              title="表格视图"
-            >
-              <Table2 className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant={viewMode === 'card' ? 'default' : 'ghost'}
-              className={`h-8 px-2 ${viewMode === 'card' ? 'cyber-btn-primary' : 'hover:bg-primary/10'}`}
-              onClick={() => setViewMode('card')}
-              title="卡片视图"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-          </div>
-          
           <Button variant="outline" onClick={loadData} disabled={loading} className="cyber-btn-outline h-10">
             <RefreshCw className="w-4 h-4 mr-1" /> 刷新
           </Button>
@@ -133,54 +109,63 @@ export default function Workflows() {
       {/* Stats Section */}
       {stats && <WorkflowStats stats={stats} />}
 
-      {/* Search and Filter */}
-      <div className="cyber-card p-4 flex items-center gap-4 relative z-10">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 z-10" />
-          <Input
-            placeholder="搜索工作流..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="cyber-input !pl-10"
-          />
-        </div>
-      </div>
-
-      {/* Workflow List */}
-      {filteredWorkflows.length === 0 ? (
-        <div className="cyber-card p-16 text-center border-dashed relative z-10">
-          <GitBranch className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-foreground mb-2">
-            {searchQuery ? '未找到匹配项' : '暂无工作流'}
-          </h3>
-          <p className="text-muted-foreground font-mono mb-6">
-            {searchQuery ? '调整搜索参数' : '创建第一个工作流开始审计流程'}
+      {/* Workflow Table - 显示所有工作流（不受搜索过滤） */}
+      {workflows.length === 0 ? (
+        <div className="cyber-card p-8 text-center border-dashed relative z-10">
+          <GitBranch className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-foreground mb-2">暂无工作流数据</h3>
+          <p className="text-sm text-muted-foreground font-mono mb-4">
+            创建第一个工作流开始审计流程
           </p>
-          {!searchQuery && (
-            <Button onClick={() => setCreateDialogOpen(true)} className="cyber-btn-primary">
-              <Plus className="w-4 h-4 mr-2" />
-              新建工作流
-            </Button>
-          )}
+          <Button onClick={() => setCreateDialogOpen(true)} className="cyber-btn-primary">
+            <Plus className="w-4 h-4 mr-2" />
+            新建工作流
+          </Button>
         </div>
-      ) : viewMode === 'table' ? (
+      ) : (
         <WorkflowTable
-          workflows={filteredWorkflows}
+          workflows={workflows}
           workflowStats={workflowStats}
         />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 relative z-10">
-          {filteredWorkflows.map((workflow) => (
-            <WorkflowCard
-              key={workflow.id}
-              workflow={workflow}
-              stats={workflowStats.get(workflow.id)?.vulnerabilities}
-              onRefresh={loadData}
-              onEdit={() => handleEdit(workflow)}
-              onConfigure={(stage) => handleConfigure(workflow, stage)}
+      )}
+
+      {/* Search - 搜索框（分隔表格和卡片，仅过滤卡片） */}
+      {workflows.length > 0 && (
+        <div className="cyber-card p-4 flex items-center gap-4 relative z-10">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 z-10" />
+            <Input
+              placeholder="搜索工作流卡片..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="cyber-input !pl-10"
             />
-          ))}
+          </div>
         </div>
+      )}
+
+      {/* Workflow Cards - 根据搜索过滤 */}
+      {workflows.length > 0 && (
+        filteredWorkflows.length === 0 ? (
+          <div className="cyber-card p-16 text-center border-dashed relative z-10">
+            <GitBranch className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-foreground mb-2">未找到匹配项</h3>
+            <p className="text-muted-foreground font-mono mb-6">调整搜索参数</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 relative z-10">
+            {filteredWorkflows.map((workflow) => (
+              <WorkflowCard
+                key={workflow.id}
+                workflow={workflow}
+                stats={workflowStats.get(workflow.id)?.vulnerabilities}
+                onRefresh={loadData}
+                onEdit={() => handleEdit(workflow)}
+                onConfigure={(stage) => handleConfigure(workflow, stage)}
+              />
+            ))}
+          </div>
+        )
       )}
 
       {/* Dialogs */}
