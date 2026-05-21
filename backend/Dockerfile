@@ -128,7 +128,7 @@ RUN apt-get update && \
 COPY docker/backend/bin/comment-checker /usr/local/bin
 
 # 安装 ripgrep
-COPY --chown=0.0 docker/backend/bin/rg /usr/local/bin
+COPY --chown=0:0 docker/backend/bin/rg /usr/local/bin
 
 # 安装cppcheck（如果文件存在）
 # ADD --chown=0:0 docker/backend/bin/cppcheck.tar.gz /usr/local
