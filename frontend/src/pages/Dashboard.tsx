@@ -550,16 +550,16 @@ export default function Dashboard() {
               <h3 className="section-title">快速操作</h3>
             </div>
             <div className="space-y-2">
-              <Link to="/projects" className="block">
-                <Button className="w-full justify-start cyber-btn-primary h-10">
+<Link to="/projects" className="block">
+                <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
                   <Bot className="w-4 h-4 mr-2" />
                   项目管理
                 </Button>
               </Link>
-              <Link to="/instant-analysis" className="block">
+              <Link to="/opencode" className="block">
                 <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
-                  <Zap className="w-4 h-4 mr-2" />
-                  即时代码分析
+                  <Terminal className="w-4 h-4 mr-2" />
+                  OpenCode 管理
                 </Button>
               </Link>
               <Link to="/opencode" className="block">

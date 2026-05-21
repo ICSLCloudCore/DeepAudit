@@ -98,7 +98,7 @@ const routes: RouteConfig[] = [
     name: "即时分析",
     path: "/instant-analysis",
     element: <InstantAnalysis />,
-    visible: true,
+    visible: false,
   },
   {
     name: "审计任务",
