@@ -6,13 +6,14 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, RefreshCw, GitBranch, Terminal } from "lucide-react";
+import { Plus, Search, RefreshCw, GitBranch, Terminal, Table2, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { getWorkflows, getWorkflowStats, getWorkflowVulnerabilityStats } from "@/shared/api/workflows";
 import type { Workflow, WorkflowDashboardStats, WorkflowVulnerabilityStats } from "@/shared/types/workflow";
 import WorkflowStats from "@/components/workflow/WorkflowStats";
 import WorkflowCard from "@/components/workflow/WorkflowCard";
+import WorkflowTable from "@/components/workflow/WorkflowTable";
 import CreateWorkflowDialog from "@/components/workflow/CreateWorkflowDialog";
 import ConfigureStageDialog from "@/components/workflow/ConfigureStageDialog";
 import EditWorkflowDialog from "@/components/workflow/EditWorkflowDialog";
@@ -23,6 +24,7 @@ export default function Workflows() {
   const [stats, setStats] = useState<WorkflowDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [configureDialogOpen, setConfigureDialogOpen] = useState(false);
@@ -97,6 +99,28 @@ export default function Workflows() {
           </h1>
         </div>
         <div className="flex gap-2">
+          {/* 视图切换按钮组 */}
+          <div className="flex gap-1 border border-border rounded p-1 bg-muted/30">
+            <Button
+              size="sm"
+              variant={viewMode === 'table' ? 'default' : 'ghost'}
+              className={`h-8 px-2 ${viewMode === 'table' ? 'cyber-btn-primary' : 'hover:bg-primary/10'}`}
+              onClick={() => setViewMode('table')}
+              title="表格视图"
+            >
+              <Table2 className="w-4 h-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === 'card' ? 'default' : 'ghost'}
+              className={`h-8 px-2 ${viewMode === 'card' ? 'cyber-btn-primary' : 'hover:bg-primary/10'}`}
+              onClick={() => setViewMode('card')}
+              title="卡片视图"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+          </div>
+          
           <Button variant="outline" onClick={loadData} disabled={loading} className="cyber-btn-outline h-10">
             <RefreshCw className="w-4 h-4 mr-1" /> 刷新
           </Button>
@@ -139,6 +163,11 @@ export default function Workflows() {
             </Button>
           )}
         </div>
+      ) : viewMode === 'table' ? (
+        <WorkflowTable
+          workflows={filteredWorkflows}
+          workflowStats={workflowStats}
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 relative z-10">
           {filteredWorkflows.map((workflow) => (
