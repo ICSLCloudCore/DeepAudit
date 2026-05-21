@@ -1,7 +1,7 @@
 """Add opencode_message_contents table
 
 Revision ID: 011_add_opencode_message_contents
-Revises: 010_add_opencode_interactions
+Revises: extend_alembic_version
 Create Date: 2025-03-22 00:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision = "011_add_opencode_message_contents"
-down_revision = "010_add_opencode_interactions"
+down_revision = "extend_alembic_version"
 branch_labels = None
 depends_on = None
 
@@ -34,9 +34,17 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    op.create_index("idx_opencode_message_contents_session_id", "opencode_message_contents", ["session_id"])
-    op.create_index("idx_opencode_message_contents_content_type", "opencode_message_contents", ["content_type"])
-    op.create_index("idx_opencode_message_contents_message_index", "opencode_message_contents", ["message_index"])
+    op.create_index(
+        "idx_opencode_message_contents_session_id", "opencode_message_contents", ["session_id"]
+    )
+    op.create_index(
+        "idx_opencode_message_contents_content_type", "opencode_message_contents", ["content_type"]
+    )
+    op.create_index(
+        "idx_opencode_message_contents_message_index",
+        "opencode_message_contents",
+        ["message_index"],
+    )
 
 
 def downgrade() -> None:
