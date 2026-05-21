@@ -389,16 +389,10 @@ export default function WorkflowDetail() {
             <Bug className="w-4 h-4 mr-2 inline" /> 漏洞统计
           </h3>
           
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">漏洞总数</p>
               <p className="text-2xl font-bold text-red-400">{stats.vulnerabilities.total}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">威胁分析</p>
-              <p className="text-xl font-semibold" style={{ color: "var(--cyber-text)" }}>
-                {stats.vulnerabilities.by_stage.analyze || 0}
-              </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">白盒分析</p>

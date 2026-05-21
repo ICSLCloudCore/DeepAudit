@@ -407,7 +407,7 @@ async def get_workflow_vulnerability_stats(
     stats = {
         "total": 0,
         "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
-        "by_stage": {"analyze": 0, "white": 0, "black": 0},
+        "by_stage": {"white": 0, "black": 0},
         "by_status": {"open": 0, "resolved": 0, "false_positive": 0},
     }
 
@@ -426,27 +426,16 @@ async def get_workflow_vulnerability_stats(
         )
         agent_tasks = agent_tasks_result.scalars().all()
 
+        analyze_count = 0
         for task in agent_tasks:
             findings_result = await db.execute(
                 select(AgentFinding).where(AgentFinding.task_id == task.id)
             )
             findings = findings_result.scalars().all()
 
-            for finding in findings:
-                stats["total"] += 1
-                stats["by_stage"]["analyze"] += 1
-                severity = finding.severity.lower() if finding.severity else "medium"
-                if severity in stats["by_severity"]:
-                    stats["by_severity"][severity] += 1
-                status = finding.status.lower() if finding.status else "open"
-                if status in ["fixed", "wont_fix"]:
-                    stats["by_status"]["resolved"] += 1
-                elif status == "false_positive":
-                    stats["by_status"]["false_positive"] += 1
-                else:
-                    stats["by_status"]["open"] += 1
+            analyze_count += len(findings)
 
-        stages["analyze"]["vulnerability_count"] = stats["by_stage"]["analyze"]
+        stages["analyze"]["vulnerability_count"] = analyze_count
 
     if workflow.white_project_id:
         stages["white"] = {

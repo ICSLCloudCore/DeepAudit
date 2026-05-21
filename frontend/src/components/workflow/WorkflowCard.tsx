@@ -5,7 +5,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Trash2, Bug, Eye, GitBranch, Zap, Code, Lock, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Edit, Trash2, Bug, Eye, GitBranch, Code, Lock, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Workflow } from "@/shared/types/workflow";
 import { useState } from "react";
@@ -15,7 +15,7 @@ import { deleteWorkflow } from "@/shared/api/workflows";
 interface WorkflowCardProps {
   workflow: Workflow;
   stats?: {
-    by_stage: { analyze: number; white: number; black: number };
+    by_stage: { white: number; black: number };
   };
   onRefresh: () => void;
   onEdit: () => void;
@@ -82,7 +82,7 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
     }
   };
 
-  const vulnByStage = stats?.by_stage || { analyze: 0, white: 0, black: 0 };
+  const vulnByStage = stats?.by_stage || { white: 0, black: 0 };
   
   const auditTypeLabel = workflow.audit_type === 'baseline' ? '基线验证' : '差异验证';
   const validationModeLabel = workflow.validation_mode === 'wide' ? '广院模式' : '自验证模式';
@@ -179,20 +179,13 @@ export default function WorkflowCard({ workflow, stats, onRefresh, onEdit, onCon
           </div>
         </div>
 
-        {/* Vulnerability Stats - 4-column grid */}
-        <div className="grid grid-cols-4 gap-2 p-3 border border-border rounded-lg bg-muted/20">
+        {/* Vulnerability Stats - 3-column grid */}
+        <div className="grid grid-cols-3 gap-2 p-3 border border-border rounded-lg bg-muted/20">
           {/* Total - prominent */}
           <div className="flex flex-col items-center justify-center p-2 rounded bg-red-500/10 border border-red-500/20">
             <Bug className="w-4 h-4 text-red-400 mb-1" />
             <span className="text-lg font-bold font-mono text-red-400">{workflow.total_vulnerabilities || 0}</span>
             <span className="text-xs font-mono text-muted-foreground">漏洞总数</span>
-          </div>
-          
-          {/* Analyze stage */}
-          <div className="flex flex-col items-center justify-center p-2 rounded bg-violet-500/10 border border-violet-500/20">
-            <Zap className="w-4 h-4 text-violet-400 mb-1" />
-            <span className="text-base font-bold font-mono text-violet-400">{vulnByStage.analyze}</span>
-            <span className="text-xs font-mono text-muted-foreground">威胁</span>
           </div>
           
           {/* White stage */}
