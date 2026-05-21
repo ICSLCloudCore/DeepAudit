@@ -7,10 +7,11 @@ FROM docker.m.daocloud.io/library/node:22-slim AS builder
 
 # Huawei 可选配置
 ARG Huawei=false
+ARG Huawei_yellow=false
 
 WORKDIR /app
 
-# 彻底清除代理设置
+# 根据参数设置代理
 ENV http_proxy=""
 ENV https_proxy=""
 ENV HTTP_PROXY=""
@@ -20,8 +21,8 @@ ENV ALL_PROXY=""
 ENV no_proxy="*"
 ENV NO_PROXY="*"
 
-# 条件配置 npm 镜像源
-RUN if [ "$Huawei" = "true" ]; then \
+# 条件配置 npm 镜像源和代理
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Using Huawei npm mirror..."; \
       npm config set registry https://mirrors.tools.huawei.com/npm && \
       npm config set strict-ssl false && \
@@ -33,6 +34,21 @@ RUN if [ "$Huawei" = "true" ]; then \
       npm config set registry https://registry.npmmirror.com && \
       npm install -g pnpm && \
       pnpm config set registry https://registry.npmmirror.com; \
+    fi
+
+# 设置代理环境变量（构建时使用）
+RUN if [ "$Huawei" = "true" ]; then \
+      echo "Setting Huawei proxy..."; \
+      export http_proxy=http://172.25.10.10:8181 && \
+      export https_proxy=http://172.25.10.10:8181 && \
+      export HTTP_PROXY=http://172.25.10.10:8181 && \
+      export HTTPS_PROXY=http://172.25.10.10:8181; \
+    elif [ "$Huawei_yellow" = "true" ]; then \
+      echo "Setting Huawei_yellow proxy..."; \
+      export http_proxy=http://10.43.232.147:8181 && \
+      export https_proxy=http://10.43.232.147:8181 && \
+      export HTTP_PROXY=http://10.43.232.147:8181 && \
+      export HTTPS_PROXY=http://10.43.232.147:8181; \
     fi
 
 # 复制依赖文件

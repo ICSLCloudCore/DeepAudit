@@ -5,6 +5,7 @@ FROM docker.m.daocloud.io/library/python:3.12-trixie AS builder
 
 # Huawei 可选配置
 ARG Huawei=false
+ARG Huawei_yellow=false
 
 WORKDIR /app
 
@@ -15,7 +16,7 @@ ENV PYTHONUNBUFFERED=1
 RUN rm -f /etc/localtime && ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
 # 条件配置 apt 源
-RUN if [ "$Huawei" = "true" ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Using Huawei apt mirror..."; \
       sed -i 's|deb.debian.org|mirrors.tools.huawei.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
       sed -i 's|deb.debian.org|mirrors.tools.huawei.com|g' /etc/apt/sources.list 2>/dev/null || true; \
@@ -45,7 +46,7 @@ COPY --from=ghcr.m.daocloud.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
 
 # 安装 Python 依赖到虚拟环境（根据 Huawei 参数选择 PyPI 源）
-RUN if [ "$Huawei" = "true" ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Using Huawei PyPI mirror..."; \
       UV_INDEX_URL=http://mirrors.tools.huawei.com/pypi/simple/ uv sync --no-dev; \
     else \
@@ -60,6 +61,7 @@ FROM docker.m.daocloud.io/library/python:3.12-trixie AS runtime
 
 # 继承 Huawei 参数
 ARG Huawei=false
+ARG Huawei_yellow=false
 
 WORKDIR /app
 
@@ -70,7 +72,7 @@ ENV PYTHONUNBUFFERED=1
 ARG CERT_DIR="/usr/local/share/ca-certificates/"
 
 # Huawei: 创建证书目录
-RUN if [ "$Huawei" = "true" ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Applying Huawei configuration..."; \
       mkdir -p ${CERT_DIR}; \
     fi
@@ -82,7 +84,7 @@ COPY docker/backend/HWITEnterpriseCA1.crt ${CERT_DIR}/
 
 # 条件配置 PyPI 源
 ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-RUN if [ "$Huawei" = "true" ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Using Huawei PyPI mirror..."; \
     else \
       echo "Using Tsinghua PyPI mirror..."; \
@@ -92,7 +94,7 @@ RUN if [ "$Huawei" = "true" ]; then \
 RUN rm -f /etc/localtime && ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
 # 条件配置 apt 源
-RUN if [ "$Huawei" = "true" ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Using Huawei apt mirror..."; \
       sed -i 's|deb.debian.org|mirrors.tools.huawei.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
       sed -i 's|deb.debian.org|mirrors.tools.huawei.com|g' /etc/apt/sources.list 2>/dev/null || true; \
@@ -146,7 +148,7 @@ RUN cp -r /usr/local/${NODE_VERSION}/* /usr/local/ \
     && chmod +x /usr/local/bin/comment-checker
 
 # 条件配置 npm 源
-RUN if [ "$Huawei" = "true" ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Using Huawei npm mirror..."; \
       npm config set registry https://mirrors.tools.huawei.com/npm -g && \
       npm config set strict-ssl false -g; \
@@ -161,14 +163,23 @@ ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 ENV OPENCODE_DISABLE_MODELS_FETCH=true
 ENV OPENCODE_DISABLE_AUTOUPDATE=true
 
-# Huawei: 临时代理（仅在 Huawei=true 时启用）
-ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.0/8,169.254.0.0/16,172.2.255.254,192.50.0.0/24,70.181.0.0/16,.huawei.com https_proxy=http://172.25.10.10:8181 https_proxy=http://172.25.10.10:8181"
+# Huawei: 临时代理（仅在 Huawei=true 或 Huawei_yellow=true 时启用）
+ARG TEMP_PROXY=""
 
 # 安装 opencode 和 oh-my-openagent
 RUN npm install -g bun \
     && if [ "$Huawei" = "true" ]; then \
-        echo "Using Huawei bun mirror..."; \
-        eval "${TEMP_PROXY}" && bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
+        echo "Using Huawei bun mirror with proxy..."; \
+        export no_proxy="10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.0/8,169.254.0.0/16,172.2.255.254,192.50.0.0/24,70.181.0.0/16,.huawei.com" && \
+        export http_proxy=http://172.25.10.10:8181 && \
+        export https_proxy=http://172.25.10.10:8181 && \
+        bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
+    elif [ "$Huawei_yellow" = "true" ]; then \
+        echo "Using Huawei bun mirror with Huawei_yellow proxy..."; \
+        export no_proxy="10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.0/8,169.254.0.0/16,172.2.255.254,192.50.0.0/24,70.181.0.0/16,.huawei.com" && \
+        export http_proxy=http://10.43.232.147:8181 && \
+        export https_proxy=http://10.43.232.147:8181 && \
+        bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \
     else \
         echo "Using Taobao bun mirror..."; \
         BUN_CONFIG_REGISTRY=https://registry.npmmirror.com bun add -g opencode-ai oh-my-openagent oh-my-opencode-slim; \

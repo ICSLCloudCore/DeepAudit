@@ -6,12 +6,17 @@
 
 ## 功能特性
 
-当启用 `Huawei=true` 时，以下组件将使用华为配置：
+当启用 `Huawei=true` 或 `Huawei_yellow=true` 时，以下组件将使用华为配置：
+
+**镜像源配置（两种模式相同）**：
 
 ### Backend 服务
 1. **使用华为 apt 镜像源** - `mirrors.tools.huawei.com`
 2. **使用华为 PyPI 镜像源** - `http://mirrors.tools.huawei.com/pypi/simple/`
 3. **使用华为 npm 镜像源** - `https://mirrors.tools.huawei.com/npm`
+
+### Frontend 服务
+1. **使用华为 npm 镜像源** - `https://mirrors.tools.huawei.com/npm`
 
 ### Sandbox 服务
 1. **使用华为 apt 镜像源** - `mirrors.tools.huawei.com`
@@ -20,6 +25,13 @@
 4. **使用华为 Rust 镜像** - `https://mirrors.tools.huawei.com/rustup`
 5. **安装华为证书** - `HuaweiITRootCA.crt` 和 `HWITEnterpriseCA1.crt`
 6. **使用本地二进制文件** - Node.js、Go 等工具的本地安装包
+
+**代理配置（两种模式不同）**：
+
+| 参数 | http_proxy | https_proxy |
+|------|------------|-------------|
+| Huawei | `http://172.25.10.10:8181` | `http://172.25.10.10:8181` |
+| Huawei_yellow | `http://10.43.232.147:8181` | `http://10.43.232.147:8181` |
 
 ## 前置准备
 
@@ -73,12 +85,16 @@
 # 设置 Huawei 环境变量并构建所有服务
 Huawei=true docker compose build
 
+# 设置 Huawei_yellow 环境变量并构建所有服务（使用不同代理地址）
+Huawei_yellow=true docker compose build
+
 # 或者只构建特定服务
 Huawei=true docker compose build backend
 Huawei=true docker compose build sandbox
 
 # 完整启动（包含构建）
 Huawei=true docker compose up -d
+Huawei_yellow=true docker compose up -d
 ```
 
 #### 方法 B：通过 .env 文件
@@ -87,6 +103,8 @@ Huawei=true docker compose up -d
 
 ```env
 Huawei=true
+# 或
+Huawei_yellow=true
 ```
 
 然后构建：
@@ -105,9 +123,11 @@ docker compose build sandbox
 ```bash
 # 构建 backend
 docker compose build --build-arg Huawei=true backend
+docker compose build --build-arg Huawei_yellow=true backend
 
 # 构建 sandbox
 docker compose build --build-arg Huawei=true sandbox
+docker compose build --build-arg Huawei_yellow=true sandbox
 ```
 
 ---
@@ -121,6 +141,9 @@ cd backend
 # 构建 Huawei 版本
 docker build --build-arg Huawei=true -t deepaudit/backend:huawei .
 
+# 构建 Huawei_yellow 版本
+docker build --build-arg Huawei_yellow=true -t deepaudit/backend:huawei-yellow .
+
 # 构建默认版本
 docker build -t deepaudit/backend:latest .
 ```
@@ -131,6 +154,9 @@ cd docker/sandbox
 
 # 构建 Huawei 版本
 docker build --build-arg Huawei=true -t deepaudit/sandbox:huawei .
+
+# 构建 Huawei_yellow 版本
+docker build --build-arg Huawei_yellow=true -t deepaudit/sandbox:huawei-yellow .
 
 # 构建默认版本
 docker build -t deepaudit/sandbox:latest .
@@ -173,51 +199,72 @@ https://mirrors.tools.huawei.com/npm
 
 ### Dockerfile 中的条件逻辑
 
-Backend 和 Sandbox 的 Dockerfile 都使用 `ARG Huawei=false` 来控制配置：
+Backend、Frontend 和 Sandbox 的 Dockerfile 都使用 `ARG Huawei=false` 和 `ARG Huawei_yellow=false` 来控制配置：
 
 ```dockerfile
 ARG Huawei=false
+ARG Huawei_yellow=false
 
 # 条件判断示例
-RUN if [ "$Huawei" = "true" ]; then \
-      # Huawei 特定配置 \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
+      # Huawei 特定镜像源配置 \
     else \
       # 默认配置 \
+    fi
+
+# 代理配置示例
+RUN if [ "$Huawei" = "true" ]; then \
+      export http_proxy=http://172.25.10.10:8181 && \
+      export https_proxy=http://172.25.10.10:8181; \
+    elif [ "$Huawei_yellow" = "true" ]; then \
+      export http_proxy=http://10.43.232.147:8181 && \
+      export https_proxy=http://10.43.232.147:8181; \
     fi
 ```
 
 ### 各组件的华为配置
 
+#### Frontend 服务
+
+##### 1. npm 源
+- **Huawei/Huawei_yellow 版本**：`https://mirrors.tools.huawei.com/npm` + `strict-ssl=false`
+- **默认版本**：`https://registry.npmmirror.com`
+
+##### 2. 代理
+- **Huawei 版本**：`http://172.25.10.10:8181`
+- **Huawei_yellow 版本**：`http://10.43.232.147:8181`
+- **默认版本**：无代理
+
 #### Backend 服务
 
 ##### 1. apt 源
-- **Huawei 版本**：`mirrors.tools.huawei.com`
+- **Huawei/Huawei_yellow 版本**：`mirrors.tools.huawei.com`
 - **默认版本**：`mirrors.aliyun.com`
 
 ##### 2. PyPI 源
-- **Huawei 版本**：`http://mirrors.tools.huawei.com/pypi/simple/`
-- **默认版本**：`https://pypi.org/simple/`
+- **Huawei/Huawei_yellow 版本**：`http://mirrors.tools.huawei.com/pypi/simple/`
+- **默认版本**：`https://pypi.tuna.tsinghua.edu.cn/simple`
 
 ##### 3. npm 源
-- **Huawei 版本**：`https://mirrors.tools.huawei.com/npm` + `strict-ssl=false`
+- **Huawei/Huawei_yellow 版本**：`https://mirrors.tools.huawei.com/npm` + `strict-ssl=false`
 - **默认版本**：`https://registry.npmmirror.com`
 
 #### Sandbox 服务
 
 ##### 1. apt 源
-- **Huawei 版本**：`mirrors.tools.huawei.com`
+- **Huawei/Huawei_yellow 版本**：`mirrors.tools.huawei.com`
 - **默认版本**：`mirrors.aliyun.com`
 
 ##### 2. npm 源
-- **Huawei 版本**：`https://mirrors.tools.huawei.com/npm` + `strict-ssl=false`
+- **Huawei/Huawei_yellow 版本**：`https://mirrors.tools.huawei.com/npm` + `strict-ssl=false`
 - **默认版本**：`https://registry.npmmirror.com`
 
 ##### 3. Go 代理
-- **Huawei 版本**：`http://mirrors.tools.huawei.com/goproxy/`
+- **Huawei/Huawei_yellow 版本**：`http://mirrors.tools.huawei.com/goproxy/`
 - **默认版本**：`https://goproxy.cn,direct`
 
 ##### 4. Rust 镜像
-- **Huawei 版本**：`https://mirrors.tools.huawei.com/rustup`
+- **Huawei/Huawei_yellow 版本**：`https://mirrors.tools.huawei.com/rustup`
 - **默认版本**：`https://rsproxy.cn`
 
 ---
@@ -239,6 +286,12 @@ RUN if [ "$Huawei" = "true" ]; then \
 
 **A:** 这是正常的。Dockerfile 使用了 `2>/dev/null || true` 来忽略文件不存在的错误。如果不需要 Huawei 配置，可以不用准备这些文件。
 
+### Q: Huawei 和 Huawei_yellow 有什么区别？
+
+**A:** 两种模式使用相同的华为镜像源配置，主要区别在于代理地址：
+- **Huawei**：使用 `http://172.25.10.10:8181` 代理
+- **Huawei_yellow**：使用 `http://10.43.232.147:8181` 代理
+
 ### Q: 如何同时使用 Huawei 配置和默认配置？
 
 **A:** 可以构建两个不同标签的镜像：
@@ -251,6 +304,10 @@ docker build -t deepaudit/sandbox:latest .
 # 构建 Huawei 版本
 docker build --build-arg Huawei=true -t deepaudit/backend:huawei .
 docker build --build-arg Huawei=true -t deepaudit/sandbox:huawei .
+
+# 构建 Huawei_yellow 版本
+docker build --build-arg Huawei_yellow=true -t deepaudit/backend:huawei-yellow .
+docker build --build-arg Huawei_yellow=true -t deepaudit/sandbox:huawei-yellow .
 ```
 
 然后在 `docker-compose.yml` 中根据需要选择使用哪个镜像。
@@ -261,7 +318,11 @@ docker build --build-arg Huawei=true -t deepaudit/sandbox:huawei .
 
 ### Q: 如何临时禁用华为配置？
 
-**A:** 只要不设置 `Huawei=true` 环境变量或 build-arg，就会使用默认配置。
+**A:** 只要不设置 `Huawei=true` 或 `Huawei_yellow=true` 环境变量或 build-arg，就会使用默认配置。
+
+### Q: 能否同时启用 Huawei 和 Huawei_yellow？
+
+**A:** 不建议同时启用。如果同时设置，Huawei 参数优先级更高。建议只启用其中一个。
 
 ---
 

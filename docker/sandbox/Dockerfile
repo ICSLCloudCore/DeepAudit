@@ -9,9 +9,10 @@ LABEL description="Secure sandbox environment for vulnerability verification and
 
 # Huawei 可选配置
 ARG Huawei=false
+ARG Huawei_yellow=false
 
-# Huawei: 临时代理（仅在 Huawei=true 时启用）
-ARG TEMP_PROXY="export no_proxy=10.0.0.0/8,192.168.0.0/16,172.16.0.0/12,127.0.0.0/8,169.254.0.0/16,172.2.255.254,192.50.0.0/24,70.181.0.0/16,.huawei.com https_proxy=http://172.25.10.10:8181 https_proxy=http://172.25.10.10:8181"
+# Huawei: 临时代理（仅在 Huawei=true 或 Huawei_yellow=true 时启用）
+# 注意：代理地址根据参数动态设置
 
 # Huawei: 证书和全局pip源配置
 ARG CERT_DIR="/usr/local/share/ca-certificates/"
@@ -26,7 +27,7 @@ COPY ./HWITEnterpriseCA1.crt ${CERT_DIR}/
 
 # 安装基本工具
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    if [ "$Huawei" = "true" ]; then \
+    if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Using Huawei apt mirror..."; \
       sed -i 's/deb.debian.org/mirrors.tools.huawei.com/g' /etc/apt/sources.list; \
       sed -i 's/security.debian.org/mirrors.tools.huawei.com/g' /etc/apt/sources.list; \
@@ -63,7 +64,7 @@ ARG NODE_VERSION="node-v22.22.2-linux-x64"
 COPY ./bin/${NODE_VERSION}.tar.xz /tmp/nodejs.tar.xz
 
 # 统一安装 Node.js
-RUN if [ "$Huawei" = "true" ] && [ -f /tmp/nodejs.tar.xz ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ] && [ -f /tmp/nodejs.tar.xz ]; then \
       echo "Installing Node.js from Huawei local file..."; \
       mkdir -p /usr/local && \
       tar -xJf /tmp/nodejs.tar.xz -C /usr/local/ && \
@@ -74,6 +75,13 @@ RUN if [ "$Huawei" = "true" ] && [ -f /tmp/nodejs.tar.xz ]; then \
     else \
       echo "Installing Node.js from NodeSource..."; \
       unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+      if [ "$Huawei" = "true" ]; then \
+        export http_proxy=http://172.25.10.10:8181 && \
+        export https_proxy=http://172.25.10.10:8181; \
+      elif [ "$Huawei_yellow" = "true" ]; then \
+        export http_proxy=http://10.43.232.147:8181 && \
+        export https_proxy=http://10.43.232.147:8181; \
+      fi && \
       curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
       && apt-get install -y nodejs \
       && npm config set registry https://registry.npmmirror.com \
@@ -89,7 +97,7 @@ ENV PATH=$PATH:/usr/local/go/bin
 COPY ./bin/go1.25.8.linux-amd64.tar.gz /tmp/go.tar.gz
 
 # 统一安装 Go
-RUN if [ "$Huawei" = "true" ] && [ -f /tmp/go.tar.gz ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ] && [ -f /tmp/go.tar.gz ]; then \
       echo "Installing Go from Huawei local file..."; \
       tar -C /usr/local -xzf /tmp/go.tar.gz && \
       rm /tmp/go.tar.gz && \
@@ -98,6 +106,13 @@ RUN if [ "$Huawei" = "true" ] && [ -f /tmp/go.tar.gz ]; then \
       echo "Installing Go from Alibaba mirror..."; \
       rm -f /tmp/go.tar.gz 2>/dev/null || true && \
       unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+      if [ "$Huawei" = "true" ]; then \
+        export http_proxy=http://172.25.10.10:8181 && \
+        export https_proxy=http://172.25.10.10:8181; \
+      elif [ "$Huawei_yellow" = "true" ]; then \
+        export http_proxy=http://10.43.232.147:8181 && \
+        export https_proxy=http://10.43.232.147:8181; \
+      fi && \
       curl -L https://mirrors.aliyun.com/golang/go1.21.6.linux-amd64.tar.gz -o go.tar.gz && \
       tar -C /usr/local -xzf go.tar.gz && \
       rm go.tar.gz && \
@@ -114,11 +129,18 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:$PATH
 
 # 安装 Rust
-RUN if [ "$Huawei" = "true" ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Installing Rust from Huawei mirror..."; \
       export RUSTUP_DIST_SERVER=https://mirrors.tools.huawei.com/rustup && \
       export RUSTUP_UPDATE_ROOT=https://mirrors.tools.huawei.com/rustup/rustup && \
       unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+      if [ "$Huawei" = "true" ]; then \
+        export http_proxy=http://172.25.10.10:8181 && \
+        export https_proxy=http://172.25.10.10:8181; \
+      elif [ "$Huawei_yellow" = "true" ]; then \
+        export http_proxy=http://10.43.232.147:8181 && \
+        export https_proxy=http://10.43.232.147:8181; \
+      fi && \
       curl -k https://mirrors.tools.huawei.com/rustup/rustup/rustup-init.sh | sh -s -- -y --default-toolchain stable --profile minimal && \
       chmod -R a+w /usr/local/cargo; \
     else \
@@ -133,7 +155,7 @@ RUN if [ "$Huawei" = "true" ]; then \
 # 设置最终的 Rust 镜像源（Huawei 或默认）
 ENV RUSTUP_DIST_SERVER=https://rsproxy.cn \
     RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
-RUN if [ "$Huawei" = "true" ]; then \
+RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Setting Huawei Rust mirror..."; \
       echo 'export RUSTUP_DIST_SERVER=https://mirrors.tools.huawei.com/rustup' >> /etc/profile && \
       echo 'export RUSTUP_UPDATE_ROOT=https://mirrors.tools.huawei.com/rustup/rustup' >> /etc/profile; \
@@ -141,8 +163,15 @@ RUN if [ "$Huawei" = "true" ]; then \
 
 # 安装 Python 安全工具
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    if [ "$Huawei" = "true" ]; then \
+    if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
       echo "Using Huawei PyPI mirror..."; \
+      if [ "$Huawei" = "true" ]; then \
+        export http_proxy=http://172.25.10.10:8181 && \
+        export https_proxy=http://172.25.10.10:8181; \
+      elif [ "$Huawei_yellow" = "true" ]; then \
+        export http_proxy=http://10.43.232.147:8181 && \
+        export https_proxy=http://10.43.232.147:8181; \
+      fi && \
       pip install --no-cache-dir -i http://mirrors.tools.huawei.com/pypi/simple --trusted-host mirrors.tools.huawei.com \
         requests \
         httpx \
