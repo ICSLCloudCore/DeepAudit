@@ -619,7 +619,7 @@ export default function TaskDetail() {
           <div className="flex items-center justify-between">
             <div>
               <p className="stat-label">代码行数</p>
-              <p className="stat-value text-violet-400">{task.total_lines.toLocaleString()}</p>
+              <p className="stat-value text-violet-400">{(task.total_lines ?? 0).toLocaleString()}</p>
             </div>
             <div className="stat-icon text-violet-400">
               <FileText className="w-6 h-6" />

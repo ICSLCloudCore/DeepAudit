@@ -968,7 +968,7 @@ export default function AuditTasks() {
                       )}
                       {task.tokens_used > 0 && (
                         <div className="flex items-center text-muted-foreground">
-                          <span>{task.tokens_used.toLocaleString()} tokens</span>
+                          <span>{(task.tokens_used ?? 0).toLocaleString()} tokens</span>
                         </div>
                       )}
                     </div>
@@ -1072,10 +1072,10 @@ export default function AuditTasks() {
                       <p className="text-2xl font-bold text-foreground">{task.total_files}</p>
                       <p className="text-xs text-muted-foreground uppercase">文件数</p>
                     </div>
-                    <div className="text-center p-3 bg-muted rounded-lg border border-border">
-                      <p className="text-2xl font-bold text-foreground">{task.total_lines.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground uppercase">代码行数</p>
-                    </div>
+<div className="text-center p-3 bg-muted rounded-lg border border-border">
+                       <p className="text-2xl font-bold text-foreground">{(task.total_lines ?? 0).toLocaleString()}</p>
+                       <p className="text-xs text-muted-foreground uppercase">代码行数</p>
+                     </div>
                     <div className="text-center p-3 bg-muted rounded-lg border border-border">
                       <p className="text-2xl font-bold text-amber-400">{task.issues_count}</p>
                       <p className="text-xs text-muted-foreground uppercase">发现问题</p>
@@ -1239,10 +1239,10 @@ export default function AuditTasks() {
                       <p className="text-2xl font-bold text-amber-400">{task.findings_count}</p>
                       <p className="text-xs text-muted-foreground uppercase">发现问题</p>
                     </div>
-                    <div className="text-center p-3 bg-muted rounded-lg border border-border">
-                      <p className="text-2xl font-bold text-fuchsia-400">{task.total_lines.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground uppercase">代码行数</p>
-                    </div>
+<div className="text-center p-3 bg-muted rounded-lg border border-border">
+                       <p className="text-2xl font-bold text-fuchsia-400">{(task.total_lines ?? 0).toLocaleString()}</p>
+                       <p className="text-xs text-muted-foreground uppercase">代码行数</p>
+                     </div>
                     <div className="text-center p-3 bg-muted rounded-lg border border-border">
                       <p className="text-2xl font-bold text-primary">{task.security_score.toFixed(1)}</p>
                       <p className="text-xs text-muted-foreground uppercase">安全评分</p>

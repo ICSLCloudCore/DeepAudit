@@ -251,7 +251,7 @@ export default function TerminalProgressDialog({
                     // 显示代码行数（仅在有变化时）
                     if (linesChanged && task.total_lines > lastTotalLines) {
                         const newLines = task.total_lines - lastTotalLines;
-                        addLog(`[STAT] 已分析 ${task.total_lines.toLocaleString()} 行代码 [+${newLines.toLocaleString()}]`, "info");
+                        addLog(`[STAT] 已分析 ${(task.total_lines ?? 0).toLocaleString()} 行代码 [+${(newLines ?? 0).toLocaleString()}]`, "info");
                         lastTotalLines = task.total_lines;
                     }
                 } else if (task.status === "completed") {
@@ -260,9 +260,9 @@ export default function TerminalProgressDialog({
                         addLog("", "info"); // 空行分隔
                         addLog("[DONE] 代码扫描完成", "success");
                         addLog("----------------------------------", "info");
-                        addLog(`[STAT] 总计扫描: ${task.total_files} 个文件`, "success");
-                        addLog(`[STAT] 总计分析: ${task.total_lines.toLocaleString()} 行代码`, "success");
-                        addLog(`[RSLT] 发现问题: ${task.issues_count} 个`, task.issues_count > 0 ? "warning" : "success");
+                        addLog(`[STAT] 总计扫描: ${task.total_files ?? 0} 个文件`, "success");
+                        addLog(`[STAT] 总计分析: ${(task.total_lines ?? 0).toLocaleString()} 行代码`, "success");
+                        addLog(`[RSLT] 发现问题: ${task.issues_count ?? 0} 个`, task.issues_count > 0 ? "warning" : "success");
 
                         // 解析问题类型分布
                         if (task.issues_count > 0) {
@@ -318,9 +318,9 @@ export default function TerminalProgressDialog({
                         addLog("[STOP] 任务已被用户取消", "warning");
                         addLog("----------------------------------", "warning");
                         addLog(`[STAT] 完成统计:`, "info");
-                        addLog(`  • 已分析文件: ${task.scanned_files}/${task.total_files}`, "info");
-                        addLog(`  • 发现问题: ${task.issues_count} 个`, "info");
-                        addLog(`  • 代码行数: ${task.total_lines.toLocaleString()} 行`, "info");
+                        addLog(`  • 已分析文件: ${task.scanned_files ?? 0}/${task.total_files ?? 0}`, "info");
+                        addLog(`  • 发现问题: ${task.issues_count ?? 0} 个`, "info");
+                        addLog(`  • 代码行数: ${(task.total_lines ?? 0).toLocaleString()} 行`, "info");
                         addLog("----------------------------------", "warning");
                         addLog("[SAVE] 已分析的结果已保存到数据库", "success");
 

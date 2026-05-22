@@ -619,7 +619,7 @@ export default function OpenCodeAuditVulnerabilities() {
             <div>
               <p className="stat-label">代码行数</p>
               <p className="stat-value text-violet-400">
-                {task.total_lines.toLocaleString()}
+                {(task.total_lines ?? 0).toLocaleString()}
               </p>
             </div>
             <div className="stat-icon text-violet-400">

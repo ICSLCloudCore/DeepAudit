@@ -126,7 +126,7 @@ export default function ExportReportDialog({
                             </div>
                             <div className="flex items-center justify-between border-b border-border pb-2">
                                 <span className="text-muted-foreground">代码行数:</span>
-                                <span className="font-bold text-foreground">{task.total_lines.toLocaleString()}</span>
+                                <span className="font-bold text-foreground">{(task.total_lines ?? 0).toLocaleString()}</span>
                             </div>
                             <div className="flex items-center justify-between border-b border-border pb-2">
                                 <span className="text-muted-foreground">严重问题:</span>

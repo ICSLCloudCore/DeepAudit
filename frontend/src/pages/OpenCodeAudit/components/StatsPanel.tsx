@@ -88,7 +88,7 @@ export function StatsPanel({ session, tokens, cost }: StatsPanelProps) {
               <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Tokens</span>
             </div>
             <span className="text-sm font-mono text-foreground">
-              {tokens.toLocaleString()} tokens
+              {(tokens ?? 0).toLocaleString()} tokens
             </span>
           </div>
         )}
@@ -112,7 +112,7 @@ export function StatsPanel({ session, tokens, cost }: StatsPanelProps) {
             <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Response</span>
           </div>
           <span className="text-sm font-mono text-foreground">
-            {responseLength.toLocaleString()} chars
+            {(responseLength ?? 0).toLocaleString()} chars
           </span>
         </div>
       </div>

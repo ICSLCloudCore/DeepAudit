@@ -247,7 +247,7 @@ export function DatabaseManager() {
                     {health.database_connected ? '正常' : '异常'}
                   </span>
                   <span className="mx-2">|</span>
-                  总记录数：<span className="text-foreground">{health.total_records.toLocaleString()}</span>
+                  总记录数：<span className="text-foreground">{(health.total_records ?? 0).toLocaleString()}</span>
                 </span>
               </div>
 
