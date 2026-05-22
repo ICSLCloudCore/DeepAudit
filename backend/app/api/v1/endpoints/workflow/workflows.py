@@ -96,6 +96,7 @@ async def create_workflow(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     workflow_data = WorkflowCreate(
+        name=f"{product_name}-{version}",
         product_name=product_name,
         product_domain=product_domain,
         version=version,
