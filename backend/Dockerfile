@@ -129,7 +129,7 @@ RUN apt-get update && \
 COPY docker/backend/bin/comment-checker /usr/local/bin
 
 # 安装 ripgrep
-COPY --chown=0:0 docker/backend/bin/rg /usr/local/bin
+COPY docker/backend/bin/rg /usr/local/bin
 
 # 安装 cppcheck（如果 zip 文件存在）
 RUN touch /tmp/cppcheck.zip
@@ -159,7 +159,12 @@ RUN cp -r /usr/local/${NODE_VERSION}/* /usr/local/ \
     && cp -r /usr/local/${GH_VERSION}/* /usr/local/ \
     && rm -rf /usr/local/${NODE_VERSION} \
     && rm -rf /usr/local/${GH_VERSION} \
-    && chmod +x /usr/local/bin/comment-checker
+    && chmod +x /usr/local/bin/comment-checker \
+    && chmod +x /usr/local/bin/rg \
+    && chmod +x /usr/local/bin/cppcheck 2>/dev/null || true \
+    && chmod +x /usr/local/bin/gh 2>/dev/null || true \
+    && chmod +x /usr/local/bin/node 2>/dev/null || true \
+    && chmod +x /usr/local/bin/npm 2>/dev/null || true
 
 # 条件配置 npm 源
 RUN if [ "$Huawei" = "true" ] || [ "$Huawei_yellow" = "true" ]; then \
